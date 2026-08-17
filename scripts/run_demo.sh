@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ ! -f "$REPO_ROOT/install/setup.bash" ]]; then
+  echo "The workspace is not built. Run ./scripts/build.sh first." >&2
+  exit 1
+fi
+
+source /opt/ros/humble/setup.bash
+source "$REPO_ROOT/install/setup.bash"
+
+exec ros2 launch embertrace_bringup embertrace_demo.launch.py \
+  use_nav2:=false use_rviz:=true use_dashboard:=true "$@"
+

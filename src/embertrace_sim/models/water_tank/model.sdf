@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="water_tank">
+    <static>true</static>
+    <link name="tank">
+      <collision name="collision"><pose>0 0 1 0 0 0</pose><geometry><cylinder><radius>1.1</radius><length>2</length></cylinder></geometry></collision>
+      <visual name="visual"><pose>0 0 1 0 0 0</pose><geometry><cylinder><radius>1.1</radius><length>2</length></cylinder></geometry><material><ambient>0.08 0.35 0.5 1</ambient><diffuse>0.1 0.5 0.7 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

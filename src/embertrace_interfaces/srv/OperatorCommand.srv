@@ -1,0 +1,5 @@
+# Valid commands: START, PAUSE, RESUME, RETURN, RESET and E_STOP.
+string command
+---
+bool accepted
+string message

@@ -1,0 +1,104 @@
+<?xml version="1.0"?>
+<sdf version="1.8">
+  <world name="embertrace_forest">
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.01</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>100</real_time_update_rate>
+    </physics>
+    <scene>
+      <ambient>0.72 0.72 0.68 1</ambient>
+      <background>0.48 0.68 0.84 1</background>
+      <shadows>true</shadows>
+      <grid>false</grid>
+    </scene>
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 30 0 0 0</pose>
+      <diffuse>0.9 0.86 0.76 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.45 0.15 -0.88</direction>
+    </light>
+
+    <spherical_coordinates>
+      <latitude_deg>-33.8688</latitude_deg>
+      <longitude_deg>151.2093</longitude_deg>
+      <elevation>50</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <include><uri>model://forest_ground</uri><name>forest_ground</name></include>
+
+    <!-- The tan strips form a looped patrol trail and have no collision geometry. -->
+    <model name="trail_west">
+      <static>true</static><pose>-10 0 0.012 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>2.2 30 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_centre">
+      <static>true</static><pose>0 0 0.014 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>22 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_north">
+      <static>true</static><pose>0 10 0.016 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>22 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_east">
+      <static>true</static><pose>10 5 0.018 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>2.2 12 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_base_spur">
+      <static>true</static><pose>-13 -13.5 0.02 0 0 -0.7854</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>8 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- Ranger infrastructure and project landmarks. -->
+    <include><uri>model://ranger_station</uri><name>ranger_base</name><pose>-16.5 -16.2 0 0 0 0.35</pose></include>
+    <include><uri>model://water_tank</uri><name>water_tank</name><pose>-16 14.5 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_1</name><pose>-10 -5 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_2</name><pose>-4 0 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_3</name><pose>3 10 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_4</name><pose>10 4 0 0 0 0</pose></include>
+
+    <!-- Hidden-source coordinates must match the default core parameters. -->
+    <include><uri>model://fire_source</uri><name>fire_source_visual</name><pose>12 7 0 0 0 0</pose></include>
+
+    <!-- Repeated local trees: no online Fuel download is required. -->
+    <include><uri>model://ember_tree</uri><name>tree_01</name><pose>-17 -8 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_02</name><pose>-16 1 0 0 0 0.5</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_03</name><pose>-17 8 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_04</name><pose>-13 16 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_05</name><pose>-6 16 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_06</name><pose>1 16 0 0 0 0.6</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_07</name><pose>8 16 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_08</name><pose>16 15 0 0 0 0.9</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_09</name><pose>16 2 0 0 0 0.4</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_10</name><pose>17 -6 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_11</name><pose>15 -14 0 0 0 0.7</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_12</name><pose>7 -16 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_13</name><pose>0 -15 0 0 0 0.5</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_14</name><pose>-6 -17 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_15</name><pose>-5 -6 0 0 0 0.4</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_16</name><pose>1 -6 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_17</name><pose>5 5 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_18</name><pose>-4 5 0 0 0 0.6</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_19</name><pose>15 11 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_20</name><pose>4 -11 0 0 0 0.9</pose></include>
+
+    <!-- Natural obstacles are positioned beside, not across, the minimum patrol route. -->
+    <include><uri>model://ember_rock</uri><name>rock_1</name><pose>-7 -3 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_rock</uri><name>rock_2</name><pose>3 2.8 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_rock</uri><name>rock_3</name><pose>7 13.5 0 0 0 0.5</pose></include>
+    <include><uri>model://fallen_log</uri><name>log_1</name><pose>-5 12.8 0 0 0 0.3</pose></include>
+    <include><uri>model://fallen_log</uri><name>log_2</name><pose>5 -3.2 0 0 0 1.1</pose></include>
+
+    <!-- Low boundary fence keeps beginner teleoperation trials inside the map. -->
+    <model name="north_fence"><static>true</static><pose>0 19.7 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>40 0.2 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>40 0.2 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="south_fence"><static>true</static><pose>0 -19.7 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>40 0.2 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>40 0.2 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="east_fence"><static>true</static><pose>19.7 0 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>0.2 40 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>0.2 40 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="west_fence"><static>true</static><pose>-19.7 0 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>0.2 40 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>0.2 40 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+  </world>
+</sdf>

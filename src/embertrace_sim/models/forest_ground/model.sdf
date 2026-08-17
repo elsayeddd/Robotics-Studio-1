@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="forest_ground">
+    <static>true</static>
+    <link name="ground">
+      <collision name="ground_collision">
+        <pose>0 0 -0.05 0 0 0</pose>
+        <geometry><box><size>40 40 0.1</size></box></geometry>
+      </collision>
+      <visual name="ground_visual">
+        <cast_shadows>false</cast_shadows>
+        <geometry><plane><normal>0 0 1</normal><size>40 40</size></plane></geometry>
+        <material>
+          <ambient>0.75 0.75 0.75 1</ambient>
+          <diffuse>0.75 0.75 0.75 1</diffuse>
+          <pbr><metal><albedo_map>model://forest_ground/materials/textures/forest_overhead.png</albedo_map></metal></pbr>
+        </material>
+      </visual>
+    </link>
+  </model>
+</sdf>
+

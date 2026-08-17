@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>embertrace_ui</name>
+  <version>0.1.0</version>
+  <description>C++/Qt ranger dashboard for EmberTrace.</description>
+  <maintainer email="team@example.com">EmberTrace student team</maintainer>
+  <license>Apache-2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <depend>embertrace_interfaces</depend>
+  <depend>qtbase5-dev</depend>
+  <depend>rclcpp</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>
+

@@ -1,0 +1,10 @@
+<?xml version="1.0"?>
+<sdf version="1.7">
+  <model name="ember_rock">
+    <static>true</static>
+    <link name="rock">
+      <collision name="collision"><pose>0 0 0.42 0 0 0</pose><geometry><sphere><radius>0.55</radius></sphere></geometry></collision>
+      <visual name="visual"><pose>0 0 0.42 0 0 0</pose><geometry><sphere><radius>0.55</radius></sphere></geometry><material><ambient>0.25 0.25 0.23 1</ambient><diffuse>0.38 0.37 0.34 1</diffuse></material></visual>
+    </link>
+  </model>
+</sdf>

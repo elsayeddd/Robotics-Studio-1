@@ -1,0 +1,76 @@
+environment_simulator_node:
+  ros__parameters:
+    use_sim_time: true
+    odometry_topic: /husky1/odometry
+    output_topic: /embertrace/raw_environment
+    odom_frame: husky1_odom
+    publish_rate_hz: 5.0
+    random_seed: 42
+    # Simulation ground truth. Other nodes must not read these two values.
+    source_x: 12.0
+    source_y: 7.0
+    emission_strength_ppm: 120.0
+    baseline_smoke_ppm: 1.0
+    plume_length_m: 14.0
+    plume_width_m: 1.6
+    plume_expansion: 0.05
+    smoke_noise_stddev: 2.0
+    ambient_temperature_c: 22.0
+    source_temperature_c: 110.0
+    thermal_decay_m: 7.0
+    # Direction the smoke travels, measured counter-clockwise from +x.
+    wind_direction_rad: -2.35619449
+    wind_speed_mps: 2.5
+
+camera_verifier_node:
+  ros__parameters:
+    use_sim_time: true
+    image_topic: /husky1/camera/image
+    output_topic: /embertrace/visual_fire_cue
+    sample_stride: 8
+    target_fraction: 0.025
+
+perception_node:
+  ros__parameters:
+    use_sim_time: true
+    input_topic: /embertrace/raw_environment
+    output_topic: /embertrace/environment
+    visual_topic: /embertrace/visual_fire_cue
+    filter_alpha: 0.25
+    smoke_enter_ppm: 12.0
+    smoke_exit_ppm: 8.0
+    smoke_full_scale_ppm: 45.0
+    baseline_smoke_ppm: 1.0
+    temperature_threshold_c: 32.0
+    temperature_full_scale_c: 65.0
+    visual_weight: 0.15
+
+mission_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    investigate_confidence: 0.22
+    track_confidence: 0.38
+    verify_confidence: 0.68
+    alert_confidence: 0.74
+    lost_confidence: 0.12
+    visual_confirmation: 0.55
+    required_detection_samples: 3
+    required_confirmation_samples: 3
+
+search_planner_node:
+  ros__parameters:
+    use_sim_time: true
+    surge_step_m: 2.0
+    cast_step_m: 2.5
+    goal_interval_s: 2.0
+    world_min_x: -18.5
+    world_max_x: 18.5
+    world_min_y: -18.5
+    world_max_y: 18.5
+
+heatmap_node:
+  ros__parameters:
+    use_sim_time: true
+    max_samples: 300
+    minimum_spacing_m: 0.35
+    display_max_smoke_ppm: 60.0

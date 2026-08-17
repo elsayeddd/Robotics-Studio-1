@@ -1,0 +1,29 @@
+# colcon output
+build/
+install/
+log/
+
+# Editor and OS files
+.vscode/
+.idea/
+*.swp
+*~
+.DS_Store
+Thumbs.db
+
+# Generated Python files from ROS launch
+__pycache__/
+*.py[cod]
+
+# Test and coverage output
+.pytest_cache/
+coverage/
+*.gcda
+*.gcno
+
+# Runtime reports
+runtime/
+*.csv
+*.bag
+*.db3
+
