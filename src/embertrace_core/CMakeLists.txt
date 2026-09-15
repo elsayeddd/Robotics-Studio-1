@@ -17,12 +17,26 @@ find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(yaml-cpp REQUIRED)
+
+if(TARGET yaml-cpp::yaml-cpp)
+  set(YAML_CPP_TARGET yaml-cpp::yaml-cpp)
+else()
+  set(YAML_CPP_TARGET yaml-cpp)
+endif()
 
 add_library(plume_model src/plume_model.cpp)
 target_include_directories(plume_model PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
+
+add_library(waypoint_patrol src/waypoint_patrol.cpp)
+target_include_directories(waypoint_patrol PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+target_link_libraries(waypoint_patrol PUBLIC ${YAML_CPP_TARGET})
 
 function(add_embertrace_node target source)
   add_executable(${target} ${source})
@@ -58,6 +72,13 @@ if(BUILD_TESTING)
   if(TARGET test_plume_model)
     target_link_libraries(test_plume_model plume_model)
     target_include_directories(test_plume_model PRIVATE include)
+  endif()
+endif()
+
+  ament_add_gtest(test_waypoint_patrol test/test_waypoint_patrol.cpp)
+  if(TARGET test_waypoint_patrol)
+    target_link_libraries(test_waypoint_patrol waypoint_patrol)
+    target_include_directories(test_waypoint_patrol PRIVATE include)
   endif()
 endif()
 

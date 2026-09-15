@@ -74,3 +74,14 @@ heatmap_node:
     max_samples: 300
     minimum_spacing_m: 0.35
     display_max_smoke_ppm: 60.0
+
+patrol_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    # waypoints_file is supplied by embertrace_demo.launch.py, which
+    # resolves it to the installed path of patrol_waypoints.yaml.
+    base_waypoint_name: ranger_base
+    arrival_tolerance_m: 0.5
+    odometry_topic: /husky1/odometry
+    frame_id: husky1_map
+
