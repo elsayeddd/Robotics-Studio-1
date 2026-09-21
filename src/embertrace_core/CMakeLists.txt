@@ -73,7 +73,6 @@ if(BUILD_TESTING)
     target_link_libraries(test_plume_model plume_model)
     target_include_directories(test_plume_model PRIVATE include)
   endif()
-endif()
 
   ament_add_gtest(test_waypoint_patrol test/test_waypoint_patrol.cpp)
   if(TARGET test_waypoint_patrol)

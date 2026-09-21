@@ -42,9 +42,9 @@ public:
     alert_confidence_ = declare_parameter<double>("alert_confidence", 0.74);
     lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
     visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
-    required_detection_samples_ = std::max(1, declare_parameter<int>("required_detection_samples", 3));
+    required_detection_samples_ = std::max(1, static_cast<int>(declare_parameter<int>("required_detection_samples", 3)));
     required_confirmation_samples_ = std::max(
-      1, declare_parameter<int>("required_confirmation_samples", 3));
+      1, static_cast<int>(declare_parameter<int>("required_confirmation_samples", 3)));
 
     state_publisher_ = create_publisher<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable());
