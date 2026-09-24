@@ -55,6 +55,9 @@ add_embertrace_node(perception_node src/perception_node.cpp)
 add_embertrace_node(mission_manager_node src/mission_manager_node.cpp)
 add_embertrace_node(search_planner_node src/search_planner_node.cpp)
 add_embertrace_node(heatmap_node src/heatmap_node.cpp)
+add_embertrace_node(patrol_manager_node src/patrol_manager_node.cpp)
+target_link_libraries(patrol_manager_node waypoint_patrol)
+
 
 install(
   TARGETS plume_model
