@@ -25,6 +25,7 @@
 #include "nav_msgs/msg/odometry.hpp"
 // #include "tf2_ros/tf2_ros/"
 #include "tf2_geometry_msgs.hpp"
+#include <cmath.h>
 
 
 namespace embertrace_core
@@ -49,6 +50,7 @@ public:
     goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
       "/embertrace/navigation_goal", 10,
       [this](const geometry_msgs::msg::PoseStamped::SharedPtr goal) {
+        goal_ = goal;
         if (!motion_allowed_) {
           RCLCPP_WARN(get_logger(), "Ignoring goal because the mission does not permit motion");
           return;
@@ -59,7 +61,12 @@ public:
         // TODO(student): transform goal, create NavigateToPose::Goal and call async_send_goal.
       });
 
-    odom_subscription_ = create_subscription<nav_msgs::msg::Odometry>("/husky1/odometry", 1000, std::bind(&nav2_goal_adapter_node::odoCallback,this,std::placeholders::_1;));
+    odom_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
+      "/husky1/odometry", 1000, /*
+      [this](nav_msgs::msg::Odometry::SharedPtr odom){
+        double dist_to_goal = hypot(odom->pose.pose.position.x - goal.
+      }
+        /*/std::bind(&nav2_goal_adapter_node::odoCallback,this,std::placeholders::_1;));
   }
 
 private:
@@ -71,9 +78,31 @@ private:
   geometry_msgs::msg::Pose pose_;//!< The current pose of platform
   std::mutex poseMtx_; //!< Mutex for controlling access to pose
 
+  geometry_msgs::msg::PoseStamped goal_; //goal copied from subscriber
+  std::mutex goalMtx_;
+
+  double dist_to_goal; //!< distance from platform to goal
+  double angle_to_goal; //!< angle from platform to goal
+  
+  //need goalCallback
+  /*
+  {
+      std::lock_guard<std::mutex> lock(goalMtx_);
+      goal_ = msg.pose.pose;
+    }
+  */
+
+  
   void nav2_goal_adapter_node::odoCallback(const nav_msgs::msg::Odometry& msg){
-    std::lock_guard<std::mutex> lock(poseMtx_);
-    pose_ = msg.pose.pose;
+    {
+      std::lock_guard<std::mutex> lock(poseMtx_);
+      pose_ = msg.pose.pose;
+    }
+
+    
+
+    double dist_to_goal = hypot((pose_->pose.pose.position.x - goal_.pose.point.x) + (pose_->pose.pose.position.y - goal_.pose.point.y));
+
   }
 }; 
 
