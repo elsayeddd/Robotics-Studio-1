@@ -13,6 +13,7 @@ Each source file starts with its completed baseline and `TODO(student)` work. Ke
 | `mission_manager_node.cpp` | Authoritative decision state machine | Autonomy member |
 | `search_planner_node.cpp` | Surge/cast search goals | Autonomy member |
 | `heatmap_node.cpp` | RViz operator visualisation | UI/testing member |
+| `nav2_goal_adapter_node.cpp` | Send commands over nav2 | Autonomy/control member |
 
 ## Nav2 adapter to add
 
