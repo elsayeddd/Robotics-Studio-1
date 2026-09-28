@@ -33,9 +33,14 @@
 
 #include "embertrace_core/waypoint_patrol.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
+#include "geometry_msgs/msg/point_stamped.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "tf2/exceptions.h"
+#include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_listener.h"
 
 namespace embertrace_core
 {
@@ -55,6 +60,8 @@ public:
     const auto odometry_topic = declare_parameter<std::string>(
       "odometry_topic", "/husky1/odometry");
     frame_id_ = declare_parameter<std::string>("frame_id", "husky1_map");
+    tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
+    tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 
     patrol_ = std::make_unique<WaypointPatrol>(arrival_tolerance_m);
 
@@ -137,8 +144,23 @@ private:
     if (!patrol_ || !patrol_->has_waypoints()) {
       return;
     }
-    const auto & position = message->pose.pose.position;
-    const auto goal = patrol_->update_pose(position.x, position.y);
+    if (message->header.frame_id.empty()) {
+      return;
+    }
+    geometry_msgs::msg::PointStamped position;
+    position.header = message->header;
+    position.point = message->pose.pose.position;
+    position.header.stamp.sec = 0;
+    position.header.stamp.nanosec = 0;
+    try {
+      position = tf_buffer_->transform(position, frame_id_);
+    } catch (const tf2::TransformException & error) {
+      RCLCPP_WARN_THROTTLE(
+        get_logger(), *get_clock(), 5000, "Waiting for patrol pose transform: %s",
+        error.what());
+      return;
+    }
+    const auto goal = patrol_->update_pose(position.point.x, position.point.y);
     if (patrol_->loops_completed() > loops_logged_) {
       loops_logged_ = patrol_->loops_completed();
       RCLCPP_INFO(get_logger(), "Patrol loop %zu complete", loops_logged_);
@@ -151,6 +173,8 @@ private:
   std::string frame_id_{"husky1_map"};
   std::size_t loops_logged_{0};
   std::unique_ptr<WaypointPatrol> patrol_;
+  std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
+  std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_publisher_;
   rclcpp::Subscription<MissionState>::SharedPtr state_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;

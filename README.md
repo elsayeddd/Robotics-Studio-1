@@ -6,7 +6,7 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 
 ## Project status
 
-This table distinguishes code on `main` from work on unmerged feature branches. Runtime acceptance of the complete autonomous rover remains outstanding.
+All three feature branches are represented on `main`. Runtime acceptance of the complete autonomous rover remains outstanding.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
@@ -15,13 +15,13 @@ This table distinguishes code on `main` from work on unmerged feature branches. 
 | Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
 | Environmental perception | Implemented baseline | Exponential filtering, thresholding and confidence calculation |
 | Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
-| Search and source estimation | Implemented on `main`; unit tests included | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; full rover-trial acceptance remains |
+| Search and source estimation | Implemented baseline | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; unit tests included |
 | Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
 | Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
-| Nav2 goal execution | In progress on `feature/nav2-goal-adapter` | Action-client draft exists, but source errors prevent a build; launch integration, result reporting and rover acceptance remain |
+| Nav2 goal execution | Implemented baseline; rover validation pending | Namespaced `NavigateToPose` client transforms and bounds-checks goals, cancels on mission changes and publishes result status |
 | Camera fire verification | Scaffolded | Simple colour cue works; robust CV model and test set remain outstanding |
-| Patrol route manager | Implemented on `feature/waypoint-patrol-manager`; unmerged | YAML route loading, sequential goals, pause/resume, return to base and unit tests; arrival uses odometry and rover loops remain unvalidated |
-| Automated end-to-end tests | Partial | Plume and search unit tests are on `main`; patrol unit tests are on its feature branch; full Gazebo/Nav2 rover trials remain |
+| Patrol route manager | Implemented baseline; rover validation pending | YAML route loading, sequential goals, pause/resume and return to base; odometry is transformed into the route frame for arrival checks |
+| Automated end-to-end tests | Partial | Plume, search and patrol unit tests are included; full Gazebo/Nav2 rover trials remain |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
@@ -92,7 +92,7 @@ Valid commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET` and `E_STOP`.
 - The EmberTrace dashboard displays mission state, smoke, temperature, confidence and alert information.
 - After `START`, the state is `PATROL`. Moving the robot into the plume causes `INVESTIGATE` and then `TRACK`; sufficiently strong combined evidence causes `VERIFY` and `ALERT`.
 
-Until the Nav2 adapter is completed, use teleoperation to move through the plume:
+For the baseline launch without Nav2, use teleoperation to move through the plume:
 
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
@@ -136,7 +136,7 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 - The environment simulator knows the hidden fire coordinates, but publishes only local sensor readings. Decision nodes must never subscribe to ground truth.
 - The visible fire model helps demonstration and camera work. It can be hidden for blind trials using the `show_fire_marker` parameter and a future world-state service.
 - The current colour-based camera verifier is deliberately simple and must not be presented as a real wildfire detector.
-- The core package and its unit tests have been built on ROS 2 Humble. Full Gazebo/Nav2 launch and ten rover trials still need acceptance testing.
+- The search baseline was built with ROS 2 Humble before the navigation and patrol branches were integrated. Build and test the combined package, full Gazebo/Nav2 launch and ten rover trials on the target machine.
 
 ## Origin of supplied material
 

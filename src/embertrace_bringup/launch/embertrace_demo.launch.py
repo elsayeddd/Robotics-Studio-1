@@ -85,7 +85,19 @@ def generate_launch_description():
             name="patrol_manager_node",
             output="screen",
             parameters=[
-            parameters, {"use_sim_time": use_sim_time, "waypoints_file": patrol_waypoints_file},],
+                parameters,
+                {"use_sim_time": use_sim_time, "waypoints_file": patrol_waypoints_file},
+            ],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
+        ),
+        Node(
+            package="embertrace_core",
+            executable="nav2_goal_adapter_node",
+            name="nav2_goal_adapter_node",
+            output="screen",
+            condition=IfCondition(use_nav2),
+            parameters=[parameters, {"use_sim_time": use_sim_time}],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
     ])
 

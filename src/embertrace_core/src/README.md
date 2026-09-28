@@ -13,21 +13,18 @@ Each source file starts with its completed baseline and `TODO(student)` work. Ke
 | `mission_manager_node.cpp` | Authoritative decision state machine | Autonomy member |
 | `search_planner_node.cpp` | Source estimation and map-safe search goals | Autonomy member |
 | `heatmap_node.cpp` | RViz operator visualisation | UI/testing member |
+| `patrol_manager_node.cpp` | Waypoint patrol and return goals | Autonomy member |
+| `nav2_goal_adapter_node.cpp` | Nav2 action bridge and result status | Navigation member |
 
-## Nav2 adapter to add
+## Nav2 adapter baseline
 
-Begin with `../scaffolds/nav2_goal_adapter_node.cpp` when the navigation package is running reliably:
-
-1. Include `rclcpp_action/rclcpp_action.hpp` and `nav2_msgs/action/navigate_to_pose.hpp`.
-2. Subscribe to `/embertrace/navigation_goal`.
-3. Create an action client for `/husky1/navigate_to_pose`.
-4. Accept `husky1_map` goals from the search planner; transform other frames when needed.
-5. Send only one active goal and cancel it before replacing it.
-6. Subscribe to `/embertrace/mission_state` and cancel immediately when motion is not allowed.
-7. Publish a small status message so the mission manager can react to success/failure.
-8. Add `rclcpp_action`, `nav2_msgs`, `tf2_ros` and `tf2_geometry_msgs` dependencies to both manifests.
-
-Do not put Nav2 action code directly into the mission manager. Keeping it separate makes state-machine testing possible without a running simulator.
+The adapter subscribes to `/embertrace/navigation_goal`, transforms goals into
+`husky1_map`, and sends them to `/husky1/navigate_to_pose` when Nav2 is ready.
+It cancels goals on mission-state changes or when motion is disallowed, rejects
+stale and out-of-bounds goals, and publishes result strings on
+`/embertrace/navigation_status`. The patrol manager currently advances from
+map-frame odometry proximity; action-result sequencing and full rover acceptance
+remain to be validated on the target ROS machine.
 
 ## Priority 3: search and source estimate
 
@@ -75,8 +72,8 @@ standard-field trials with the baseline perception filter, a fixed survey route
 with moved sources and changed plume parameters, and translation of the same
 evidence to another location. The seeded test
 checks median error below 2.0 m, but it supplies a controlled track through
-the plume. The roadmap's full rover-trial acceptance still needs the Nav2
-adapter and patrol manager from priorities 1 and 2.
+the plume. The roadmap's full rover-trial acceptance still needs integrated
+runs with the Nav2 adapter and patrol manager.
 
 For a runtime check after building, launch with `use_nav2:=true` so SLAM
 publishes `/husky1/map`, then send `START` and teleoperate through the plume:
@@ -93,5 +90,5 @@ square metres, and search goals stamped in `husky1_map`. With
 `use_nav2:=false` there is no SLAM map, so estimates may still appear while
 navigation goals are withheld. Move out of the plume and check that goals
 cease after `signal_loss_timeout_s`; pause or switch to `VERIFY` to check
-that motion goals stop immediately. The adapter from priority 1 is required
-before these goals can actually drive the rover.
+that motion goals stop immediately. With `use_nav2:=true`, inspect
+`/embertrace/navigation_status` and verify that cancellation stops motion.
