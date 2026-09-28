@@ -1,5 +1,5 @@
 # Planned patrol loop in the husky1_map frame.
-# The future waypoint patrol manager should load these in order and return to base.
+# The patrol manager loads these in order and returns to the named base.
 frame_id: husky1_map
 waypoints:
   - {name: ranger_base, x: -14.0, y: -14.0, yaw: 0.7854}
@@ -12,4 +12,3 @@ waypoints:
   - {name: junction, x: 10.0, y: 0.0, yaw: 3.1416}
   - {name: centre, x: 0.0, y: 0.0, yaw: 3.1416}
   - {name: west_centre_return, x: -10.0, y: 0.0, yaw: -1.5708}
-

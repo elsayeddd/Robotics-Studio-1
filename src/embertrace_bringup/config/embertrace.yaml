@@ -56,6 +56,8 @@ mission_manager_node:
     visual_confirmation: 0.55
     required_detection_samples: 3
     required_confirmation_samples: 3
+    max_estimate_age_s: 5.0
+    max_estimate_stddev_m: 4.0
 
 search_planner_node:
   ros__parameters:
@@ -63,6 +65,23 @@ search_planner_node:
     surge_step_m: 2.0
     cast_step_m: 2.5
     goal_interval_s: 2.0
+    estimate_interval_s: 1.0
+    max_samples: 160
+    minimum_spacing_m: 0.3
+    # Field-shape priors; these are not source coordinates.
+    ambient_temperature_c: 22.0
+    baseline_smoke_ppm: 1.0
+    thermal_decay_m: 7.0
+    plume_length_m: 14.0
+    plume_width_m: 1.6
+    plume_expansion: 0.05
+    map_topic: /husky1/map
+    robot_clearance_m: 0.8
+    max_map_occupancy: 20
+    goal_snap_radius_m: 2.0
+    reading_timeout_s: 3.0
+    signal_loss_timeout_s: 20.0
+    search_timeout_s: 120.0
     world_min_x: -18.5
     world_max_x: 18.5
     world_min_y: -18.5
@@ -74,3 +93,14 @@ heatmap_node:
     max_samples: 300
     minimum_spacing_m: 0.35
     display_max_smoke_ppm: 60.0
+
+patrol_manager_node:
+  ros__parameters:
+    use_sim_time: true
+    # waypoints_file is supplied by embertrace_demo.launch.py, which
+    # resolves it to the installed path of patrol_waypoints.yaml.
+    base_waypoint_name: ranger_base
+    arrival_tolerance_m: 0.5
+    odometry_topic: /husky1/odometry
+    frame_id: husky1_map
+
