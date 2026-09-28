@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cctype>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -21,6 +22,7 @@
 #include "embertrace_interfaces/msg/mission_state.hpp"
 #include "embertrace_interfaces/srv/operator_command.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 using namespace std::chrono_literals;
@@ -42,8 +44,11 @@ public:
     alert_confidence_ = declare_parameter<double>("alert_confidence", 0.74);
     lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
     visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
-    required_detection_samples_ = std::max(1, declare_parameter<int>("required_detection_samples", 3));
-    required_confirmation_samples_ = std::max(
+    max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
+    max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
+    required_detection_samples_ = std::max<int>(
+      1, declare_parameter<int>("required_detection_samples", 3));
+    required_confirmation_samples_ = std::max<int>(
       1, declare_parameter<int>("required_confirmation_samples", 3));
 
     state_publisher_ = create_publisher<MissionState>(
@@ -53,9 +58,9 @@ public:
     reading_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
       "/embertrace/environment", rclcpp::SensorDataQoS(),
       std::bind(&MissionManagerNode::on_reading, this, std::placeholders::_1));
-    goal_subscription_ = create_subscription<geometry_msgs::msg::PoseStamped>(
-      "/embertrace/navigation_goal", 10,
-      [this](const geometry_msgs::msg::PoseStamped::SharedPtr message) {
+    estimate_subscription_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+      "/embertrace/source_estimate", 10,
+      [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr message) {
         latest_estimate_ = *message;
         have_estimate_ = true;
       });
@@ -177,6 +182,7 @@ private:
     if (command == "START") {
       detection_count_ = 0;
       confirmation_count_ = 0;
+      have_estimate_ = false;
       transition_to(MissionState::PATROL, "Patrol started by operator");
     } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
       pre_pause_state_ = state_;
@@ -190,6 +196,7 @@ private:
     } else if (command == "RESET") {
       detection_count_ = 0;
       confirmation_count_ = 0;
+      have_estimate_ = false;
       transition_to(MissionState::IDLE, "System reset; waiting for START");
     } else {
       response->accepted = false;
@@ -223,10 +230,31 @@ private:
     alert.header.stamp = now();
     alert.header.frame_id = latest_reading_.sample_pose.header.frame_id;
     alert.severity = embertrace_interfaces::msg::FireAlert::CRITICAL;
-    alert.estimated_source = have_estimate_ ? latest_estimate_ : latest_reading_.sample_pose;
+    // Only a recent localisation fit may be reported as the source. The robot
+    // pose is a fallback location when the source is still unresolved.
+    const double estimate_age_s = have_estimate_ ?
+      (now() - rclcpp::Time(latest_estimate_.header.stamp)).seconds() : 0.0;
+    const bool fresh_estimate = have_estimate_ &&
+      latest_estimate_.header.frame_id == latest_reading_.sample_pose.header.frame_id &&
+      estimate_age_s >= 0.0 && estimate_age_s <= max_estimate_age_s_ &&
+      std::isfinite(latest_estimate_.pose.covariance[0]) &&
+      std::isfinite(latest_estimate_.pose.covariance[7]) &&
+      latest_estimate_.pose.covariance[0] <=
+      max_estimate_stddev_m_ * max_estimate_stddev_m_ &&
+      latest_estimate_.pose.covariance[7] <=
+      max_estimate_stddev_m_ * max_estimate_stddev_m_;
+    if (fresh_estimate) {
+      alert.estimated_source.header = latest_estimate_.header;
+      alert.estimated_source.pose = latest_estimate_.pose.pose;
+    } else {
+      alert.estimated_source = latest_reading_.sample_pose;
+    }
     alert.confidence = latest_reading_.fused_confidence;
     alert.confirmed = true;
     alert.evidence = "Persistent smoke plus thermal or visual confirmation";
+    if (!fresh_estimate) {
+      alert.evidence += "; source location unresolved (pose is latest sample)";
+    }
     alert.recommended_action = "Review the map, notify the ranger and keep personnel clear";
     alert_publisher_->publish(alert);
   }
@@ -244,16 +272,19 @@ private:
   double alert_confidence_{0.74};
   double lost_confidence_{0.12};
   double visual_confirmation_{0.55};
+  double max_estimate_age_s_{5.0};
+  double max_estimate_stddev_m_{4.0};
   bool have_reading_{false};
   bool have_estimate_{false};
   embertrace_interfaces::msg::EnvironmentalReading latest_reading_;
-  geometry_msgs::msg::PoseStamped latest_estimate_;
+  geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
 
   rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;
   rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_publisher_;
   rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr
     reading_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
+    estimate_subscription_;
   rclcpp::Service<embertrace_interfaces::srv::OperatorCommand>::SharedPtr command_service_;
   rclcpp::TimerBase::SharedPtr state_timer_;
 };

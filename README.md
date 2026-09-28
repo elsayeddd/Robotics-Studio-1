@@ -13,13 +13,13 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 | Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
 | Environmental perception | Implemented baseline | Exponential filtering, thresholding and confidence calculation |
 | Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
-| Investigation goal generation | Implemented baseline | Upwind surge and alternating crosswind recovery goals |
+| Search and source estimation | Implemented and unit-tested | Bounded sample history, fitted source/covariance, map-safe goals and bounded recovery |
 | Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
 | Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
 | Nav2 goal execution | Scaffolded | Connect generated goals to `NavigateToPose` and report completion |
 | Camera fire verification | Scaffolded | Simple colour cue works; robust CV model and test set remain outstanding |
 | Patrol route manager | Scaffolded | Waypoint file exists; sequential Nav2 execution remains outstanding |
-| Automated end-to-end tests | Partial | Pure plume-model test and repository validation are included |
+| Automated end-to-end tests | Partial | Plume and search unit tests are included; rover trials remain |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
@@ -72,7 +72,7 @@ ros2 launch embertrace_bringup embertrace_demo.launch.py \
   use_nav2:=false use_rviz:=true use_dashboard:=true
 ```
 
-Start with `use_nav2:=false`. This verifies Gazebo, the sensor bridge, plume simulation, state machine, heatmap and dashboard before the team integrates autonomous goal execution.
+Start with `use_nav2:=false`. This verifies Gazebo, the sensor bridge, plume simulation, state machine, heatmap and dashboard. The search planner publishes source estimates from samples, but only publishes goals when SLAM supplies a map and TF.
 
 ### 5. Send an operator command without the dashboard
 
@@ -86,7 +86,7 @@ Valid commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET` and `E_STOP`.
 ## What should appear
 
 - Gazebo opens the `embertrace_forest` world with a Husky rover at the ranger base.
-- RViz shows the robot, LiDAR, map/TF data when available, generated investigation goals and smoke sample markers.
+- RViz shows the robot, LiDAR, smoke samples and source estimate. The map and investigation goals appear when SLAM is running.
 - The EmberTrace dashboard displays mission state, smoke, temperature, confidence and alert information.
 - After `START`, the state is `PATROL`. Moving the robot into the plume causes `INVESTIGATE` and then `TRACK`; sufficiently strong combined evidence causes `VERIFY` and `ALERT`.
 
@@ -134,7 +134,7 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 - The environment simulator knows the hidden fire coordinates, but publishes only local sensor readings. Decision nodes must never subscribe to ground truth.
 - The visible fire model helps demonstration and camera work. It can be hidden for blind trials using the `show_fire_marker` parameter and a future world-state service.
 - The current colour-based camera verifier is deliberately simple and must not be presented as a real wildfire detector.
-- The repository was statically validated in an environment without ROS 2. The first team member with the target Ubuntu/ROS installation must complete the build-and-launch acceptance test in the roadmap.
+- The core package and its unit tests have been built on ROS 2 Humble. Full Gazebo/Nav2 launch and ten rover trials still need acceptance testing.
 
 ## Origin of supplied material
 
