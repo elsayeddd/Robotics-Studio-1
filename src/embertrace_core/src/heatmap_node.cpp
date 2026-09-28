@@ -29,7 +29,7 @@ public:
   HeatmapNode()
   : Node("heatmap_node")
   {
-    max_samples_ = std::max(10, static_cast<int>(declare_parameter<int>("max_samples", 300)));
+    max_samples_ = std::max<int>(10, declare_parameter<int>("max_samples", 300));
     minimum_spacing_m_ = std::max(0.05, declare_parameter<double>("minimum_spacing_m", 0.35));
     display_max_smoke_ppm_ = std::max(
       1.0, declare_parameter<double>("display_max_smoke_ppm", 60.0));
