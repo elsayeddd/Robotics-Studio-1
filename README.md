@@ -6,6 +6,8 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 
 ## Project status
 
+This table distinguishes code on `main` from work on unmerged feature branches. Runtime acceptance of the complete autonomous rover remains outstanding.
+
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Forest world and Husky sensor model | Implemented | Self-contained local trees, rocks, logs, base station, fire source and textured terrain |
@@ -13,13 +15,13 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 | Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
 | Environmental perception | Implemented baseline | Exponential filtering, thresholding and confidence calculation |
 | Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
-| Search and source estimation | Implemented and unit-tested | Bounded sample history, fitted source/covariance, map-safe goals and bounded recovery |
+| Search and source estimation | Implemented on `main`; unit tests included | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; full rover-trial acceptance remains |
 | Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
 | Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
-| Nav2 goal execution | Scaffolded | Connect generated goals to `NavigateToPose` and report completion |
+| Nav2 goal execution | In progress on `feature/nav2-goal-adapter` | Action-client draft exists, but source errors prevent a build; launch integration, result reporting and rover acceptance remain |
 | Camera fire verification | Scaffolded | Simple colour cue works; robust CV model and test set remain outstanding |
-| Patrol route manager | Scaffolded | Waypoint file exists; sequential Nav2 execution remains outstanding |
-| Automated end-to-end tests | Partial | Plume and search unit tests are included; rover trials remain |
+| Patrol route manager | Implemented on `feature/waypoint-patrol-manager`; unmerged | YAML route loading, sequential goals, pause/resume, return to base and unit tests; arrival uses odometry and rover loops remain unvalidated |
+| Automated end-to-end tests | Partial | Plume and search unit tests are on `main`; patrol unit tests are on its feature branch; full Gazebo/Nav2 rover trials remain |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
