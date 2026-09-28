@@ -26,7 +26,7 @@
 // #include "tf2_ros/tf2_ros/"
 #include "tf2_geometry_msgs.hpp"
 #include <cmath.h>
-
+#include "tf2_geometry_msgs/tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 namespace embertrace_core
 {
@@ -40,6 +40,7 @@ public:
     state_subscription_ = create_subscription<embertrace_interfaces::msg::MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable(),
       [this](const embertrace_interfaces::msg::MissionState::SharedPtr message) {
+        state_ = message.state;
         motion_allowed_ = message->motion_allowed;
         if (!motion_allowed_) {
           // TODO(student): call async_cancel_goal on the active Nav2 goal.
@@ -75,6 +76,8 @@ private:
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
 
+  embertrace_interfaces::msg::MissionState state_;//! copied state from subscriber.
+
   geometry_msgs::msg::Pose pose_;//!< The current pose of platform
   std::mutex poseMtx_; //!< Mutex for controlling access to pose
 
@@ -83,7 +86,9 @@ private:
 
   double dist_to_goal; //!< distance from platform to goal
   double angle_to_goal; //!< angle from platform to goal
-  
+  const double angleTolerance = 0.2; // the acceptable difference between the yaw and angleToGoal
+  const double calibratedTurningSpeed_ = 0.75; // used in reachGoal to avoid exceding time
+
   //need goalCallback
   /*
   {
@@ -92,16 +97,62 @@ private:
     }
   */
 
+  //Assuming angle range is 0 to 2pi
+  //Will need to change if range is -pi to pi
+  void normaliseAngle(double &angle)
+  {
+    if (angle < 0.0){
+      angle = angle + 2*M_PI;
+    }
+    else if (angle > 2*M_PI){
+      angle = angle - 2*M_PI;
+    }
+  }
+
   
   void nav2_goal_adapter_node::odoCallback(const nav_msgs::msg::Odometry& msg){
     {
-      std::lock_guard<std::mutex> lock(poseMtx_);
+      std::unique_lock<std::mutex> lock(poseMtx_);
       pose_ = msg.pose.pose;
-    }
-
-    
+    }    
 
     double dist_to_goal = hypot((pose_->pose.pose.position.x - goal_.pose.point.x) + (pose_->pose.pose.position.y - goal_.pose.point.y));
+
+    normaliseAngle(pose_->pose.orientation);
+    angle_to_goal = atan2(goal_.pose.point.y - pose_->pose.pose.position.y, goal_.pose.point.x - pose_->pose.pose.position.x); 
+    normaliseAngle(angle_to_goal);
+
+
+    //copy over skidsteer if necessary
+    if (state_.motion_allowed == false){
+      // set cmd to 0
+    }else{
+      if (fabs(odometry_.yaw - angle) <= angleTolerance)
+      { 
+        //set turning to 0; drive forward
+        // action_ = IDLE;
+        // cmd_.at(1) = 0;
+      }
+      else{
+
+        if (odometry_.yaw < angle){
+          if ((angle-odometry_.yaw)<M_PI){
+            // cmd_.at(1) = calibratedTurningSpeed_; // left = +ve
+          }
+          else{
+            // cmd_.at(1) = -calibratedTurningSpeed_; // right = -ve
+          }
+        }
+        else{
+          if ((odometry_.yaw-angle)<M_PI){
+            // cmd_.at(1) = -calibratedTurningSpeed_; // right
+          }
+          else{
+            // cmd_.at(1) = calibratedTurningSpeed_; // left 
+          }
+        }
+      }
+    }
 
   }
 }; 
