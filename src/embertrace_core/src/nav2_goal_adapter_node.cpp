@@ -100,7 +100,7 @@ private:
 
   void cancel_active_goal()
   {
-    if (active_goal_handle_ && active_goal_handle_->is_active()) {
+    if (active_goal_handle_) {
       action_client_->async_cancel_goal(active_goal_handle_);
       publish_status("CANCEL_REQUESTED");
     }
