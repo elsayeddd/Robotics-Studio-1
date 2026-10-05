@@ -35,6 +35,7 @@ public:
   {
     const auto action_name = declare_parameter<std::string>(
       "action_name", "/husky1/navigate_to_pose");
+    boundary_frame_ = declare_parameter<std::string>("boundary_frame", "husky1_odom");
     map_frame_ = declare_parameter<std::string>("map_frame", "husky1_map");
     max_goal_age_s_ = declare_parameter<double>("max_goal_age_s", 5.0);
     pending_timeout_s_ = declare_parameter<double>("pending_timeout_s", 15.0);
@@ -134,7 +135,12 @@ private:
       return;
     }
 
-    const auto & p = mapped.pose.position;
+    geometry_msgs::msg::PoseStamped bounded;
+    try {
+      bounded = mapped.header.frame_id == boundary_frame_ ? mapped :
+        tf_buffer_->transform(mapped, boundary_frame_);
+    } catch (const tf2::TransformException &) {return;}
+    const auto & p = bounded.pose.position;
     if (!std::isfinite(p.x) || !std::isfinite(p.y) ||
       p.x < min_x_ || p.x > max_x_ || p.y < min_y_ || p.y > max_y_)
     {
@@ -192,7 +198,7 @@ private:
   double max_goal_age_s_{5.0};
   double pending_timeout_s_{15.0};
   double min_x_{-18.5}, max_x_{18.5}, min_y_{-18.5}, max_y_{18.5};
-  std::string map_frame_;
+  std::string map_frame_, boundary_frame_;
   std::optional<geometry_msgs::msg::PoseStamped> pending_goal_;
   rclcpp::Time pending_since_{0, 0, RCL_ROS_TIME};
   std::shared_ptr<GoalHandle> active_goal_handle_;
@@ -214,3 +220,4 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
+

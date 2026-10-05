@@ -1,0 +1,6 @@
+std_msgs/Header header
+bool environment_fresh
+bool visual_fresh
+bool confirmation_candidate
+uint64 rejected_samples
+uint32 consecutive_samples

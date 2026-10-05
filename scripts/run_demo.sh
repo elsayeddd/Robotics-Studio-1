@@ -12,5 +12,6 @@ source /opt/ros/humble/setup.bash
 source "$REPO_ROOT/install/setup.bash"
 
 exec ros2 launch embertrace_bringup embertrace_demo.launch.py \
-  use_nav2:=false use_rviz:=true use_dashboard:=true "$@"
+  use_nav2:=true use_drone:=true use_rviz:=true use_dashboard:=true "$@"
+
 

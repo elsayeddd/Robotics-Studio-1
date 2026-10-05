@@ -31,16 +31,38 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "use_nav2": use_nav2,
             "use_rviz": use_rviz,
+            "use_drone": LaunchConfiguration("use_drone"),
+            "scenario": LaunchConfiguration("scenario"),
         }.items(),
     )
 
     core_nodes = TimerAction(period=2.0, actions=[
+        Node(package="embertrace_core", executable="velocity_guard_node", name="velocity_guard_node",
+             output="screen", parameters=[parameters, {"use_sim_time": use_sim_time}]),
+        Node(package="embertrace_core", executable="sensor_health_node", name="sensor_health_node",
+             output="screen", parameters=[parameters, {"use_sim_time": use_sim_time}]),
+        Node(package="embertrace_core", executable="drone_scout_node", name="drone_scout_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+             parameters=[parameters, {"use_sim_time": use_sim_time}],
+             remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")]),
+        Node(package="embertrace_core", executable="sensor_health_node", name="drone_sensor_health_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+             parameters=[parameters, {"use_sim_time": use_sim_time}]),
+        Node(package="embertrace_core", executable="environment_simulator_node", name="drone_environment_simulator_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+             parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario")}]),
+        Node(package="embertrace_core", executable="camera_verifier_node", name="drone_camera_verifier_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+             parameters=[parameters, {"use_sim_time": use_sim_time}]),
+        Node(package="embertrace_core", executable="perception_node", name="drone_perception_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+             parameters=[parameters, {"use_sim_time": use_sim_time}]),
         Node(
             package="embertrace_core",
             executable="environment_simulator_node",
             name="environment_simulator_node",
             output="screen",
-            parameters=[parameters, {"use_sim_time": use_sim_time}],
+            parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario")}],
         ),
         Node(
             package="embertrace_core",
@@ -109,15 +131,19 @@ def generate_launch_description():
             executable="operator_dashboard",
             name="operator_dashboard",
             output="screen",
+            parameters=[{"use_sim_time": use_sim_time}],
         )],
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("scenario", default_value="fire"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
-        DeclareLaunchArgument("use_nav2", default_value="false"),
+        DeclareLaunchArgument("use_nav2", default_value="true"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument("use_dashboard", default_value="true"),
         simulation,
         core_nodes,
         dashboard,
     ])
+

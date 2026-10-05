@@ -90,6 +90,14 @@ public:
     reading_subscription_ = create_subscription<Reading>(
       "/embertrace/environment", rclcpp::SensorDataQoS(),
       std::bind(&SearchPlannerNode::on_reading, this, std::placeholders::_1));
+    scout_subscription_ = create_subscription<Reading>("/drone1/environment", rclcpp::SensorDataQoS(),
+      [this](const Reading::SharedPtr reading) {
+        const double age = (now() - rclcpp::Time(reading->header.stamp)).seconds();
+        if (reading->header.frame_id == "husky1_odom" && age >= 0 && age <= reading_timeout_s_ &&
+          (reading->smoke_detected || reading->temperature_anomaly) &&
+          reading->fused_confidence >= 0.38)
+        {scout_pose_ = reading->sample_pose; have_scout_ = true;}
+      });
     map_subscription_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
       map_topic_, rclcpp::QoS(1).transient_local().reliable(),
       std::bind(&SearchPlannerNode::on_map, this, std::placeholders::_1));
@@ -170,6 +178,7 @@ private:
       // A new simulation run resets /clock and invalidates old time ordering.
       estimator_->clear();
       estimate_.reset();
+      have_scout_ = false;
       last_sample_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
       last_goal_time_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
       have_last_goal_ = false;
@@ -200,12 +209,9 @@ private:
       have_signal_ = false;  // The old recovery anchor used another frame.
     }
     sample_frame_ = pose.header.frame_id;
-    if (!estimator_->add({
-        pose.pose.position.x, pose.pose.position.y, reading->smoke_ppm,
-        reading->temperature_c, reading->wind_direction_rad}))
-    {
-      return;
-    }
+    // A stationary reading can still drive a new goal after an aerial cue.
+    estimator_->add({pose.pose.position.x, pose.pose.position.y, reading->smoke_ppm,
+      reading->temperature_c, reading->wind_direction_rad});
 
     if (reading->smoke_detected) {
       last_signal_time_ = current;
@@ -279,7 +285,19 @@ private:
     double target_x = position.x;
     double target_y = position.y;
     bool casting = state_ == MissionState::RECOVER || !reading.smoke_detected;
-    if (casting) {
+    const double scout_age = have_scout_ ?
+      (current - rclcpp::Time(scout_pose_.header.stamp)).seconds() : -1.0;
+    if (!reading.smoke_detected && !reading.temperature_anomaly && have_scout_ &&
+      scout_age >= 0 && scout_age <= 5.0 &&
+      scout_pose_.header.frame_id == reading.sample_pose.header.frame_id)
+    {
+      // Flyover observations only choose a probe; they are not rover samples or truth.
+      const double dx = scout_pose_.pose.position.x - position.x;
+      const double dy = scout_pose_.pose.position.y - position.y;
+      const double fraction = std::min(1.0, surge_step_m_ / std::max(0.01, std::hypot(dx, dy)));
+      target_x += fraction * dx; target_y += fraction * dy;
+      casting = false;
+    } else if (casting) {
       // Expanding alternating crosswind casts revisit the last measured plume.
       const auto & anchor = have_signal_ ?
         last_signal_pose_.pose.position : position;
@@ -377,6 +395,9 @@ private:
   std::uint8_t state_{MissionState::IDLE};
   int cast_count_{0};
   bool have_reading_{false};
+  bool have_scout_{false};
+  geometry_msgs::msg::PoseStamped scout_pose_;
+  rclcpp::Subscription<Reading>::SharedPtr scout_subscription_;
   bool have_signal_{false};
   bool have_search_start_{false};
   bool have_last_goal_{false};
@@ -427,3 +448,4 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
+

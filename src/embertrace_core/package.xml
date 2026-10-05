@@ -10,6 +10,8 @@
 
   <depend>embertrace_interfaces</depend>
   <depend>geometry_msgs</depend>
+  <depend>diagnostic_msgs</depend>
+  <exec_depend>rclpy</exec_depend>
   <depend>nav2_msgs</depend>
   <depend>nav_msgs</depend>
   <depend>rclcpp</depend>
@@ -30,3 +32,4 @@
     <build_type>ament_cmake</build_type>
   </export>
 </package>
+

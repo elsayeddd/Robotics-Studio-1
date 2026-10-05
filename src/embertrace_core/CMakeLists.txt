@@ -12,6 +12,7 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(embertrace_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
 find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
@@ -29,6 +30,14 @@ if(TARGET yaml-cpp::yaml-cpp)
 else()
   set(YAML_CPP_TARGET yaml-cpp)
 endif()
+
+add_library(perception_filter src/perception_filter.cpp src/visual_classifier.cpp)
+target_include_directories(perception_filter PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>)
+add_executable(evaluate_perception src/evaluate_perception.cpp)
+target_link_libraries(evaluate_perception perception_filter)
+install(TARGETS evaluate_perception DESTINATION lib/${PROJECT_NAME})
 
 add_library(plume_model src/plume_model.cpp)
 target_include_directories(plume_model PUBLIC
@@ -62,8 +71,17 @@ add_embertrace_node(environment_simulator_node src/environment_simulator_node.cp
 target_link_libraries(environment_simulator_node plume_model)
 
 add_embertrace_node(camera_verifier_node src/camera_verifier_node.cpp)
+target_link_libraries(camera_verifier_node perception_filter)
 add_embertrace_node(perception_node src/perception_node.cpp)
+target_link_libraries(perception_node perception_filter)
 add_embertrace_node(mission_manager_node src/mission_manager_node.cpp)
+target_link_libraries(mission_manager_node perception_filter)
+add_embertrace_node(drone_scout_node src/drone_scout_node.cpp)
+ament_target_dependencies(drone_scout_node tf2 tf2_ros)
+add_embertrace_node(velocity_guard_node src/velocity_guard_node.cpp)
+add_embertrace_node(sensor_health_node src/sensor_health_node.cpp)
+ament_target_dependencies(sensor_health_node diagnostic_msgs)
+install(PROGRAMS scripts/record_perception.py scripts/demo_preflight.py DESTINATION lib/${PROJECT_NAME})
 add_embertrace_node(search_planner_node src/search_planner_node.cpp)
 target_link_libraries(search_planner_node search_estimation)
 ament_target_dependencies(search_planner_node tf2 tf2_geometry_msgs tf2_ros)
@@ -76,7 +94,7 @@ ament_target_dependencies(nav2_goal_adapter_node nav2_msgs rclcpp_action tf2 tf2
 
 
 install(
-  TARGETS plume_model search_estimation waypoint_patrol
+  TARGETS perception_filter plume_model search_estimation waypoint_patrol
   EXPORT plume_model_targets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -86,7 +104,14 @@ install(DIRECTORY include/ DESTINATION include)
 install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
+  find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME ros_perception_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_perception_integration_test.py)
+  set_tests_properties(ros_perception_integration PROPERTIES TIMEOUT 60)
   find_package(ament_cmake_gtest REQUIRED)
+  add_executable(test_perception_filter test/test_perception_filter.cpp)
+  target_link_libraries(test_perception_filter perception_filter)
+  add_test(NAME perception_regression COMMAND test_perception_filter)
   ament_add_gtest(test_plume_model test/test_plume_model.cpp)
   if(TARGET test_plume_model)
     target_link_libraries(test_plume_model plume_model)
@@ -108,3 +133,4 @@ endif()
 ament_export_include_directories(include)
 ament_export_targets(plume_model_targets HAS_LIBRARY_TARGET)
 ament_package()
+

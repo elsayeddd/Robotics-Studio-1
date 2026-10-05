@@ -1,98 +1,60 @@
-/**
- * Camera verifier starter implementation.
- *
- * COMPLETE BASELINE: samples pixels and reports the fraction matching a broad
- * orange/red flame heuristic. No OpenCV dependency is required.
- *
- * TODO(student): record a labelled simulation dataset, handle illumination changes,
- * add temporal consistency and compare this baseline with an OpenCV or ML detector.
- */
-
+/** Connected colour patches and consecutive frames; a simulation cue, not an ML detector. */
 #include <algorithm>
-#include <cstddef>
-#include <cstdint>
-#include <functional>
 #include <memory>
 #include <string>
-
+#include "embertrace_core/visual_classifier.hpp"
+#include "embertrace_interfaces/msg/visual_cue.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "sensor_msgs/image_encodings.hpp"
 #include "sensor_msgs/msg/image.hpp"
 #include "std_msgs/msg/float32.hpp"
-
 namespace embertrace_core
 {
-
 class CameraVerifierNode : public rclcpp::Node
 {
 public:
-  CameraVerifierNode()
-  : Node("camera_verifier_node")
+  CameraVerifierNode() : Node("camera_verifier_node")
   {
-    const auto image_topic = declare_parameter<std::string>(
-      "image_topic", "/husky1/camera/image");
-    const auto output_topic = declare_parameter<std::string>(
-      "output_topic", "/embertrace/visual_fire_cue");
-    sample_stride_ = std::max<int>(1, declare_parameter<int>("sample_stride", 8));
-    target_fraction_ = std::max(0.0001, declare_parameter<double>("target_fraction", 0.025));
-
-    publisher_ = create_publisher<std_msgs::msg::Float32>(output_topic, rclcpp::SensorDataQoS());
-    subscription_ = create_subscription<sensor_msgs::msg::Image>(
-      image_topic, rclcpp::SensorDataQoS(),
-      std::bind(&CameraVerifierNode::on_image, this, std::placeholders::_1));
+    stride_ = std::max(1, declare_parameter<int>("sample_stride", 8));
+    target_ = declare_parameter<double>("target_fraction", 0.025);
+    cluster_ = std::max(1, declare_parameter<int>("minimum_cluster", 4));
+    frames_ = std::max(1, declare_parameter<int>("required_frames", 2));
+    timeout_ = declare_parameter<double>("image_timeout_s", 1.0);
+    cue_ = create_publisher<embertrace_interfaces::msg::VisualCue>(
+      declare_parameter<std::string>("output_topic", "/embertrace/visual_cue"), rclcpp::SensorDataQoS());
+    legacy_ = create_publisher<std_msgs::msg::Float32>(
+      declare_parameter<std::string>("legacy_topic", "/embertrace/visual_fire_cue"), rclcpp::SensorDataQoS());
+    image_ = create_subscription<sensor_msgs::msg::Image>(
+      declare_parameter<std::string>("image_topic", "/husky1/camera/image"), rclcpp::SensorDataQoS(),
+      [this](const sensor_msgs::msg::Image::SharedPtr image) {
+        const double stamp = rclcpp::Time(image->header.stamp).seconds(), clock = now().seconds();
+        if (clock < last_clock_) {last_stamp_ = -1; consecutive_ = 0;}
+        last_clock_ = clock;
+        embertrace_interfaces::msg::VisualCue cue;
+        cue.header = image->header;
+        const auto score = flame_colour_score(image->data, image->width, image->height,
+          image->step, image->encoding, stride_, target_, cluster_);
+        cue.valid = score.has_value() && stamp > 0 && clock - stamp <= timeout_ &&
+          stamp - clock <= 0.1 && stamp > last_stamp_ && !image->header.frame_id.empty();
+        if (cue.valid) {
+          if (stamp - last_stamp_ > timeout_) {consecutive_ = 0;}
+          last_stamp_ = stamp;
+          consecutive_ = *score >= 0.5 ? consecutive_ + 1 : 0;
+          cue.confidence = consecutive_ >= frames_ ? static_cast<float>(*score) : 0.0F;
+        } else {consecutive_ = 0;}
+        cue_->publish(cue);
+        std_msgs::msg::Float32 legacy;
+        legacy.data = cue.valid ? cue.confidence : 0.0F;
+        legacy_->publish(legacy);
+      });
   }
-
 private:
-  void on_image(const sensor_msgs::msg::Image::SharedPtr image)
-  {
-    const bool rgb = image->encoding == sensor_msgs::image_encodings::RGB8 ||
-      image->encoding == sensor_msgs::image_encodings::RGBA8;
-    const bool bgr = image->encoding == sensor_msgs::image_encodings::BGR8 ||
-      image->encoding == sensor_msgs::image_encodings::BGRA8;
-    if (!rgb && !bgr) {
-      RCLCPP_WARN_THROTTLE(
-        get_logger(), *get_clock(), 5000, "Unsupported image encoding: %s", image->encoding.c_str());
-      return;
-    }
-
-    const std::size_t channels =
-      (image->encoding == sensor_msgs::image_encodings::RGBA8 ||
-      image->encoding == sensor_msgs::image_encodings::BGRA8) ? 4U : 3U;
-    std::size_t inspected = 0U;
-    std::size_t fire_coloured = 0U;
-
-    for (std::uint32_t row = 0; row < image->height; row += sample_stride_) {
-      const std::size_t row_offset = static_cast<std::size_t>(row) * image->step;
-      for (std::uint32_t col = 0; col < image->width; col += sample_stride_) {
-        const std::size_t index = row_offset + static_cast<std::size_t>(col) * channels;
-        if (index + 2U >= image->data.size()) {
-          continue;
-        }
-        const std::uint8_t red = image->data[index + (rgb ? 0U : 2U)];
-        const std::uint8_t green = image->data[index + 1U];
-        const std::uint8_t blue = image->data[index + (rgb ? 2U : 0U)];
-        const bool candidate = red > 160U && green > 35U && green < 205U && blue < 115U &&
-          static_cast<int>(red) > static_cast<int>(green) + 35;
-        fire_coloured += candidate ? 1U : 0U;
-        ++inspected;
-      }
-    }
-
-    std_msgs::msg::Float32 cue;
-    const double fraction = inspected == 0U ? 0.0 :
-      static_cast<double>(fire_coloured) / static_cast<double>(inspected);
-    cue.data = static_cast<float>(std::clamp(fraction / target_fraction_, 0.0, 1.0));
-    publisher_->publish(cue);
-  }
-
-  int sample_stride_{8};
-  double target_fraction_{0.025};
-  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr publisher_;
-  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr subscription_;
+  int stride_{8}, cluster_{4}, frames_{2}, consecutive_{0};
+  double target_{0.025}, timeout_{1.0}, last_stamp_{-1.0}, last_clock_{-1.0};
+  rclcpp::Publisher<embertrace_interfaces::msg::VisualCue>::SharedPtr cue_;
+  rclcpp::Publisher<std_msgs::msg::Float32>::SharedPtr legacy_;
+  rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr image_;
 };
-
-}  // namespace embertrace_core
-
+}
 int main(int argc, char ** argv)
 {
   rclcpp::init(argc, argv);

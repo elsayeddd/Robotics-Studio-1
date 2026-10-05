@@ -26,7 +26,11 @@ camera_verifier_node:
   ros__parameters:
     use_sim_time: true
     image_topic: /husky1/camera/image
-    output_topic: /embertrace/visual_fire_cue
+    output_topic: /embertrace/visual_cue
+    legacy_topic: /embertrace/visual_fire_cue
+    required_frames: 2
+    minimum_cluster: 4
+    image_timeout_s: 1.0
     sample_stride: 8
     target_fraction: 0.025
 
@@ -35,7 +39,7 @@ perception_node:
     use_sim_time: true
     input_topic: /embertrace/raw_environment
     output_topic: /embertrace/environment
-    visual_topic: /embertrace/visual_fire_cue
+    visual_topic: /embertrace/visual_cue
     filter_alpha: 0.25
     smoke_enter_ppm: 12.0
     smoke_exit_ppm: 8.0
@@ -44,6 +48,11 @@ perception_node:
     temperature_threshold_c: 32.0
     temperature_full_scale_c: 65.0
     visual_weight: 0.15
+    environment_timeout_s: 2.0
+    visual_timeout_s: 1.0
+    future_tolerance_s: 0.1
+    warmup_samples: 3
+    temperature_exit_c: 29.0
 
 mission_manager_node:
   ros__parameters:
@@ -56,6 +65,7 @@ mission_manager_node:
     visual_confirmation: 0.55
     required_detection_samples: 3
     required_confirmation_samples: 3
+    reading_timeout_s: 2.0
     max_estimate_age_s: 5.0
     max_estimate_stddev_m: 4.0
 
@@ -102,5 +112,61 @@ patrol_manager_node:
     base_waypoint_name: ranger_base
     arrival_tolerance_m: 0.5
     odometry_topic: /husky1/odometry
-    frame_id: husky1_map
+    frame_id: husky1_odom
 
+
+
+sensor_health_node:
+  ros__parameters:
+    robot: husky1
+    environment_topic: /embertrace/raw_environment
+    ready_topic: /embertrace/sensors_ready
+    sensor_timeout_s: 2.0
+
+drone_sensor_health_node:
+  ros__parameters:
+    robot: drone1
+    environment_topic: /drone1/raw_environment
+    ready_topic: /drone1/sensors_ready
+    sensor_timeout_s: 2.0
+
+drone_environment_simulator_node:
+  ros__parameters:
+    odometry_topic: /drone1/odometry
+    odom_frame: husky1_odom
+    output_topic: /drone1/raw_environment
+    truth_topic: /drone1/validation/truth
+    publish_rate_hz: 5.0
+    random_seed: 43
+    source_x: 12.0
+    source_y: 7.0
+    wind_direction_rad: -2.35619449
+    altitude_decay_m: 8.0
+
+drone_camera_verifier_node:
+  ros__parameters:
+    image_topic: /drone1/camera/image
+    output_topic: /drone1/visual_cue
+    legacy_topic: /drone1/visual_fire_cue
+    sample_stride: 4
+    target_fraction: 0.025
+    required_frames: 2
+    minimum_cluster: 4
+    image_timeout_s: 1.0
+
+drone_perception_node:
+  ros__parameters:
+    input_topic: /drone1/raw_environment
+    output_topic: /drone1/environment
+    visual_topic: /drone1/visual_cue
+    status_topic: /drone1/perception_status
+    environment_timeout_s: 2.0
+    visual_timeout_s: 1.0
+    warmup_samples: 3
+
+drone_scout_node:
+  ros__parameters:
+    altitude_m: 8.0
+    max_speed_mps: 1.5
+    sweep_x: [-12.0, 12.0, 12.0, -12.0, -12.0, 12.0]
+    sweep_y: [-8.0, -8.0, 0.0, 0.0, 8.0, 8.0]
