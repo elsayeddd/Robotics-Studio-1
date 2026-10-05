@@ -42,7 +42,11 @@ public:
     camera.transform.translation.z = -0.12;
     camera.transform.rotation.y = std::sin(3.14159265358979323846 / 4.0);
     camera.transform.rotation.w = std::cos(3.14159265358979323846 / 4.0);
-    static_tf_->sendTransform(camera);
+    geometry_msgs::msg::TransformStamped lidar;
+    lidar.header = camera.header; lidar.child_frame_id = "drone1_lidar_link";
+    lidar.transform.translation.z = 0.25;
+    lidar.transform.rotation.w = 1.0;
+    static_tf_->sendTransform(std::vector<geometry_msgs::msg::TransformStamped>{camera, lidar});
     command_ = create_publisher<geometry_msgs::msg::Twist>("/drone1/cmd_vel", 10);
     odom_ = create_subscription<nav_msgs::msg::Odometry>("/drone1/odometry", rclcpp::SensorDataQoS(),
       [this](const nav_msgs::msg::Odometry::SharedPtr msg) {

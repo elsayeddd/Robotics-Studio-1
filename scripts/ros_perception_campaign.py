@@ -57,6 +57,7 @@ def trial(output, split, scenario, seed, duration):
             'ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
             'use_rviz:=false', 'use_dashboard:=false', 'use_nav2:=false',
             'use_drone:=true', f'scenario:={scenario}', f'random_seed:={seed}',
+            f'drone_random_seed:={seed + 1}',
             'rover_x:=10.5', 'rover_y:=5.5', 'drone_x:=12.0', 'drone_y:=7.0',
             'dropout_start_s:=4.0', 'dropout_duration_s:=4.0'],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -90,6 +91,9 @@ def trial(output, split, scenario, seed, duration):
             raise RuntimeError(f'{name}/{robot}: insufficient recorded samples')
         if scenario == 'dropout' and not any(row['environment_available'] == '0' for row in rows):
             raise RuntimeError(f'{name}/{robot}: dropout was not recorded')
+        if scenario == 'visual_decoy' and robot == 'husky1' and not any(
+                float(row['visual_confidence']) >= 0.55 for row in rows):
+            raise RuntimeError(f'{name}: visual decoy was not visible to the rover camera')
     print(f'Recorded {name}: both vehicle sensor streams', flush=True)
     return paths
 

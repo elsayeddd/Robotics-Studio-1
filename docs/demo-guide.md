@@ -154,6 +154,19 @@ ros2 run embertrace_core evaluate_perception log/trials/combined.csv > log/trial
 Keep training and acceptance trials separate. The threshold sweep utility and
 metric definitions are in [Perception validation](perception-validation.md).
 
+To record the complete automated campaign (six scenarios, separate training and
+held-out seeds, both vehicles) with the mission idle:
+
+```bash
+python3 scripts/ros_perception_campaign.py
+```
+
+This launches fresh trials near the source, records local sensor observations,
+checks dropout and a visible decoy, tunes on rover training data, and writes
+held-out metrics for each vehicle to `log/gazebo-perception/`. It takes several
+minutes. Close an existing demo first. CI runs the same campaign under Xvfb and
+preserves all CSVs and launch logs as a downloadable artifact.
+
 ## Isolate startup problems
 
 For sensor/teleoperation work without Nav2 or the drone:
