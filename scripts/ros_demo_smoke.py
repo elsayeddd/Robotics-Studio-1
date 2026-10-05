@@ -57,7 +57,11 @@ def main():
                 rclpy.spin_until_future_complete(node, future, timeout_sec=3)
                 if not future.done() or not future.result().accepted:
                     raise RuntimeError('Command failed: ' + text)
-            pump(2)
+            # DDS discovery and the first sensor sample are asynchronous. Wait
+            # for the actual streams instead of assuming a two-second startup.
+            deadline = time.monotonic() + 25
+            while time.monotonic() < deadline and (len(poses) < 2 or not client.service_is_ready()):
+                pump(0.1)
             assert len(poses) == 2, 'Both odometry streams are required'
             initial = dict(poses)
             command('START')
@@ -86,7 +90,10 @@ def main():
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL)
-            print((output / 'launch.log').read_text()[-8000:])
+            content = (output / 'launch.log').read_text()
+            errors = [line for line in content.splitlines() if '[ERROR]' in line or '[FATAL]' in line]
+            print('\n'.join(errors[:25]))
+            print(content[-8000:])
 
 
 if __name__ == '__main__':

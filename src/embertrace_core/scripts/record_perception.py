@@ -49,15 +49,16 @@ class Recorder(Node):
         self.visual = msg
 
     def on_truth(self, msg):
-        self.truth[round(stamp(msg), 9)] = (msg, time.monotonic())
+        self.truth[round(stamp(msg), 9)] = (
+            msg, time.monotonic(), self.get_clock().now().nanoseconds * 1e-9)
         self.drain()
 
     def drain(self, force=False):
-        for key, (truth, received) in sorted(list(self.truth.items())):
+        for key, (truth, received, truth_now) in sorted(list(self.truth.items())):
             raw = self.raw.get(key)
             if raw is None and not force and time.monotonic() - received < 0.4:
                 break
-            now_s = self.get_clock().now().nanoseconds * 1e-9
+            now_s = truth_now
             v = self.visual
             # A later camera frame cannot be replayed backwards into this sample.
             visual_valid = v is not None and v.valid and 0 <= now_s - stamp(v) <= 1.0
