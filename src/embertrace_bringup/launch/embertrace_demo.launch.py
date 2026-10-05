@@ -33,6 +33,7 @@ def generate_launch_description():
             "use_rviz": use_rviz,
             "use_drone": LaunchConfiguration("use_drone"),
             "scenario": LaunchConfiguration("scenario"),
+            **{key: LaunchConfiguration(key) for key in ("rover_x", "rover_y", "drone_x", "drone_y")},
         }.items(),
     )
 
@@ -50,7 +51,10 @@ def generate_launch_description():
              parameters=[parameters, {"use_sim_time": use_sim_time}]),
         Node(package="embertrace_core", executable="environment_simulator_node", name="drone_environment_simulator_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
-             parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario")}]),
+             parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario"),
+                         "random_seed": LaunchConfiguration("random_seed"),
+                         "dropout_start_s": LaunchConfiguration("dropout_start_s"),
+                         "dropout_duration_s": LaunchConfiguration("dropout_duration_s")}]),
         Node(package="embertrace_core", executable="camera_verifier_node", name="drone_camera_verifier_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
              parameters=[parameters, {"use_sim_time": use_sim_time}]),
@@ -62,7 +66,10 @@ def generate_launch_description():
             executable="environment_simulator_node",
             name="environment_simulator_node",
             output="screen",
-            parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario")}],
+            parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario"),
+                        "random_seed": LaunchConfiguration("random_seed"),
+                        "dropout_start_s": LaunchConfiguration("dropout_start_s"),
+                        "dropout_duration_s": LaunchConfiguration("dropout_duration_s")}],
         ),
         Node(
             package="embertrace_core",
@@ -137,6 +144,13 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("random_seed", default_value="42"),
+        DeclareLaunchArgument("dropout_start_s", default_value="25.0"),
+        DeclareLaunchArgument("dropout_duration_s", default_value="8.0"),
+        DeclareLaunchArgument("rover_x", default_value="-14.0"),
+        DeclareLaunchArgument("rover_y", default_value="-14.0"),
+        DeclareLaunchArgument("drone_x", default_value="-14.0"),
+        DeclareLaunchArgument("drone_y", default_value="-12.0"),
         DeclareLaunchArgument("scenario", default_value="fire"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("use_nav2", default_value="true"),
@@ -146,4 +160,3 @@ def generate_launch_description():
         core_nodes,
         dashboard,
     ])
-

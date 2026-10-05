@@ -70,7 +70,8 @@ def generate_launch_description():
         package="ros_ign_gazebo", executable="create", name="spawn_drone1", output="screen",
         condition=IfCondition(LaunchConfiguration("use_drone")),
         arguments=["-file", PathJoinSubstitution([model_dir, "scout_drone", "model.sdf"]),
-                   "-name", "drone1", "-x", "-14", "-y", "-12", "-z", "8"],
+                   "-name", "drone1", "-x", LaunchConfiguration("drone_x"),
+                   "-y", LaunchConfiguration("drone_y"), "-z", "8"],
     )])
 
     robot_state_publisher = Node(
@@ -93,8 +94,8 @@ def generate_launch_description():
             arguments=[
                 "-topic", "/husky1/robot_description",
                 "-name", "husky1",
-                "-x", "-14.0",
-                "-y", "-14.0",
+                "-x", LaunchConfiguration("rover_x"),
+                "-y", LaunchConfiguration("rover_y"),
                 "-z", "0.4",
                 "-Y", "0.7854",
             ],
@@ -169,6 +170,10 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("rover_x", default_value="-14.0"),
+        DeclareLaunchArgument("rover_y", default_value="-14.0"),
+        DeclareLaunchArgument("drone_x", default_value="-14.0"),
+        DeclareLaunchArgument("drone_y", default_value="-12.0"),
         DeclareLaunchArgument("scenario", default_value="fire"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("use_nav2", default_value="false"),
@@ -200,5 +205,4 @@ def generate_launch_description():
         navigation,
         rviz,
     ])
-
 

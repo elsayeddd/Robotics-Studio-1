@@ -41,6 +41,15 @@ jobs:
           source /opt/ros/humble/setup.bash
           source install/setup.bash
           xvfb-run -a python3 scripts/ros_demo_smoke.py
+      - name: Recorded Gazebo perception campaign
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          ROS_DOMAIN_ID: "74"
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          xvfb-run -a python3 scripts/ros_perception_campaign.py
       - name: Preserve demo and test logs
         if: always()
         uses: actions/upload-artifact@v4

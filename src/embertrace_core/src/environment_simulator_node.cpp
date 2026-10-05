@@ -131,7 +131,7 @@ private:
     if (truth.sensor_dropout) {return;}
 
     embertrace_interfaces::msg::EnvironmentalReading message;
-    message.header.stamp = now();
+    message.header.stamp = truth.header.stamp;
     message.header.frame_id = odom_frame_;
     message.sample_pose.header = message.header;
     message.sample_pose.pose = latest_odometry_.pose.pose;
@@ -169,4 +169,3 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
-

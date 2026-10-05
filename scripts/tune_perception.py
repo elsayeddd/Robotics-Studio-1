@@ -21,7 +21,9 @@ def main():
         # False confirmations are weighted twice as heavily as missed positive frames.
         cost = 4 * fp + 2 * fn
         results.append(dict(alpha=alpha, smoke_enter=smoke, heat_enter=heat, tp=tp, fp=fp, fn=fn, cost=cost))
-    results.sort(key=lambda row: (row['cost'], row['alpha']))
+    # Prefer the existing conservative defaults when training costs tie.
+    results.sort(key=lambda row: (row['cost'], abs(row['alpha'] - 0.4),
+                                 abs(row['smoke_enter'] - 12), abs(row['heat_enter'] - 32)))
     with open(args.output, 'w', newline='') as handle:
         writer = csv.DictWriter(handle, fieldnames=list(results[0]))
         writer.writeheader()
