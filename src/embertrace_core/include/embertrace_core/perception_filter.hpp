@@ -7,7 +7,7 @@ namespace embertrace_core
 {
 struct PerceptionConfig
 {
-  double alpha{0.25};
+  double alpha{0.4};
   double nominal_period_s{0.2};
   double smoke_enter{12.0}, smoke_exit{8.0}, smoke_scale{45.0}, baseline_smoke{1.0};
   double heat_enter{32.0}, heat_exit{29.0}, heat_scale{65.0};

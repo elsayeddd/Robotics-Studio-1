@@ -14,10 +14,10 @@ class CameraVerifierNode : public rclcpp::Node
 public:
   CameraVerifierNode() : Node("camera_verifier_node")
   {
-    stride_ = std::max(1, declare_parameter<int>("sample_stride", 8));
+    stride_ = std::max<int>(1, declare_parameter<int>("sample_stride", 8));
     target_ = declare_parameter<double>("target_fraction", 0.025);
-    cluster_ = std::max(1, declare_parameter<int>("minimum_cluster", 4));
-    frames_ = std::max(1, declare_parameter<int>("required_frames", 2));
+    cluster_ = std::max<int>(1, declare_parameter<int>("minimum_cluster", 4));
+    frames_ = std::max<int>(1, declare_parameter<int>("required_frames", 2));
     timeout_ = declare_parameter<double>("image_timeout_s", 1.0);
     cue_ = create_publisher<embertrace_interfaces::msg::VisualCue>(
       declare_parameter<std::string>("output_topic", "/embertrace/visual_cue"), rclcpp::SensorDataQoS());

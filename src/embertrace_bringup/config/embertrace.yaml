@@ -40,7 +40,7 @@ perception_node:
     input_topic: /embertrace/raw_environment
     output_topic: /embertrace/environment
     visual_topic: /embertrace/visual_cue
-    filter_alpha: 0.25
+    filter_alpha: 0.4
     smoke_enter_ppm: 12.0
     smoke_exit_ppm: 8.0
     smoke_full_scale_ppm: 45.0

@@ -19,7 +19,7 @@ public:
   PerceptionNode() : Node("perception_node")
   {
     PerceptionConfig c;
-    c.alpha = declare_parameter<double>("filter_alpha", 0.25);
+    c.alpha = declare_parameter<double>("filter_alpha", 0.4);
     c.nominal_period_s = declare_parameter<double>("nominal_period_s", 0.2);
     c.smoke_enter = declare_parameter<double>("smoke_enter_ppm", 12.0);
     c.smoke_exit = declare_parameter<double>("smoke_exit_ppm", 8.0);

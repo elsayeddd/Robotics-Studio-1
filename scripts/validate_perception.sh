@@ -9,7 +9,7 @@ g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -O2 \
   "$TASK_ROOT/src/embertrace_core/src/perception_filter.cpp" \
   "$TASK_ROOT/src/embertrace_core/src/evaluate_perception.cpp" \
   -o "$TASK_OUTPUT/evaluate_perception"
-python3 "$TASK_ROOT/scripts/generate_perception_trials.py" "$TASK_OUTPUT/synthetic_trials.csv"
+python3 "$TASK_ROOT/scripts/generate_perception_trials.py" "$TASK_OUTPUT/synthetic_trials.csv" --seed-start 142
 "$TASK_OUTPUT/evaluate_perception" "$TASK_OUTPUT/synthetic_trials.csv" > "$TASK_OUTPUT/metrics.csv"
 cat "$TASK_OUTPUT/metrics.csv"
 g++ -std=c++17 -Wall -Wextra -Wpedantic -Werror -O2 \
