@@ -70,6 +70,14 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 **Acceptance:** report confusion matrix and latency over at least three scenarios.
 
+**Implementation supplied:** timestamp-aware filters, environmental/visual validity,
+consecutive-frame colour verification, dropout recovery, sensor diagnostics, CSV
+recording/evaluation, threshold sweep and regression/ROS integration tests. The
+integrated demo also includes an aerial scout and guarded rover commands. See
+[Perception validation](perception-validation.md) and [Demo guide](demo-guide.md).
+Synthetic results cover six scenarios; recorded Gazebo tuning and held-out
+acceptance remain outstanding.
+
 ## Priority 5: operator interface refinement
 
 **Suggested owner:** UI member  
@@ -104,4 +112,5 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 - aerial scout feeding initial search bounds;
 - terrain slopes and wheel slip;
 - bag-file replay mode for repeatable perception testing.
+
 

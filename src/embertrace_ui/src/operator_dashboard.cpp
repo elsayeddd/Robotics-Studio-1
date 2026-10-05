@@ -26,6 +26,7 @@
 #include <QWidget>
 
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
+#include "embertrace_interfaces/msg/perception_status.hpp"
 #include "embertrace_interfaces/msg/fire_alert.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
 #include "embertrace_interfaces/srv/operator_command.hpp"
@@ -47,6 +48,7 @@ public:
         detail_ = message->detail;
         progress_ = message->progress;
         connected_ = true;
+        state_stamp_ = rclcpp::Time(message->header.stamp);
       });
     reading_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
       "/embertrace/environment", rclcpp::SensorDataQoS(),
@@ -61,6 +63,18 @@ public:
       [this](const embertrace_interfaces::msg::FireAlert::SharedPtr message) {
         alert_text_ = message->confirmed ? "CONFIRMED FIRE" : "Suspected fire";
         alert_text_ += " — " + message->recommended_action;
+      });
+    rover_status_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
+      "/embertrace/perception_status", 10,
+      [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr msg) {
+        rover_fresh_ = msg->environment_fresh;
+        rover_stamp_ = rclcpp::Time(msg->header.stamp);
+      });
+    drone_status_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
+      "/drone1/perception_status", 10,
+      [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr msg) {
+        drone_fresh_ = msg->environment_fresh;
+        drone_stamp_ = rclcpp::Time(msg->header.stamp);
       });
     command_client_ = create_client<embertrace_interfaces::srv::OperatorCommand>(
       "/embertrace/operator_command");
@@ -83,7 +97,18 @@ public:
       });
   }
 
-  bool connected() const {return connected_;}
+  bool fresh(const rclcpp::Time & stamp) const
+  {
+    const double age = (now() - stamp).seconds();
+    return stamp.nanoseconds() > 0 && age >= 0 && age < 2.0;
+  }
+  bool connected() const {return connected_ && fresh(state_stamp_);}
+  bool rover_fresh() const {return rover_fresh_ && fresh(rover_stamp_);}
+  std::string sensor_health() const
+  {
+    return std::string("Rover perception: ") + (rover_fresh() ? "fresh" : "waiting / stale") +
+      " | Drone perception: " + (drone_fresh_ && fresh(drone_stamp_) ? "fresh" : "disabled / waiting / stale");
+  }
   const std::string & state_name() const {return state_name_;}
   const std::string & detail() const {return detail_;}
   const std::string & alert_text() const {return alert_text_;}
@@ -95,7 +120,9 @@ public:
   float confidence() const {return confidence_;}
 
 private:
-  bool connected_{false};
+  bool connected_{false}, rover_fresh_{false}, drone_fresh_{false};
+  rclcpp::Time state_stamp_{0, 0, RCL_ROS_TIME}, rover_stamp_{0, 0, RCL_ROS_TIME}, drone_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr rover_status_, drone_status_;
   std::string state_name_{"WAITING"};
   std::string detail_{"Waiting for mission manager"};
   std::string alert_text_{"No active alert"};
@@ -152,6 +179,9 @@ public:
     sensors->addWidget(new QLabel("Temperature"), 1, 0); sensors->addWidget(temperature_, 1, 1);
     sensors->addWidget(new QLabel("Wind"), 0, 2); sensors->addWidget(wind_, 0, 3);
     sensors->addWidget(new QLabel("Fused confidence"), 1, 2); sensors->addWidget(confidence_, 1, 3);
+    health_ = new QLabel("Waiting for sensor health");
+    health_->setWordWrap(true);
+    sensors->addWidget(health_, 2, 0, 1, 4);
     root->addWidget(sensor_box);
 
     alert_ = new QLabel("No active alert");
@@ -205,6 +235,11 @@ private:
     temperature_->setText(QString::number(node_->temperature_c(), 'f', 1) + " °C");
     wind_->setText(QString::number(node_->wind_speed_mps(), 'f', 1) + " m/s");
     confidence_->setText(QString::number(100.0F * node_->confidence(), 'f', 0) + " %");
+    health_->setText(QString::fromStdString(node_->sensor_health()));
+    if (!node_->rover_fresh()) {
+      smoke_->setText("Unavailable"); temperature_->setText("Unavailable");
+      wind_->setText("Unavailable"); confidence_->setText("Unavailable");
+    }
     alert_->setText(QString::fromStdString(node_->alert_text()));
     if (node_->alert_text().find("CONFIRMED") != std::string::npos) {
       alert_->setStyleSheet("padding: 10px; background: #7f1d1d; color: white; font-weight: 700;");
@@ -220,6 +255,7 @@ private:
   QLabel * temperature_{nullptr};
   QLabel * wind_{nullptr};
   QLabel * confidence_{nullptr};
+  QLabel * health_{nullptr};
   QLabel * alert_{nullptr};
   QLabel * command_result_{nullptr};
   QProgressBar * progress_{nullptr};
@@ -239,3 +275,4 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return result;
 }
+

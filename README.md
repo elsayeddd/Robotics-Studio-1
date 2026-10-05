@@ -6,20 +6,23 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 
 ## Project status
 
-All three feature branches are represented on `main`. Runtime acceptance of the complete autonomous rover remains outstanding.
+The navigation, patrol and source estimation modules are integrated with timestamp-aware perception, sensor health and an aerial scout on `feature/perception-validation`. See [Demo guide](docs/demo-guide.md) and [Perception validation](docs/perception-validation.md) for commands, measured synthetic results and outstanding recorded-trial acceptance.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
 | Forest world and Husky sensor model | Implemented | Self-contained local trees, rocks, logs, base station, fire source and textured terrain |
 | ROS–Gazebo bridge | Implemented | Odometry, IMU, LiDAR, RGB-D camera, commands and simulation clock |
 | Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
-| Environmental perception | Implemented baseline | Exponential filtering, thresholding and confidence calculation |
+| Environmental perception | Implemented; recorded trials pending | Timestamp-aware filtering/hysteresis, stale/dropout recovery, validity and guarded confirmation |
 | Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
 | Search and source estimation | Implemented baseline | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; unit tests included |
 | Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
 | Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
 | Nav2 goal execution | Implemented baseline; rover validation pending | Namespaced `NavigateToPose` client transforms and bounds-checks goals, cancels on mission changes and publishes result status |
-| Camera fire verification | Scaffolded | Simple colour cue works; robust CV model and test set remain outstanding |
+| Camera fire verification | Implemented simulation heuristic | Connected colour patches, valid stamped cues and consecutive frames; real-image validation pending |
+| Aerial scout | Implemented demo proxy | Velocity-controlled drone, RGB-D/LiDAR/IMU, local environment samples and rover investigation cues |
+| Sensor health and motion guard | Implemented | All sensor streams monitored; missing readiness/mission/command heartbeat inhibits motion |
+| Perception evaluation | Implemented | Six scenarios, CSV recorder/evaluator, threshold sweep, synthetic confusion matrices and latency |
 | Patrol route manager | Implemented baseline; rover validation pending | YAML route loading, sequential goals, pause/resume and return to base; odometry is transformed into the route frame for arrival checks |
 | Automated end-to-end tests | Partial | Plume, search and patrol unit tests are included; full Gazebo/Nav2 rover trials remain |
 
@@ -61,7 +64,7 @@ source /opt/ros/humble/setup.bash
 source install/setup.bash
 ```
 
-### 4. Run the complete scaffold
+### 4. Run the integrated demo
 
 ```bash
 ./scripts/run_demo.sh
@@ -71,10 +74,18 @@ Equivalent launch command:
 
 ```bash
 ros2 launch embertrace_bringup embertrace_demo.launch.py \
-  use_nav2:=false use_rviz:=true use_dashboard:=true
+  use_nav2:=true use_drone:=true use_rviz:=true use_dashboard:=true scenario:=fire
 ```
 
-Start with `use_nav2:=false`. This verifies Gazebo, the sensor bridge, plume simulation, state machine, heatmap and dashboard. The search planner publishes source estimates from samples, but only publishes goals when SLAM supplies a map and TF.
+Run the read-only readiness check in a second sourced terminal before START:
+
+```bash
+ros2 run embertrace_core demo_preflight.py --timeout 60
+```
+
+Begin with `scenario:=no_fire` to inspect patrol and drone motion; then restart
+with `scenario:=fire`. See [Demo guide](docs/demo-guide.md) for false alarms,
+dropout, recording and isolated sensor/teleoperation modes.
 
 ### 5. Send an operator command without the dashboard
 
@@ -87,16 +98,16 @@ Valid commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET` and `E_STOP`.
 
 ## What should appear
 
-- Gazebo opens the `embertrace_forest` world with a Husky rover at the ranger base.
+- Gazebo opens the `embertrace_forest` world with a Husky rover at the ranger base and an aerial scout hovering above its base.
 - RViz shows the robot, LiDAR, smoke samples and source estimate. The map and investigation goals appear when SLAM is running.
 - The EmberTrace dashboard displays mission state, smoke, temperature, confidence and alert information.
 - After `START`, the state is `PATROL`. Moving the robot into the plume causes `INVESTIGATE` and then `TRACK`; sufficiently strong combined evidence causes `VERIFY` and `ALERT`.
 
-For the baseline launch without Nav2, use teleoperation to move through the plume:
+For a launch with `use_nav2:=false`, START the mission, then use teleoperation to move through the plume:
 
 ```bash
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-  --ros-args --remap cmd_vel:=/husky1/cmd_vel
+  --ros-args --remap cmd_vel:=/husky1/autonomy_cmd_vel
 ```
 
 ## Repository layout
@@ -134,10 +145,11 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 
 - Smoke is a mathematical field, not computational fluid dynamics. This keeps the system deterministic and achievable in 12 weeks.
 - The environment simulator knows the hidden fire coordinates, but publishes only local sensor readings. Decision nodes must never subscribe to ground truth.
-- The visible fire model helps demonstration and camera work. It can be hidden for blind trials using the `show_fire_marker` parameter and a future world-state service.
-- The current colour-based camera verifier is deliberately simple and must not be presented as a real wildfire detector.
-- The search baseline was built with ROS 2 Humble before the navigation and patrol branches were integrated. Build and test the combined package, full Gazebo/Nav2 launch and ten rover trials on the target machine.
+- Scenario switches remove the visible fire model for no_fire, dust and hot_surface trials. The visual_decoy scenario deliberately retains it without a fire field.
+- The colour-based camera verifier is a simulation heuristic, and the drone is an ideal velocity-controlled proxy without rotor dynamics or a physical flight controller.
+- The synthetic perception report does not establish recorded Gazebo or hardware performance. Complete at least three recorded perception scenarios and ten source-localisation rover trials on the target machine.
 
 ## Origin of supplied material
 
 The simulation structure, Husky model, sensor bridge conventions, forest texture and meshes were adapted from the supplied `41068_ignition_bringup_v1.zip`. See [Original package audit](docs/original-package-audit.md) and [NOTICE](NOTICE.md) before publishing the repository publicly.
+
