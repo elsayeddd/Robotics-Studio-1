@@ -17,20 +17,46 @@ colcon test --packages-select embertrace_core
 colcon test-result --verbose
 ```
 
-The initial unit test checks physical relationships in the plume model. Add tests for filters, mission transitions and search geometry as those components mature.
+The suite covers the plume model, source estimation, patrol geometry, timestamp-aware
+perception and image classification. The ROS transport test launches camera,
+perception and mission processes and checks multisensor confirmation, vision-only
+suppression, stale vision, dropout pause and the E-stop latch.
 
 ### 3. Node-level tests
 
-Publish controlled messages and inspect outputs. Example:
+Inspect the stamped visual cue and local fused measurements:
 
 ```bash
-ros2 topic pub --once /embertrace/visual_fire_cue std_msgs/msg/Float32 "{data: 0.8}"
+ros2 topic echo /embertrace/visual_cue
 ros2 topic echo /embertrace/environment
 ```
 
 ### 4. Integrated simulation trials
 
-Record each trial's random seed and parameters. Measure:
+With ROS and the workspace sourced, run the full startup/motion check:
+
+```bash
+python3 scripts/ros_demo_smoke.py
+```
+
+It waits for fresh vehicle sensors, map/TF and active Nav2 lifecycle nodes, starts
+the mission, requires actual odometry movement from both vehicles, and checks
+zero command output after E-stop. The launch log is retained in `log/demo-smoke/`.
+
+Run the recorded perception campaign separately:
+
+```bash
+python3 scripts/ros_perception_campaign.py
+```
+
+It records six stationary near-source scenarios for both vehicles with separate
+training and held-out seeds, checks visible visual-decoy evidence and dropout,
+then writes threshold-sweep and confusion-matrix/latency CSVs. See
+[Perception validation](perception-validation.md) for metric definitions and
+[Demo guide](demo-guide.md) for interactive trials. For headless execution, prefix
+either command with `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a`.
+
+Longer operational trials should record each random seed and parameters. Measure:
 
 - time from plume entry to detection;
 - time from detection to alert;

@@ -79,7 +79,7 @@ def trial(output, split, scenario, seed, duration):
         finally:
             for node in nodes:
                 node.drain(force=True)
-                node.handle.close()
+                node.csv_handle.close()
                 executor.remove_node(node)
                 node.destroy_node()
             executor.shutdown()

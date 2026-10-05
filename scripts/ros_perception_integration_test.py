@@ -1,18 +1,64 @@
 #!/usr/bin/env python3
 """Exercise real ROS transport, mission confirmation, dropout and E-stop latching."""
 import math
+import csv
+import importlib.util
 import os
 from pathlib import Path
 import signal
 import subprocess
 import tempfile
 import time
+from types import SimpleNamespace
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy
-from embertrace_interfaces.msg import EnvironmentalReading, MissionState, FireAlert
+from embertrace_interfaces.msg import EnvironmentalReading, MissionState, FireAlert, TrialTruth, VisualCue
 from embertrace_interfaces.srv import OperatorCommand
 from sensor_msgs.msg import Image
+
+
+def check_recorder(directory):
+    path = Path(__file__).resolve().parents[1] / 'src/embertrace_core/scripts/record_perception.py'
+    spec = importlib.util.spec_from_file_location('test_recorder', path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    output = Path(directory) / 'recording.csv'
+    recorder = module.Recorder(SimpleNamespace(robot='husky1', output=str(output), trial='ordering'))
+    recorder.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=False)])
+    try:
+        base = recorder.get_clock().now().nanoseconds
+        def message(cls, offset):
+            msg = cls()
+            ns = base + offset
+            msg.header.stamp.sec, msg.header.stamp.nanosec = divmod(ns, 1000000000)
+            return msg
+        cue = message(VisualCue, 0)
+        cue.valid = True
+        cue.confidence = 0.2
+        recorder.on_visual(cue)
+        recorder.on_raw(message(EnvironmentalReading, 0))
+        future = message(VisualCue, 50000000)
+        future.valid = True
+        future.confidence = 0.9
+        recorder.on_visual(future)
+        recorder.on_truth(message(TrialTruth, 0))
+        # A missing earlier raw packet must stay visible and must not allow a
+        # later observation to overtake it while awaiting its join deadline.
+        recorder.on_truth(message(TrialTruth, 100000000))
+        recorder.on_raw(message(EnvironmentalReading, 200000000))
+        recorder.on_truth(message(TrialTruth, 200000000))
+        assert recorder.rows == 1, 'Later row overtook an unresolved dropout'
+        recorder.drain(force=True)
+        rows = list(csv.DictReader(output.open()))
+        assert len(rows) == 3
+        assert abs(float(rows[0]['visual_confidence']) - 0.2) < 1e-6, 'Future visual evidence leaked backwards'
+        assert [r['environment_available'] for r in rows] == ['1', '0', '1'], 'Dropout disappeared from recording'
+        stamps = [float(r['stamp_s']) for r in rows]
+        assert stamps == sorted(stamps), 'CSV observations reordered'
+    finally:
+        recorder.csv_handle.close()
+        recorder.destroy_node()
 
 
 def run():
@@ -68,6 +114,7 @@ def run():
     logs = tempfile.TemporaryDirectory(prefix='embertrace_ros_test_')
     processes, handles = [], []
     try:
+        check_recorder(logs.name)
         for executable in ('perception_node', 'camera_verifier_node', 'mission_manager_node'):
             handle = (Path(logs.name) / (executable + '.log')).open('w')
             handles.append(handle)

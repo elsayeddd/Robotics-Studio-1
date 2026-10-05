@@ -25,8 +25,8 @@ class Recorder(Node):
         root = '/embertrace' if args.robot == 'husky1' else '/drone1'
         path = Path(args.output).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.handle = path.open('w', newline='')
-        self.writer = csv.writer(self.handle)
+        self.csv_handle = path.open('w', newline='')
+        self.writer = csv.writer(self.csv_handle)
         self.writer.writerow(HEADER)
         self.trial = args.trial
         self.raw, self.truth = {}, {}
@@ -78,7 +78,7 @@ class Recorder(Node):
         if len(self.raw) > 200:
             for key in sorted(self.raw)[:-200]:
                 self.raw.pop(key)
-        self.handle.flush()
+        self.csv_handle.flush()
 
 
 def main():
@@ -100,7 +100,7 @@ def main():
         pass
     finally:
         node.drain(force=True)
-        node.handle.close()
+        node.csv_handle.close()
         count = node.rows
         node.destroy_node()
         rclpy.shutdown()
