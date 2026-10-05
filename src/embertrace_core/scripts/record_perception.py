@@ -40,7 +40,9 @@ class Recorder(Node):
         self.create_timer(0.1, self.drain)
 
     def on_raw(self, msg):
-        self.raw[round(stamp(msg), 9)] = (msg, self.get_clock().now().nanoseconds * 1e-9)
+        # Snapshot the visual evidence now; waiting for truth must not introduce
+        # camera evidence that arrived after this environmental observation.
+        self.raw[round(stamp(msg), 9)] = (msg, self.get_clock().now().nanoseconds * 1e-9, self.visual)
         self.drain()
 
     def on_visual(self, msg):
@@ -54,14 +56,14 @@ class Recorder(Node):
         for key, (truth, received) in sorted(list(self.truth.items())):
             raw = self.raw.get(key)
             if raw is None and not force and time.monotonic() - received < 0.4:
-                continue
+                break
             now_s = self.get_clock().now().nanoseconds * 1e-9
             v = self.visual
             # A later camera frame cannot be replayed backwards into this sample.
             visual_valid = v is not None and v.valid and 0 <= now_s - stamp(v) <= 1.0
             values = [key, 0, 22, 0, 0]
             if raw is not None:
-                msg, now_s = raw
+                msg, now_s, v = raw
                 values = [stamp(msg), msg.smoke_ppm, msg.temperature_c, msg.wind_speed_mps, msg.wind_direction_rad]
                 visual_valid = v is not None and v.valid and 0 <= now_s - stamp(v) <= 1.0
             self.writer.writerow([self.trial, truth.scenario, now_s, *values,

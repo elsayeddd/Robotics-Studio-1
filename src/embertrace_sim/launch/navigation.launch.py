@@ -5,7 +5,9 @@ from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDesc
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
 from launch_ros.actions import Node, PushRosNamespace, SetRemap
+from launch_ros.descriptions import ParameterFile
 from launch_ros.substitutions import FindPackageShare
+from nav2_common.launch import RewrittenYaml
 
 
 def generate_launch_description():
@@ -42,7 +44,12 @@ def generate_launch_description():
 
     # Explicit velocity routing prevents a second Nav2 publisher bypassing the guard.
     # Keep Humble's controller -> velocity smoother chain intact.
-    params = PathJoinSubstitution([config_dir, "nav2_params_husky1.yaml"])
+    # ROS parameter selectors must include the node namespace, including the
+    # costmap child nodes. Otherwise Nav2 silently uses its default parameters.
+    params = ParameterFile(RewrittenYaml(
+        source_file=PathJoinSubstitution([config_dir, "nav2_params_husky1.yaml"]),
+        root_key="husky1", param_rewrites={"use_sim_time": use_sim_time},
+        convert_types=True), allow_substs=True)
     stack = [
         ("nav2_controller", "controller_server", "controller_server"),
         ("nav2_smoother", "smoother_server", "smoother_server"),
@@ -73,4 +80,3 @@ def generate_launch_description():
         slam,
         nav2,
     ])
-

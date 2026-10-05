@@ -20,7 +20,8 @@ def main():
     parser.add_argument('--no-nav2', action='store_true')
     args, ros_args = parser.parse_known_args()
     rclpy.init(args=ros_args)
-    node = Node('demo_preflight')
+    node = Node('demo_preflight', cli_args=[
+        '--ros-args', '-r', '/tf:=/husky1/tf', '-r', '/tf_static:=/husky1/tf_static'])
     node.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=True)])
     checks = {'rover sensors': False, 'rover perception': False, 'mission heartbeat': False}
     if not args.no_drone:
