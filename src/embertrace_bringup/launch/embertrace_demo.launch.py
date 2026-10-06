@@ -33,6 +33,7 @@ def generate_launch_description():
             "use_rviz": use_rviz,
             "use_drone": LaunchConfiguration("use_drone"),
             "scenario": LaunchConfiguration("scenario"),
+            "gazebo_gui": LaunchConfiguration("gazebo_gui"),
             **{key: LaunchConfiguration(key) for key in ("rover_x", "rover_y", "drone_x", "drone_y")},
         }.items(),
     )
@@ -144,6 +145,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
         DeclareLaunchArgument("random_seed", default_value="42"),
         DeclareLaunchArgument("drone_random_seed", default_value="43"),
         DeclareLaunchArgument("dropout_start_s", default_value="25.0"),

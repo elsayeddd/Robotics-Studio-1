@@ -36,6 +36,7 @@ def generate_launch_description():
 
     def launch_world(context):
         scenario = LaunchConfiguration("scenario").perform(context)
+        gui = LaunchConfiguration("gazebo_gui").perform(context).lower() == "true"
         if scenario not in ("fire", "no_fire", "dust", "hot_surface", "visual_decoy", "dropout"):
             raise ValueError("Unknown scenario: " + scenario)
         world = Path(get_package_share_directory("embertrace_sim")) / "worlds" / "embertrace_forest.sdf"
@@ -54,7 +55,7 @@ def generate_launch_description():
         return [
             IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([
                 FindPackageShare("ros_ign_gazebo"), "launch", "ign_gazebo.launch.py"
-            ])), launch_arguments={"ign_args": [runtime_world, " -r"]}.items()),
+            ])), launch_arguments={"ign_args": [runtime_world, " -r" if gui else " -r -s -v 3"]}.items()),
             RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)])),
         ]
 
@@ -170,6 +171,7 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
         DeclareLaunchArgument("rover_x", default_value="-14.0"),
         DeclareLaunchArgument("rover_y", default_value="-14.0"),
         DeclareLaunchArgument("drone_x", default_value="-14.0"),
@@ -205,4 +207,3 @@ def generate_launch_description():
         navigation,
         rviz,
     ])
-

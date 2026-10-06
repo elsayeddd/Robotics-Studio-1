@@ -52,15 +52,21 @@ def trial(output, split, scenario, seed, duration):
         nodes.append(node)
         executor.add_node(node)
     with (output / f'{name}.log').open('w') as log:
+        trial_env = dict(os.environ)
+        # Gazebo transport is separate from DDS. Fresh partitions prevent a
+        # stopped trial's discovery data from interfering with the next world.
+        trial_env['IGN_PARTITION'] = f'embertrace_{name}_{os.getpid()}'
+        trial_env['GZ_PARTITION'] = trial_env['IGN_PARTITION']
         # Explicit spawn poses belong to this test fixture, never to autonomy.
         process = subprocess.Popen([
             'ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
             'use_rviz:=false', 'use_dashboard:=false', 'use_nav2:=false',
+            'gazebo_gui:=false',
             'use_drone:=true', f'scenario:={scenario}', f'random_seed:={seed}',
             f'drone_random_seed:={seed + 1}',
             'rover_x:=10.5', 'rover_y:=5.5', 'drone_x:=12.0', 'drone_y:=7.0',
             'dropout_start_s:=4.0', 'dropout_duration_s:=4.0'],
-            stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=trial_env)
         first_stamp = None
         deadline = time.monotonic() + 90
         try:
@@ -75,7 +81,10 @@ def trial(output, split, scenario, seed, duration):
                     if now_s - first_stamp >= duration:
                         break
             else:
-                raise RuntimeError(f'{name}: no complete sensor trial within 90 seconds')
+                raise RuntimeError(f'{name}: incomplete trial after 90 s; '
+                                   f'rows={[node.rows for node in nodes]}, '
+                                   f'clock={nodes[0].get_clock().now().nanoseconds * 1e-9}, '
+                                   f'first_stamp={first_stamp}; see {log.name}')
         finally:
             for node in nodes:
                 node.drain(force=True)
