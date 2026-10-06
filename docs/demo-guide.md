@@ -48,6 +48,8 @@ Proceed when every preflight row says PASS. The rover follows the original patro
 route while the drone follows its bounded aerial sweep. Watch the vehicle poses
 and the navigation status; verify the rover actually reaches successive waypoints.
 Two complete patrol loops remain a target-machine acceptance step.
+Preflight also asks Nav2 to compute the first moving patrol leg without driving.
+This waits for SLAM's initial map coverage instead of starting with an off-map goal.
 
 ```bash
 ros2 topic echo /embertrace/navigation_status
@@ -187,6 +189,9 @@ If GUI windows fail in WSL, first confirm that WSLg can open another Linux GUI
 application. `use_rviz:=false use_dashboard:=false` removes those two optional
 windows. Gazebo still needs a working rendering context to produce camera/LiDAR
 samples; suppressing a window does not substitute for sensor readiness.
+`gazebo_gui:=false` runs the server without its GUI window; cameras still require
+WSLg or an Xvfb/Mesa rendering context. The automated recording campaign uses
+this mode and a fresh Gazebo transport partition for every trial.
 
 For an automated short check on a ROS machine:
 

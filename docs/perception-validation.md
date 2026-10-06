@@ -151,6 +151,35 @@ map/TF/action availability, actual movement of both vehicles and E-stop zero
 commands. It does not replace recorded perception acceptance or ten seeded source
 localisation trials. CI and WSL acceptance status are recorded in the pull request.
 
+### Recorded campaign protocol
+
+`scripts/ros_perception_campaign.py` launches a fresh server-mode world for every
+scenario and seed, with isolated Gazebo transport. The rover is stationary at
+(10.5, 5.5); the drone hovers at (12, 7, 8). These are explicit test-fixture poses
+used to make local evidence observable, not inputs to autonomy's source fit.
+Trials cover fire, no_fire, dust, hot_surface, visual_decoy and dropout. The
+dropout fixture starts at 4 simulated seconds and lasts 4 seconds; the interactive
+demo retains its longer 25 s / 8 s schedule.
+
+Each trial records both vehicles for at least 12 simulated seconds after the
+first labelled observations. Rover seed 42 / drone seed 43 supply training data;
+142 / 143 supply held-out data. The threshold sweep uses only rover training
+observations and prefers the existing defaults when costs tie. Held-out reports
+include results with both defaults and the selected candidate for each vehicle.
+The campaign requires a visible rover camera cue in the visual-decoy fixture,
+missing observations during dropout, rover detection in fire/dropout and zero
+rover confirmations in the four negative scenarios.
+
+The recorder snapshots visual evidence at raw-sample reception and joins truth
+by the same acquisition timestamp. It preserves missing observations and their
+reception times while waiting for a join, and writes observations in acquisition
+order. A ROS regression checks that a later image cannot influence an earlier
+record and that a dropout row cannot be overtaken or silently omitted.
+
+These trials measure near-source local perception in the mathematical field.
+They complement the independent synthetic transient/noise suite. They do not
+measure patrol coverage, source-search travel time or real-world sensor accuracy.
+
 ## Remaining acceptance evidence
 
 The implementation and synthetic evaluation are supplied. Priority 4 acceptance
