@@ -16,6 +16,9 @@ find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
+find_package(tf2 REQUIRED)
+find_package(tf2_geometry_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(yaml-cpp REQUIRED)
 
@@ -27,6 +30,12 @@ endif()
 
 add_library(plume_model src/plume_model.cpp)
 target_include_directories(plume_model PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+
+add_library(search_estimation src/source_estimator.cpp src/known_free_grid.cpp)
+target_include_directories(search_estimation PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>
 )
@@ -54,13 +63,15 @@ add_embertrace_node(camera_verifier_node src/camera_verifier_node.cpp)
 add_embertrace_node(perception_node src/perception_node.cpp)
 add_embertrace_node(mission_manager_node src/mission_manager_node.cpp)
 add_embertrace_node(search_planner_node src/search_planner_node.cpp)
+target_link_libraries(search_planner_node search_estimation)
+ament_target_dependencies(search_planner_node tf2 tf2_geometry_msgs tf2_ros)
 add_embertrace_node(heatmap_node src/heatmap_node.cpp)
 add_embertrace_node(patrol_manager_node src/patrol_manager_node.cpp)
 target_link_libraries(patrol_manager_node waypoint_patrol)
 
 
 install(
-  TARGETS plume_model
+  TARGETS plume_model search_estimation waypoint_patrol
   EXPORT plume_model_targets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
@@ -76,6 +87,11 @@ if(BUILD_TESTING)
     target_link_libraries(test_plume_model plume_model)
     target_include_directories(test_plume_model PRIVATE include)
   endif()
+  ament_add_gtest(test_search_estimation test/test_search_estimation.cpp)
+  if(TARGET test_search_estimation)
+    target_link_libraries(test_search_estimation search_estimation plume_model)
+    target_include_directories(test_search_estimation PRIVATE include)
+  endif()
 
   ament_add_gtest(test_waypoint_patrol test/test_waypoint_patrol.cpp)
   if(TARGET test_waypoint_patrol)
@@ -87,4 +103,3 @@ endif()
 ament_export_include_directories(include)
 ament_export_targets(plume_model_targets HAS_LIBRARY_TARGET)
 ament_package()
-

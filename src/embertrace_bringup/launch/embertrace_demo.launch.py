@@ -71,6 +71,8 @@ def generate_launch_description():
             name="search_planner_node",
             output="screen",
             parameters=[parameters, {"use_sim_time": use_sim_time}],
+            # Simulation and SLAM publish TF within the Husky namespace.
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
         Node(
             package="embertrace_core",
