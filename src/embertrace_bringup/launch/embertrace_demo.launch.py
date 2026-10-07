@@ -14,6 +14,7 @@ def generate_launch_description():
     use_nav2 = LaunchConfiguration("use_nav2")
     use_rviz = LaunchConfiguration("use_rviz")
     use_dashboard = LaunchConfiguration("use_dashboard")
+    world_file = LaunchConfiguration("world_file")
     parameters = PathJoinSubstitution([
         FindPackageShare("embertrace_bringup"), "config", "embertrace.yaml"
     ])
@@ -31,6 +32,7 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "use_nav2": use_nav2,
             "use_rviz": use_rviz,
+            "world_file": world_file,
         }.items(),
     )
 
@@ -103,6 +105,15 @@ def generate_launch_description():
         DeclareLaunchArgument("use_nav2", default_value="false"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument("use_dashboard", default_value="true"),
+        DeclareLaunchArgument(
+            "world_file",
+            default_value="embertrace_forest.sdf",
+            description=(
+                "World SDF filename under embertrace_sim/worlds/ to load. "
+                "Use the small/sparse default for fast iteration, or "
+                "'embertrace_forest_dense.sdf' for the larger final-demo world."
+            ),
+        ),
         simulation,
         core_nodes,
         dashboard,
