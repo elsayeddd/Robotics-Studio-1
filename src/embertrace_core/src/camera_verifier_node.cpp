@@ -33,7 +33,7 @@ public:
       "image_topic", "/husky1/camera/image");
     const auto output_topic = declare_parameter<std::string>(
       "output_topic", "/embertrace/visual_fire_cue");
-    sample_stride_ = std::max(1, declare_parameter<int>("sample_stride", 8));
+    sample_stride_ = std::max(1L, declare_parameter<int>("sample_stride", 8));
     target_fraction_ = std::max(0.0001, declare_parameter<double>("target_fraction", 0.025));
 
     publisher_ = create_publisher<std_msgs::msg::Float32>(output_topic, rclcpp::SensorDataQoS());

@@ -29,12 +29,21 @@ target_include_directories(plume_model PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
+add_library(nav2_goal_adapter_lib src/nav2_goal_adapter_node.cpp)
+target_include_directories(nav2_goal_adapter_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(nav2_goal_adapter_lib
+  embertrace_interfaces geometry_msgs nav_msgs rclcpp sensor_msgs std_msgs visualization_msgs
+  nav2_msgs rclcpp_action tf2 tf2_ros tf2_geometry_msgs
+)
+
 function(add_embertrace_node target source)
   add_executable(${target} ${source})
   target_include_directories(${target} PRIVATE include)
   ament_target_dependencies(${target}
     embertrace_interfaces geometry_msgs nav_msgs rclcpp sensor_msgs std_msgs visualization_msgs
-    nav2_msgs rclcpp_action tf2 tf2_ros tf2_geometry_msgs
   )
   install(TARGETS ${target} DESTINATION lib/${PROJECT_NAME})
 endfunction()
@@ -47,19 +56,27 @@ add_embertrace_node(perception_node src/perception_node.cpp)
 add_embertrace_node(mission_manager_node src/mission_manager_node.cpp)
 add_embertrace_node(search_planner_node src/search_planner_node.cpp)
 add_embertrace_node(heatmap_node src/heatmap_node.cpp)
-add_embertrace_node(nav2_goal_adapter_node src/nav2_goal_adapter_node.cpp)
-target_link_libraries(nav2_goal_adapter_node plume_model)
+
+
+add_executable(nav2_goal_adapter_node src/nav2_goal_adapter_lib.cpp)
+target_include_directories(nav2_goal_adapter_node PRIVATE include)
+ament_target_dependencies(nav2_goal_adapter_node
+  embertrace_interfaces geometry_msgs nav_msgs rclcpp rclcpp_action nav2_msgs
+  tf2 tf2_ros tf2_geometry_msgs
+)
+target_link_libraries(nav2_goal_adapter_node nav2_goal_adapter_lib)
+install(TARGETS nav2_goal_adapter_node DESTINATION lib/${PROJECT_NAME})
 
 
 install(
-  TARGETS plume_model
+  TARGETS plume_model nav2_goal_adapter_lib
   EXPORT plume_model_targets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)
-install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
+install(FILES src/README.md DESTINATION share/${PROJECT_NAME}) #remove if issue
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -68,9 +85,17 @@ if(BUILD_TESTING)
     target_link_libraries(test_plume_model plume_model)
     target_include_directories(test_plume_model PRIVATE include)
   endif()
+
+  ament_add_gtest(test_nav2_goal_adapter test/test_nav2_goal_adapter.cpp)
+  if(TARGET test_nav2_goal_adapter)
+    target_link_libraries(test_nav2_goal_adapter nav2_goal_adapter_lib)
+    target_include_directories(test_nav2_goal_adapter PRIVATE include)
+    ament_target_dependencies(test_nav2_goal_adapter
+      rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs
+    )
+  endif()
 endif()
 
 ament_export_include_directories(include)
 ament_export_targets(plume_model_targets HAS_LIBRARY_TARGET)
 ament_package()
-
