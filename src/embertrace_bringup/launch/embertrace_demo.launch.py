@@ -17,6 +17,9 @@ def generate_launch_description():
     parameters = PathJoinSubstitution([
         FindPackageShare("embertrace_bringup"), "config", "embertrace.yaml"
     ])
+    patrol_waypoints_file = PathJoinSubstitution([
+        FindPackageShare("embertrace_bringup"), "config", "patrol_waypoints.yaml"
+    ])
 
     simulation = IncludeLaunchDescription(
         PythonLaunchDescriptionSource(
@@ -66,6 +69,8 @@ def generate_launch_description():
             name="search_planner_node",
             output="screen",
             parameters=[parameters, {"use_sim_time": use_sim_time}],
+            # Simulation and SLAM publish TF within the Husky namespace.
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
         Node(
             package="embertrace_core",
@@ -73,6 +78,26 @@ def generate_launch_description():
             name="heatmap_node",
             output="screen",
             parameters=[parameters, {"use_sim_time": use_sim_time}],
+        ),
+        Node(
+            package="embertrace_core",
+            executable="patrol_manager_node",
+            name="patrol_manager_node",
+            output="screen",
+            parameters=[
+                parameters,
+                {"use_sim_time": use_sim_time, "waypoints_file": patrol_waypoints_file},
+            ],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
+        ),
+        Node(
+            package="embertrace_core",
+            executable="nav2_goal_adapter_node",
+            name="nav2_goal_adapter_node",
+            output="screen",
+            condition=IfCondition(use_nav2),
+            parameters=[parameters, {"use_sim_time": use_sim_time}],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
     ])
 

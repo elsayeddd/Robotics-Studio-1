@@ -8,13 +8,15 @@ Treat this document as the integration agreement. Discuss changes before renamin
 | --- | --- | --- | --- | --- |
 | `/husky1/odometry` | `nav_msgs/msg/Odometry` | Gazebo bridge | Environment simulator, localisation | Raw simulated odometry |
 | `/husky1/odom` | `nav_msgs/msg/Odometry` | EKF | Nav2 and future consumers | Filtered robot odometry |
+| `/husky1/map` | `nav_msgs/msg/OccupancyGrid` | SLAM Toolbox | Search planner, Nav2, RViz | Known free cells for goal selection |
 | `/husky1/scan` | `sensor_msgs/msg/LaserScan` | Gazebo bridge | SLAM/Nav2/RViz | Obstacle perception |
 | `/husky1/camera/image` | `sensor_msgs/msg/Image` | Gazebo bridge | Camera verifier/RViz | RGB image |
 | `/embertrace/raw_environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Environment simulator | Perception | Noisy local simulated sensors |
 | `/embertrace/visual_fire_cue` | `std_msgs/msg/Float32` | Camera verifier | Perception | Visual confidence from 0 to 1 |
 | `/embertrace/environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Perception | Mission, search, UI, heatmap | Filtered/fused evidence |
 | `/embertrace/mission_state` | `embertrace_interfaces/msg/MissionState` | Mission manager | Search, UI, adapter | Authoritative state |
-| `/embertrace/navigation_goal` | `geometry_msgs/msg/PoseStamped` | Search planner | Future Nav2 adapter, RViz | Next short investigation goal |
+| `/embertrace/navigation_goal` | `geometry_msgs/msg/PoseStamped` | Search planner | Future Nav2 adapter, RViz | Next short map-frame investigation goal in known free space |
+| `/embertrace/source_estimate` | `geometry_msgs/msg/PoseWithCovarianceStamped` | Search planner | Mission manager, RViz | Source position and x/y covariance from local sensor history; sample frame |
 | `/embertrace/fire_alert` | `embertrace_interfaces/msg/FireAlert` | Mission manager | UI, logging | Confirmed or suspected alert |
 | `/embertrace/sample_markers` | `visualization_msgs/msg/MarkerArray` | Heatmap | RViz | Colour-coded sample history |
 
@@ -47,5 +49,5 @@ Unknown commands must be rejected with `accepted=false` and an explanatory messa
 | `husky1_base_scan` | LiDAR frame |
 | `husky1_camera_link` | Camera frame |
 
-All project-level sample poses currently use `husky1_odom`. When the Nav2 integration becomes stable, the team may transform them into `husky1_map`, but the change must be made consistently.
+Environmental sample poses and source estimates use `husky1_odom`. The search planner transforms candidate goals into `husky1_map` before checking the occupancy map and publishing them. Consumers must use the message header frame rather than assuming all poses share a frame.
 

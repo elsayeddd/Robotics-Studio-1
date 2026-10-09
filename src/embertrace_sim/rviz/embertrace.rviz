@@ -48,6 +48,13 @@ Visualization Manager:
         Value: /embertrace/navigation_goal
       Shape: Arrow
       Color: 255; 200; 0
+    - Class: rviz_default_plugins/PoseWithCovariance
+      Name: Estimated Fire Source
+      Enabled: true
+      Topic:
+        Value: /embertrace/source_estimate
+      Shape: Arrow
+      Color: 255; 80; 60
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: false
