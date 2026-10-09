@@ -92,8 +92,6 @@ install(TARGETS nav2_goal_adapter_node DESTINATION lib/${PROJECT_NAME})
 add_embertrace_node(patrol_manager_node src/patrol_manager_node.cpp)
 target_link_libraries(patrol_manager_node waypoint_patrol)
 ament_target_dependencies(patrol_manager_node tf2 tf2_geometry_msgs tf2_ros)
-add_embertrace_node(nav2_goal_adapter_node src/nav2_goal_adapter_node.cpp)
-ament_target_dependencies(nav2_goal_adapter_node nav2_msgs rclcpp_action tf2 tf2_geometry_msgs tf2_ros)
 
 
 install(
@@ -119,8 +117,9 @@ if(BUILD_TESTING)
     target_link_libraries(test_nav2_goal_adapter nav2_goal_adapter_lib)
     target_include_directories(test_nav2_goal_adapter PRIVATE include)
     ament_target_dependencies(test_nav2_goal_adapter
-      rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs
-    )
+      rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs)
+  endif()
+  
   ament_add_gtest(test_search_estimation test/test_search_estimation.cpp)
   if(TARGET test_search_estimation)
     target_link_libraries(test_search_estimation search_estimation plume_model)
