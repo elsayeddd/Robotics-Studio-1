@@ -104,7 +104,7 @@ install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  
+
   ament_add_gtest(test_plume_model test/test_plume_model.cpp)
   if(TARGET test_plume_model)
     target_link_libraries(test_plume_model plume_model)
@@ -113,7 +113,6 @@ if(BUILD_TESTING)
 
   ament_add_gtest(test_nav2_goal_adapter test/test_nav2_goal_adapter.cpp)
   if(TARGET test_nav2_goal_adapter)
-    target_link_libraries(test_nav2_goal_adapter nav2_goal_adapter_lib)
     target_include_directories(test_nav2_goal_adapter PRIVATE include)
     ament_target_dependencies(test_nav2_goal_adapter
       rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs)
