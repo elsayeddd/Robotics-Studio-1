@@ -47,9 +47,9 @@ public:
     max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
     max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
     required_detection_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_detection_samples", 3));
+      1L, declare_parameter<int>("required_detection_samples", 3));
     required_confirmation_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_confirmation_samples", 3));
+      1L, declare_parameter<int>("required_confirmation_samples", 3));
 
     state_publisher_ = create_publisher<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable());

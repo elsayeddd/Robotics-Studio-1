@@ -12,8 +12,10 @@ endif()
 find_package(ament_cmake REQUIRED)
 find_package(embertrace_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
+find_package(nav2_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclcpp_action REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(tf2 REQUIRED)
@@ -34,6 +36,15 @@ target_include_directories(plume_model PUBLIC
   $<INSTALL_INTERFACE:include>
 )
 
+add_library(nav2_goal_adapter_lib src/nav2_goal_adapter_node.cpp)
+target_include_directories(nav2_goal_adapter_lib PUBLIC
+  $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+  $<INSTALL_INTERFACE:include>
+)
+ament_target_dependencies(nav2_goal_adapter_lib
+  embertrace_interfaces geometry_msgs nav_msgs rclcpp sensor_msgs std_msgs visualization_msgs
+  nav2_msgs rclcpp_action tf2 tf2_ros tf2_geometry_msgs
+)
 add_library(search_estimation src/source_estimator.cpp src/known_free_grid.cpp)
 target_include_directories(search_estimation PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -66,19 +77,32 @@ add_embertrace_node(search_planner_node src/search_planner_node.cpp)
 target_link_libraries(search_planner_node search_estimation)
 ament_target_dependencies(search_planner_node tf2 tf2_geometry_msgs tf2_ros)
 add_embertrace_node(heatmap_node src/heatmap_node.cpp)
+
+
+add_executable(nav2_goal_adapter_node src/nav2_goal_adapter_lib.cpp)
+target_include_directories(nav2_goal_adapter_node PRIVATE include)
+ament_target_dependencies(nav2_goal_adapter_node
+  embertrace_interfaces geometry_msgs nav_msgs rclcpp rclcpp_action nav2_msgs
+  tf2 tf2_ros tf2_geometry_msgs
+)
+target_link_libraries(nav2_goal_adapter_node nav2_goal_adapter_lib)
+install(TARGETS nav2_goal_adapter_node DESTINATION lib/${PROJECT_NAME})
+
+
 add_embertrace_node(patrol_manager_node src/patrol_manager_node.cpp)
 target_link_libraries(patrol_manager_node waypoint_patrol)
+ament_target_dependencies(patrol_manager_node tf2 tf2_geometry_msgs tf2_ros)
 
 
 install(
-  TARGETS plume_model search_estimation waypoint_patrol
+  TARGETS plume_model search_estimation waypoint_patrol nav2_goal_adapter_lib
   EXPORT plume_model_targets
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)
-install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
+install(FILES src/README.md DESTINATION share/${PROJECT_NAME}) #remove if issue
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
@@ -87,6 +111,15 @@ if(BUILD_TESTING)
     target_link_libraries(test_plume_model plume_model)
     target_include_directories(test_plume_model PRIVATE include)
   endif()
+
+  ament_add_gtest(test_nav2_goal_adapter test/test_nav2_goal_adapter.cpp)
+  if(TARGET test_nav2_goal_adapter)
+    target_link_libraries(test_nav2_goal_adapter nav2_goal_adapter_lib)
+    target_include_directories(test_nav2_goal_adapter PRIVATE include)
+    ament_target_dependencies(test_nav2_goal_adapter
+      rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs)
+  endif()
+  
   ament_add_gtest(test_search_estimation test/test_search_estimation.cpp)
   if(TARGET test_search_estimation)
     target_link_libraries(test_search_estimation search_estimation plume_model)
