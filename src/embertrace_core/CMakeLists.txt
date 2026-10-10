@@ -88,11 +88,9 @@ ament_target_dependencies(nav2_goal_adapter_node
 target_link_libraries(nav2_goal_adapter_node nav2_goal_adapter_lib)
 install(TARGETS nav2_goal_adapter_node DESTINATION lib/${PROJECT_NAME})
 
-
 add_embertrace_node(patrol_manager_node src/patrol_manager_node.cpp)
 target_link_libraries(patrol_manager_node waypoint_patrol)
 ament_target_dependencies(patrol_manager_node tf2 tf2_geometry_msgs tf2_ros)
-
 
 install(
   TARGETS plume_model search_estimation waypoint_patrol nav2_goal_adapter_lib
@@ -102,10 +100,11 @@ install(
   RUNTIME DESTINATION bin
 )
 install(DIRECTORY include/ DESTINATION include)
-install(FILES src/README.md DESTINATION share/${PROJECT_NAME}) #remove if issue
+install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
+  
   ament_add_gtest(test_plume_model test/test_plume_model.cpp)
   if(TARGET test_plume_model)
     target_link_libraries(test_plume_model plume_model)
