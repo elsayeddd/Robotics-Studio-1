@@ -29,15 +29,47 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode()
 {
   using namespace std::chrono_literals;
 
-  const auto action_name = declare_parameter<std::string>(
-    "action_name", "/husky1/navigate_to_pose");
-  map_frame_ = declare_parameter<std::string>("map_frame", "husky1_map");
+// ==========================================================================
+  // ROBOT CONFIGURATION PARAMETERS
+  // Change these via launch file to adapt to different robots
+  // ==========================================================================
+  
+  // Namespace prefix for topics (e.g., "husky1", "quadcopter1", "" for single robot)
+  robot_namespace_ = declare_parameter<std::string>("robot_namespace", "");
+  
+  // TF frame IDs
+  map_frame_ = declare_parameter<std::string>("map_frame", "map");
+  odom_frame_ = declare_parameter<std::string>("odom_frame", "odom");
+  
+  // Topic names
+  odom_topic_ = declare_parameter<std::string>(
+    "odom_topic", robot_namespace_.empty() ? "/odom" : ("/" + robot_namespace_ + "/odometry"));
+  goal_topic_ = declare_parameter<std::string>(
+    "navigation_goal_topic", "/embertrace/navigation_goal");
+  mission_state_topic_ = declare_parameter<std::string>(
+    "mission_state_topic", "/embertrace/mission_state");
+  
+  // Nav2 action server name
+  action_name_ = declare_parameter<std::string>(
+    "action_name", robot_namespace_.empty() ? "/navigate_to_pose" : ("/" + robot_namespace_ + "/navigate_to_pose"));
+  
+  // World bounds for coordinate validation (in meters)
+  const auto half_world_length = 18.5;
+  min_x_ = declare_parameter<double>("world_min_x", -half_world_length);
+  max_x_ = declare_parameter<double>("world_max_x", half_world_length);
+  min_y_ = declare_parameter<double>("world_min_y", -half_world_length);
+  max_y_ = declare_parameter<double>("world_max_y", half_world_length);
+  
+  // Timing thresholds
   max_goal_age_s_ = declare_parameter<double>("max_goal_age_s", 5.0);
   pending_timeout_s_ = declare_parameter<double>("pending_timeout_s", 15.0);
-  min_x_ = declare_parameter<double>("world_min_x", -18.5);
-  max_x_ = declare_parameter<double>("world_max_x", 18.5);
-  min_y_ = declare_parameter<double>("world_min_y", -18.5);
-  max_y_ = declare_parameter<double>("world_max_y", 18.5);
+
+  // Log loaded configuration
+  RCLCPP_INFO(get_logger(), "Robot namespace: '%s'", robot_namespace_.c_str());
+  RCLCPP_INFO(get_logger(), "Map frame: '%s', Odometry frame: '%s'", map_frame_.c_str(), odom_frame_.c_str());
+  RCLCPP_INFO(get_logger(), "Odometry topic: %s", odom_topic_.c_str());
+  RCLCPP_INFO(get_logger(), "Action server: %s", action_name_.c_str());
+
 
   // TF2 machinery: listener fills the shared buffer from /tf and /tf_static
   tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
