@@ -38,11 +38,11 @@ def _quad_node():
         name='nav2_goal_adapter',
         output='screen',
         parameters=[{
-            'robot_namespace': 'quad1',
-            'map_frame': 'quad1_map',
-            'odom_frame': 'quad1_odom',
-            'odom_topic': '/quad1/odometry',
-            'action_name': '/quad1/navigate_to_pose',
+            'robot_namespace': 'parrot1',
+            'map_frame': 'parrot1_map',
+            'odom_frame': 'parrot1_odom',
+            'odom_topic': '/parrot1/odometry',
+            'action_name': '/parrot1/navigate_to_pose',
         }],
     )
 
