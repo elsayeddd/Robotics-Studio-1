@@ -30,7 +30,7 @@ private:
   // ========================================================================
   // ROBOT CONFIGURATION PARAMETERS (all customizable at launch time)
   // ========================================================================
-  std::string robot_namespace_;           // e.g., "husky1", "quadcopter1", ""
+  std::string robot_namespace_;           // e.g., "husky1", "parrot1", ""
   std::string odom_topic_;                // e.g., "/odom", "/husky1/odometry"
   std::string goal_topic_;                // e.g., "/navigation_goal"
   std::string mission_state_topic_;       // e.g., "/mission_state"
@@ -64,7 +64,6 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   // Parameters
-  std::string map_frame_;
   double max_goal_age_s_;
   double pending_timeout_s_;
   double min_x_, max_x_, min_y_, max_y_;

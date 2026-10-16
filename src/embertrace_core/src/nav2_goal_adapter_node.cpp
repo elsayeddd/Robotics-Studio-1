@@ -77,7 +77,7 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode()
 
   // Action client: use full namespace path
   action_client_ = rclcpp_action::create_client<nav2_msgs::action::NavigateToPose>(
-    this, action_name);    
+    this, action_name_);
 
   status_publisher_ = create_publisher<std_msgs::msg::String>(
       "/embertrace/navigation_status", 10);
