@@ -1,3 +1,12 @@
+## Random roll (normal operation) — 0-30, husky if >15, quad if <15
+#ros2 launch embertrace_bringup platform_select.launch.py
+#
+## Force Husky (no randomness)
+#ros2 launch embertrace_bringup platform_select.launch.py platform:=husky
+#
+## Force quadcopter (no randomness)
+#ros2 launch embertrace_bringup platform_select.launch.py platform:=quad
+
 import random
 
 from launch import LaunchDescription
