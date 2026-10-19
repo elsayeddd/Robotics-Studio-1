@@ -8,9 +8,9 @@
 #include <chrono>
 
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "nav_msgs/msg/odometry.hpp"                    // ← Added
+#include "nav_msgs/msg/odometry.hpp"
 #include "nav2_msgs/action/navigate_to_pose.hpp"
-#include "embertrace_interfaces/msg/mission_state.hpp"  // ← Added
+#include "embertrace_interfaces/msg/mission_state.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -27,6 +27,18 @@ public:
   static void normaliseAngle(double & angle);
 
 private:
+  // ========================================================================
+  // ROBOT CONFIGURATION PARAMETERS (all customizable at launch time)
+  // ========================================================================
+  std::string robot_namespace_;           // e.g., "husky1", "parrot1", ""
+  std::string odom_topic_;                // e.g., "/odom", "/husky1/odometry"
+  std::string goal_topic_;                // e.g., "/navigation_goal"
+  std::string mission_state_topic_;       // e.g., "/mission_state"
+  std::string action_name_;               // e.g., "/navigate_to_pose"
+  std::string map_frame_;                 // e.g., "map", "husky1_map"
+  std::string odom_frame_;                // e.g., "odom", "husky1_odom"
+
+
   // ========================================================================
   // STATE MANAGEMENT (thread-safe)
   // ========================================================================
@@ -52,7 +64,6 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
 
   // Parameters
-  std::string map_frame_;
   double max_goal_age_s_;
   double pending_timeout_s_;
   double min_x_, max_x_, min_y_, max_y_;
@@ -67,7 +78,7 @@ private:
     state_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
     goal_subscription_;
-  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;  // ← Fixed: nav_msgs namespace
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
 
   // Publisher
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
