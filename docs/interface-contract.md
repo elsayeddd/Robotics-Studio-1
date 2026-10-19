@@ -49,5 +49,41 @@ Unknown commands must be rejected with `accepted=false` and an explanatory messa
 | `husky1_base_scan` | LiDAR frame |
 | `husky1_camera_link` | Camera frame |
 
-Environmental sample poses and source estimates use `husky1_odom`. The search planner transforms candidate goals into `husky1_map` before checking the occupancy map and publishing them. Consumers must use the message header frame rather than assuming all poses share a frame.
+Environmental sample poses and source estimates use `husky1_odom`. Fortress OdometryPublisher reports world positions; the simulation EKF preserves that origin by fusing x/y/yaw. Both vehicle environmental streams use this shared simulation frame. Patrol waypoints are in that frame, not the arbitrary SLAM map origin. The search planner transforms candidate goals into `husky1_map` before checking the occupancy map and publishing them. Consumers must use the message header frame rather than assuming all poses share a frame.
 
+
+
+## Added perception and aerial integration interfaces
+
+| Topic | Type | Purpose |
+| --- | --- | --- |
+| `/embertrace/visual_cue` | `embertrace_interfaces/msg/VisualCue` | Timestamped valid rover camera cue; legacy Float32 still published |
+| `/embertrace/perception_status` | `embertrace_interfaces/msg/PerceptionStatus` | Environment/vision freshness, confirmation candidate and rejection counts |
+| `/embertrace/sensors_ready` | `std_msgs/msg/Bool` | Required rover sensor freshness |
+| `/husky1/autonomy_cmd_vel` | `geometry_msgs/msg/Twist` | Nav2/teleop input to sole rover command guard |
+| `/husky1/cmd_vel` | `geometry_msgs/msg/Twist` | Guarded rover command to Gazebo |
+| `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | Per-stream vehicle sensor freshness |
+| `/drone1/odometry` | `nav_msgs/msg/Odometry` | Scout pose in shared `husky1_odom` |
+| `/drone1/cmd_vel` | `geometry_msgs/msg/Twist` | Guarded aerial sweep/return velocity |
+| `/drone1/imu` | `sensor_msgs/msg/Imu` | Scout inertial data |
+| `/drone1/scan` and `/drone1/scan/points` | `LaserScan` / `PointCloud2` | Scout obstacle scan and cloud |
+| `/drone1/camera/image` | `sensor_msgs/msg/Image` | Downward RGB image |
+| `/drone1/camera/depth/image` and `/drone1/camera/depth/points` | `Image` / `PointCloud2` | Downward depth data |
+| `/{husky1,drone1}/camera/camera_info` | `sensor_msgs/msg/CameraInfo` | RGB-D calibration |
+| `/drone1/raw_environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Independent noisy altitude-attenuated scout samples |
+| `/drone1/visual_cue` | `embertrace_interfaces/msg/VisualCue` | Independent stamped scout visual evidence |
+| `/drone1/environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Independent filtered scout evidence; investigation cue only |
+| `/drone1/perception_status` | `embertrace_interfaces/msg/PerceptionStatus` | Scout perception freshness |
+| `/drone1/sensors_ready` | `std_msgs/msg/Bool` | Required scout sensor freshness |
+| `/{embertrace,drone1}/validation/truth` | `embertrace_interfaces/msg/TrialTruth` | Evaluation-only local observability/dropout label; autonomy never subscribes |
+
+`VisualCue` has a header, confidence and validity. `PerceptionStatus` has a
+publication header, environment/visual freshness, confirmation candidate,
+rejected sample count and consecutive fresh sample count. EnvironmentalReading
+retains its existing fields and now preserves the raw acquisition timestamp.
+
+All vehicle transforms share `/husky1/tf` and `/husky1/tf_static` for this
+simulation. Drone frames are `drone1_base_link` and `drone1_camera_link`.
+The drone's environmental pose is its measured position, not a source estimate.
+The aerial hint is checked for acquisition age and never supplies fire ground
+truth to the rover. The source estimator continues using rover samples only.

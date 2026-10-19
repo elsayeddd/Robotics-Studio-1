@@ -1,6 +1,6 @@
-# Planned patrol loop in the husky1_map frame.
+# Planned patrol loop in the husky1_odom frame.
 # The patrol manager loads these in order and returns to the named base.
-frame_id: husky1_map
+frame_id: husky1_odom
 waypoints:
   - {name: ranger_base, x: -14.0, y: -14.0, yaw: 0.7854}
   - {name: west_south, x: -10.0, y: -8.0, yaw: 1.5708}

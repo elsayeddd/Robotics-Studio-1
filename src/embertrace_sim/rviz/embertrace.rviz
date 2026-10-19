@@ -55,6 +55,24 @@ Visualization Manager:
         Value: /embertrace/source_estimate
       Shape: Arrow
       Color: 255; 80; 60
+    - Class: rviz_default_plugins/Odometry
+      Name: Aerial Scout Pose
+      Enabled: true
+      Topic:
+        Value: /drone1/odometry
+      Shape: Arrow
+      Color: 60; 130; 255
+      Keep: 20
+    - Class: rviz_default_plugins/Image
+      Name: Rover RGB
+      Enabled: true
+      Topic:
+        Value: /husky1/camera/image
+    - Class: rviz_default_plugins/Image
+      Name: Scout RGB
+      Enabled: true
+      Topic:
+        Value: /drone1/camera/image
     - Class: rviz_default_plugins/TF
       Name: TF
       Enabled: false

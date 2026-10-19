@@ -6,7 +6,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 0: first-machine acceptance
 
-**Suggested owner:** integration lead  
+**Suggested owner:** integration lead
 **Estimate:** 0.5–1 day
 
 - Install the declared dependencies on Ubuntu 22.04.
@@ -19,7 +19,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 1: Nav2 goal adapter
 
-**Suggested owner:** navigation member  
+**Suggested owner:** navigation member
 **Estimate:** 3–5 days
 
 - Create `nav2_goal_adapter_node.cpp` from the instructions in `embertrace_core/src/README.md`.
@@ -33,7 +33,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 2: waypoint patrol manager
 
-**Suggested owner:** autonomy member  
+**Suggested owner:** autonomy member
 **Estimate:** 2–4 days
 
 - Load waypoints from `patrol_waypoints.yaml`.
@@ -46,7 +46,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 3: search and source estimate
 
-**Suggested owner:** decision-making member  
+**Suggested owner:** decision-making member
 **Estimate:** 4–6 days
 
 - Replace the baseline one-step surge/cast rule with a documented algorithm.
@@ -59,7 +59,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 4: perception validation
 
-**Suggested owner:** perception member  
+**Suggested owner:** perception member
 **Estimate:** 3–5 days
 
 - Tune smoke/temperature filters and thresholds using recorded trials.
@@ -70,9 +70,17 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 **Acceptance:** report confusion matrix and latency over at least three scenarios.
 
+**Implementation supplied:** timestamp-aware filters, environmental/visual validity,
+consecutive-frame colour verification, dropout recovery, sensor diagnostics, CSV
+recording/evaluation, threshold sweep and regression/ROS integration tests. The
+integrated demo also includes an aerial scout and guarded rover commands. See
+[Perception validation](perception-validation.md) and [Demo guide](demo-guide.md).
+Synthetic results cover six scenarios; recorded Gazebo tuning and held-out
+acceptance remain outstanding.
+
 ## Priority 5: operator interface refinement
 
-**Suggested owner:** UI member  
+**Suggested owner:** UI member
 **Estimate:** 2–4 days
 
 - Add a 2D map panel or embed RViz if time permits.
@@ -85,7 +93,7 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 
 ## Priority 6: testing and final evidence
 
-**Suggested owner:** testing/documentation member  
+**Suggested owner:** testing/documentation member
 **Estimate:** ongoing, then 3 days
 
 - Add unit tests for perception thresholds and state transitions.
@@ -104,4 +112,3 @@ The repository provides a complete simulation shell and runnable node scaffoldin
 - aerial scout feeding initial search bounds;
 - terrain slopes and wheel slip;
 - bag-file replay mode for repeatable perception testing.
-

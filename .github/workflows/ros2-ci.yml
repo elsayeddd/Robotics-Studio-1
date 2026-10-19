@@ -2,7 +2,12 @@ name: ROS 2 CI
 
 on:
   push:
+    branches: [main]
   pull_request:
+
+concurrency:
+  group: ros2-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   build-and-test:
@@ -15,11 +20,13 @@ jobs:
         shell: bash
         run: |
           apt-get update
+          apt-get install -y xvfb libgl1-mesa-dri
           rosdep update
           rosdep install --from-paths src --ignore-src -r -y --rosdistro humble
       - name: Static validation
         run: python3 scripts/validate_repo.py
       - name: Build
+        id: build
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
@@ -31,3 +38,28 @@ jobs:
           source install/setup.bash
           colcon test --event-handlers console_direct+
           colcon test-result --verbose
+
+      - name: Gazebo rover and drone smoke check
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          xvfb-run -a python3 scripts/ros_demo_smoke.py
+      - name: Recorded Gazebo perception campaign
+        if: ${{ !cancelled() && steps.build.outcome == 'success' }}
+        shell: bash
+        env:
+          LIBGL_ALWAYS_SOFTWARE: "1"
+          ROS_DOMAIN_ID: "74"
+        run: |
+          source /opt/ros/humble/setup.bash
+          source install/setup.bash
+          xvfb-run -a python3 scripts/ros_perception_campaign.py
+      - name: Preserve demo and test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: demo-test-logs
+          path: log/

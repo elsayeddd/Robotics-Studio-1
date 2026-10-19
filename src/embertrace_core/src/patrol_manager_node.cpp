@@ -27,6 +27,8 @@
  */
 
 #include <cmath>
+#include <chrono>
+#include "std_msgs/msg/string.hpp"
 #include <memory>
 #include <optional>
 #include <string>
@@ -89,6 +91,21 @@ public:
     state_subscription_ = create_subscription<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable(),
       std::bind(&PatrolManagerNode::on_mission_state, this, std::placeholders::_1));
+    status_subscription_ = create_subscription<std_msgs::msg::String>(
+      "/embertrace/navigation_status", 10, [this](const std_msgs::msg::String::SharedPtr msg) {
+        if (msg->data == "SENT" || msg->data == "ACCEPTED") {acknowledged_ = true;}
+        else if (msg->data == "REJECTED" || msg->data == "STALE" || msg->data == "ABORTED")
+        {acknowledged_ = false;}
+      });
+    retry_ = create_wall_timer(std::chrono::seconds(2), [this]() {
+      if (last_goal_ && !acknowledged_ && retries_ < 3 &&
+        (patrol_->is_patrolling() || patrol_->is_returning()))
+      {
+        auto retry = *last_goal_;
+        retry.header.stamp = now();
+        goal_publisher_->publish(retry); ++retries_;
+      }
+    });
     odometry_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
       odometry_topic, rclcpp::SensorDataQoS(),
       std::bind(&PatrolManagerNode::on_odometry, this, std::placeholders::_1));
@@ -122,6 +139,7 @@ private:
     goal.pose.position.x = waypoint.x;
     goal.pose.position.y = waypoint.y;
     set_yaw(goal.pose, waypoint.yaw);
+    last_goal_ = goal; acknowledged_ = false; retries_ = 0;
     goal_publisher_->publish(goal);
     RCLCPP_INFO(
       get_logger(), "Patrol goal: %s (%.2f, %.2f)", waypoint.name.c_str(), waypoint.x,
@@ -133,6 +151,7 @@ private:
     if (!patrol_ || !patrol_->has_waypoints()) {
       return;
     }
+    if (to_trigger(message->state) == PatrolTrigger::kHold) {last_goal_.reset();}
     const auto goal = patrol_->on_mission_state(to_trigger(message->state));
     if (goal) {
       publish_goal(*goal);
@@ -170,6 +189,11 @@ private:
     }
   }
 
+  bool acknowledged_{false};
+  int retries_{0};
+  std::optional<geometry_msgs::msg::PoseStamped> last_goal_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_subscription_;
+  rclcpp::TimerBase::SharedPtr retry_;
   std::string frame_id_{"husky1_map"};
   std::size_t loops_logged_{0};
   std::unique_ptr<WaypointPatrol> patrol_;

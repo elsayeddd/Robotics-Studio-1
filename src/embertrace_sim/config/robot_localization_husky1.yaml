@@ -4,18 +4,18 @@
     two_d_mode: true
     publish_acceleration: false
     publish_tf: true
-    map_frame: map
+    map_frame: husky1_map
     odom_frame: husky1_odom
     base_link_frame: husky1_base_link
     world_frame: husky1_odom
     odom0: odometry
     odom0_config:
+    - true
+    - true
     - false
     - false
     - false
-    - false
-    - false
-    - false
+    - true
     - true
     - true
     - false

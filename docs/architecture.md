@@ -14,7 +14,7 @@ flowchart LR
     PER -->|filtered evidence| MM["Mission manager"]
     MM -->|mission state| SEARCH["Search planner"]
     PER --> SEARCH
-    SEARCH -->|navigation goal| NAV["Nav2 adapter – outstanding"]
+    SEARCH -->|navigation goal| NAV["Nav2 goal adapter"]
     NAV -->|cmd_vel through Nav2| BR
     PER --> MAP["Heatmap node"]
     MM --> UI["Operator dashboard"]
@@ -69,5 +69,22 @@ Only the mission manager publishes `/embertrace/mission_state`. Other nodes requ
 
 ## Safety boundary
 
-`E_STOP` is latched in the mission manager. The future Nav2 adapter must immediately cancel its goal and publish zero velocity when the state becomes `EMERGENCY_STOP`. Resetting the state must require an explicit operator `RESET` command.
+`E_STOP` is latched in the mission manager. The Nav2 adapter cancels its goal, while the command guard immediately inhibits velocity when motion is not allowed. The guard is the only rover cmd_vel publisher in the integrated launch. Resetting the state must require an explicit operator `RESET` command.
 
+
+
+## Aerial scout and perception validation
+
+A separate drone model/bridge, environment sampler, camera verifier and local
+perception filter publish only measured scout evidence. Aerial detections can
+request rover investigation. The search planner selects short goals toward the
+sampled aerial location and still enforces known-free occupancy cells. Rover
+confirmation and the source fit use rover-local evidence.
+
+Sensor-health nodes report all streams to diagnostics. The rover command guard
+and aerial controller require fresh mission/sensor heartbeats. Perception
+watchdogs clear stale environmental/visual validity; the mission pauses on
+rover environmental dropout. A recorder consumes separate evaluation labels,
+and a standalone executable evaluates the same filter used by the live nodes.
+The new drone is a kinematic demonstrator, not a rotor-dynamics or hardware
+flight-control system. See demo-guide.md and perception-validation.md.
