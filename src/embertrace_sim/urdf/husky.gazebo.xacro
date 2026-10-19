@@ -14,7 +14,7 @@
       <visualize>$(arg imu_visual)</visualize>
       <update_rate>100</update_rate>
       <topic>model/${gz_model_name}/imu</topic>
-      <gz_frame_id>${prefix}imu_link</gz_frame_id>
+      <ignition_frame_id>${prefix}imu_link</ignition_frame_id>
       <imu>
         <angular_velocity>
           <x>
@@ -69,14 +69,10 @@
           </z>
         </linear_acceleration>
       </imu>
-      <plugin
-        filename="ignition-gazebo-imu-system"
-        name="ignition::gazebo::systems::Imu">
-      </plugin>
     </sensor>
     <material>Gazebo/Grey</material>
   </gazebo>
- 
+
   <!-- Move base directly without faffing around with diff drive controllers -->
   <gazebo>
     <plugin
@@ -91,7 +87,7 @@
     <plugin
       filename="ignition-gazebo-odometry-publisher-system"
       name="ignition::gazebo::systems::OdometryPublisher">
-      <topic>model/${gz_model_name}/odometry</topic>
+      <odom_topic>model/${gz_model_name}/odometry</odom_topic>
       <odom_publish_frequency>20</odom_publish_frequency>
       <odom_frame>${prefix}odom</odom_frame>
       <robot_base_frame>${prefix}base_link</robot_base_frame>
@@ -112,8 +108,8 @@
       <pose relative_to='${prefix}base_scan'>0 0 0 0 0 0</pose>
       <visualize>$(arg laser_visual)</visualize>
       <topic>model/${gz_model_name}/scan</topic>
-      <update_rate>3</update_rate>
-      <gz_frame_id>${prefix}base_scan</gz_frame_id>
+      <update_rate>10</update_rate>
+      <ignition_frame_id>${prefix}base_scan</ignition_frame_id>
       <ray>
         <scan>
           <horizontal>
@@ -165,10 +161,10 @@
         </depth_camera>
       </camera>
       <always_on>1</always_on>
-      <update_rate>3</update_rate> <!--10-->
+      <update_rate>10</update_rate> <!--10-->
       <visualize>$(arg camera_visual)</visualize>
       <topic>/model/${gz_model_name}/camera</topic>
-      <gz_frame_id>${prefix}camera_link</gz_frame_id>
+      <ignition_frame_id>${prefix}camera_link</ignition_frame_id>
     </sensor>
   </gazebo>
 

@@ -18,6 +18,8 @@
 #include <string>
 
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
+#include "embertrace_interfaces/msg/perception_status.hpp"
+#include "embertrace_core/perception_filter.hpp"
 #include "embertrace_interfaces/msg/fire_alert.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
 #include "embertrace_interfaces/srv/operator_command.hpp"
@@ -44,12 +46,13 @@ public:
     alert_confidence_ = declare_parameter<double>("alert_confidence", 0.74);
     lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
     visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
+    reading_timeout_s_ = declare_parameter<double>("reading_timeout_s", 2.0);
     max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
     max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
     required_detection_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_detection_samples", 3));
+      1L, declare_parameter<int>("required_detection_samples", 3));
     required_confirmation_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_confirmation_samples", 3));
+      1L, declare_parameter<int>("required_confirmation_samples", 3));
 
     state_publisher_ = create_publisher<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable());
@@ -63,6 +66,23 @@ public:
       [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr message) {
         latest_estimate_ = *message;
         have_estimate_ = true;
+      });
+    health_subscription_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
+      "/embertrace/perception_status", 10,
+      [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr status) {
+        if (!status->environment_fresh) {detection_count_ = confirmation_count_ = 0;}
+      });
+    scout_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
+      "/drone1/environment", rclcpp::SensorDataQoS(),
+      [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr sample) {
+        const double age = (now() - rclcpp::Time(sample->header.stamp)).seconds();
+        if (state_ == MissionState::PATROL && age >= 0 && age <= reading_timeout_s_ &&
+          sample->header.frame_id == "husky1_odom" &&
+          (sample->smoke_detected || sample->temperature_anomaly) &&
+          sample->fused_confidence >= track_confidence_)
+        {
+          transition_to(MissionState::INVESTIGATE, "Aerial environmental cue; rover must verify locally");
+        }
       });
     command_service_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
       "/embertrace/operator_command",
@@ -120,6 +140,12 @@ private:
 
   void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading)
   {
+    const double age = (now() - rclcpp::Time(reading->header.stamp)).seconds();
+    if (age < 0 || age > reading_timeout_s_ || !std::isfinite(reading->fused_confidence) ||
+      reading->header.frame_id.empty() ||
+      (have_reading_ && rclcpp::Time(reading->header.stamp) <= last_reading_stamp_))
+    {return;}
+    last_reading_stamp_ = rclcpp::Time(reading->header.stamp);
     latest_reading_ = *reading;
     have_reading_ = true;
 
@@ -132,8 +158,9 @@ private:
 
     detection_count_ = reading->fused_confidence >= investigate_confidence_ || reading->smoke_detected ?
       detection_count_ + 1 : 0;
-    confirmation_count_ = reading->fused_confidence >= alert_confidence_ &&
-      (reading->temperature_anomaly || reading->visual_confidence >= visual_confirmation_) ?
+    confirmation_count_ = confirmation_allowed(true, reading->smoke_detected,
+      reading->temperature_anomaly, reading->visual_confidence, reading->fused_confidence,
+      visual_confirmation_, alert_confidence_) ?
       confirmation_count_ + 1 : 0;
 
     switch (state_) {
@@ -179,13 +206,18 @@ private:
     const std::string command = uppercase(request->command);
     response->accepted = true;
 
+    if (state_ == MissionState::EMERGENCY_STOP && command != "RESET" && command != "E_STOP") {
+      response->accepted = false;
+      response->message = "Emergency stop is latched; RESET is required";
+      return;
+    }
     if (command == "START") {
       detection_count_ = 0;
       confirmation_count_ = 0;
       have_estimate_ = false;
       transition_to(MissionState::PATROL, "Patrol started by operator");
     } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
-      pre_pause_state_ = state_;
+      if (state_ != MissionState::PAUSED) {pre_pause_state_ = state_;}
       transition_to(MissionState::PAUSED, "Mission paused by operator");
     } else if (command == "RESUME" && state_ == MissionState::PAUSED) {
       transition_to(pre_pause_state_, "Mission resumed by operator");
@@ -209,6 +241,23 @@ private:
 
   void publish_state()
   {
+    const auto current = now();
+    if (current < last_clock_) {
+      have_reading_ = have_estimate_ = false;
+      detection_count_ = confirmation_count_ = 0;
+      last_reading_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+    }
+    last_clock_ = current;
+    if (state_ != MissionState::IDLE && state_ != MissionState::ALERT &&
+      state_ != MissionState::RETURN_TO_BASE && state_ != MissionState::PAUSED &&
+      state_ != MissionState::EMERGENCY_STOP &&
+      (!have_reading_ || (current - last_reading_stamp_).seconds() > reading_timeout_s_))
+    {
+      pre_pause_state_ = state_;
+      state_ = MissionState::PAUSED;
+      detail_ = "Rover environmental data stale; restore sensors then RESUME";
+      detection_count_ = confirmation_count_ = 0;
+    }
     MissionState message;
     message.header.stamp = now();
     message.header.frame_id = "husky1_odom";
@@ -272,6 +321,11 @@ private:
   double alert_confidence_{0.74};
   double lost_confidence_{0.12};
   double visual_confirmation_{0.55};
+  double reading_timeout_s_{2.0};
+  rclcpp::Time last_reading_stamp_{0, 0, RCL_ROS_TIME};
+  rclcpp::Time last_clock_{0, 0, RCL_ROS_TIME};
+  rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr health_subscription_;
+  rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr scout_subscription_;
   double max_estimate_age_s_{5.0};
   double max_estimate_stddev_m_{4.0};
   bool have_reading_{false};

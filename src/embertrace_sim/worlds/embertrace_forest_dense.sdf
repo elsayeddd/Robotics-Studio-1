@@ -1,0 +1,196 @@
+<?xml version="1.0"?>
+<!--
+  Dense final-demonstration variant of embertrace_forest.sdf.
+
+  Design intent: the whole ORIGINAL 40x40 play area (ground truth fire
+  source, patrol trail, ranger/water/sensor landmarks, and all 20 original
+  trees/3 rocks/2 logs) is kept byte-for-byte identical to
+  embertrace_forest.sdf, so patrol_waypoints.yaml, the Husky spawn pose,
+  source_x/source_y defaults in environment_simulator_node, and the Nav2
+  costmap bounds all keep working with zero changes anywhere else in the
+  project. The world is then extended outward to 70x70 with a denser,
+  larger forest and a couple more sensor-station landmarks.
+
+  See "KEY AREAS TO EDIT" comments below for where to change the boundary
+  size, re-tune asset density, or regenerate the added props.
+-->
+<sdf version="1.8">
+  <world name="embertrace_forest_dense">
+    <gravity>0 0 -9.81</gravity>
+    <magnetic_field>6e-06 2.3e-05 -4.2e-05</magnetic_field>
+    <atmosphere type="adiabatic"/>
+    <physics name="default_physics" type="ignored">
+      <max_step_size>0.01</max_step_size>
+      <real_time_factor>1.0</real_time_factor>
+      <real_time_update_rate>100</real_time_update_rate>
+    </physics>
+    <scene>
+      <ambient>0.72 0.72 0.68 1</ambient>
+      <background>0.48 0.68 0.84 1</background>
+      <shadows>true</shadows>
+      <grid>false</grid>
+    </scene>
+    <light name="sun" type="directional">
+      <cast_shadows>true</cast_shadows>
+      <pose>0 0 30 0 0 0</pose>
+      <diffuse>0.9 0.86 0.76 1</diffuse>
+      <specular>0.2 0.2 0.2 1</specular>
+      <direction>-0.45 0.15 -0.88</direction>
+    </light>
+
+    <spherical_coordinates>
+      <latitude_deg>-33.8688</latitude_deg>
+      <longitude_deg>151.2093</longitude_deg>
+      <elevation>50</elevation>
+      <heading_deg>0</heading_deg>
+      <surface_model>EARTH_WGS84</surface_model>
+    </spherical_coordinates>
+
+    <!-- KEY AREA: ground size. Swap models/forest_ground_large for a
+         different footprint (edit its model.sdf <box>/<plane> <size>),
+         or point back at model://forest_ground for the original 40x40. -->
+    <include><uri>model://forest_ground_large</uri><name>forest_ground</name></include>
+
+    <!-- ================= ORIGINAL 40x40 CORE (unchanged) ================= -->
+    <!-- Everything in this block is copied verbatim from embertrace_forest.sdf
+         so the patrol loop, spawn pose, and ground-truth fire source keep
+         working without touching any other package. -->
+
+    <!-- The tan strips form a looped patrol trail and have no collision geometry. -->
+    <model name="trail_west">
+      <static>true</static><pose>-10 0 0.012 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>2.2 30 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_centre">
+      <static>true</static><pose>0 0 0.014 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>22 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_north">
+      <static>true</static><pose>0 10 0.016 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>22 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_east">
+      <static>true</static><pose>10 5 0.018 0 0 0</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>2.2 12 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+    <model name="trail_base_spur">
+      <static>true</static><pose>-13 -13.5 0.02 0 0 -0.7854</pose>
+      <link name="trail"><visual name="surface"><geometry><box><size>8 2.2 0.02</size></box></geometry><material><ambient>0.38 0.26 0.13 1</ambient><diffuse>0.48 0.34 0.18 1</diffuse></material></visual></link>
+    </model>
+
+    <!-- Ranger infrastructure and project landmarks. -->
+    <include><uri>model://ranger_station</uri><name>ranger_base</name><pose>-16.5 -16.2 0 0 0 0.35</pose></include>
+    <include><uri>model://water_tank</uri><name>water_tank</name><pose>-16 14.5 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_1</name><pose>-10 -5 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_2</name><pose>-4 0 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_3</name><pose>3 10 0 0 0 0</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_4</name><pose>10 4 0 0 0 0</pose></include>
+
+    <!-- Hidden-source coordinates must match the default core parameters
+         (environment_simulator_node's source_x/source_y, both 12.0/7.0). -->
+    <include><uri>model://fire_source</uri><name>fire_source_visual</name><pose>12 7 0 0 0 0</pose></include>
+
+    <!-- Repeated local trees: no online Fuel download is required. -->
+    <include><uri>model://ember_tree</uri><name>tree_01</name><pose>-17 -8 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_02</name><pose>-16 1 0 0 0 0.5</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_03</name><pose>-17 8 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_04</name><pose>-13 16 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_05</name><pose>-6 16 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_06</name><pose>1 16 0 0 0 0.6</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_07</name><pose>8 16 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_08</name><pose>16 15 0 0 0 0.9</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_09</name><pose>16 2 0 0 0 0.4</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_10</name><pose>17 -6 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_11</name><pose>15 -14 0 0 0 0.7</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_12</name><pose>7 -16 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_13</name><pose>0 -15 0 0 0 0.5</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_14</name><pose>-6 -17 0 0 0 0.1</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_15</name><pose>-5 -6 0 0 0 0.4</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_16</name><pose>1 -6 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_17</name><pose>5 5 0 0 0 0.3</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_18</name><pose>-4 5 0 0 0 0.6</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_19</name><pose>15 11 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_tree</uri><name>tree_20</name><pose>4 -11 0 0 0 0.9</pose></include>
+
+    <!-- Natural obstacles are positioned beside, not across, the minimum patrol route. -->
+    <include><uri>model://ember_rock</uri><name>rock_1</name><pose>-7 -3 0 0 0 0.2</pose></include>
+    <include><uri>model://ember_rock</uri><name>rock_2</name><pose>3 2.8 0 0 0 0.8</pose></include>
+    <include><uri>model://ember_rock</uri><name>rock_3</name><pose>7 13.5 0 0 0 0.5</pose></include>
+    <include><uri>model://fallen_log</uri><name>log_1</name><pose>-5 12.8 0 0 0 0.3</pose></include>
+    <include><uri>model://fallen_log</uri><name>log_2</name><pose>5 -3.2 0 0 0 1.1</pose></include>
+
+    <!-- ================= END OF ORIGINAL 40x40 CORE ================= -->
+
+    <!-- ================= DENSE OUTER FOREST (new) =================
+         KEY AREA: asset density / layout. These 52 props (40 trees, 6
+         rocks, 4 logs, 2 extra sensor stations) were generated by a small
+         Python script (random seed 42) that scatters points across the
+         new +/-33.5 area while rejecting anything too close to the patrol
+         trail, any existing landmark, or another new prop. To change the
+         count or re-roll the layout: edit the try_place(...) counts and/or
+         the `random.seed(...)` value and rerun the generator, then paste
+         the printed <include> blocks in below. See the chat message this
+         file was delivered in for the full generator script. -->
+    <include><uri>model://ember_tree</uri><name>forest_tree_21</name><pose>9.34 -31.82 0 0 0 4.812</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_22</name><pose>26.28 -27.68 0 0 0 0.807</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_23</name><pose>-5.23 -31.50 0 0 0 2.986</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_24</name><pose>-18.85 0.36 0 0 0 3.455</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_25</name><pose>-31.72 -20.18 0 0 0 1.665</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_26</name><pose>-18.73 5.98 0 0 0 5.482</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_27</name><pose>20.73 -33.06 0 0 0 2.659</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_28</name><pose>20.49 13.28 0 0 0 1.331</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_29</name><pose>-10.70 -23.08 0 0 0 3.388</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_30</name><pose>30.63 -10.95 0 0 0 4.586</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_31</name><pose>-27.29 -27.02 0 0 0 1.264</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_32</name><pose>23.28 6.95 0 0 0 1.959</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_33</name><pose>2.43 31.70 0 0 0 6.253</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_34</name><pose>13.71 -30.43 0 0 0 4.083</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_35</name><pose>-28.15 -17.90 0 0 0 2.753</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_36</name><pose>-26.73 -14.88 0 0 0 3.252</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_37</name><pose>9.09 -9.06 0 0 0 0.76</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_38</name><pose>-8.70 -19.46 0 0 0 1.412</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_39</name><pose>-15.61 29.26 0 0 0 2.124</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_40</name><pose>-22.03 15.35 0 0 0 3.696</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_41</name><pose>-22.55 -8.08 0 0 0 1.446</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_42</name><pose>32.80 9.38 0 0 0 1.384</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_43</name><pose>22.97 18.49 0 0 0 0.446</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_44</name><pose>-18.15 -31.35 0 0 0 3.965</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_45</name><pose>-19.36 29.67 0 0 0 1.438</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_46</name><pose>25.22 -12.42 0 0 0 5.689</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_47</name><pose>11.80 -6.20 0 0 0 5.401</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_48</name><pose>27.77 -2.76 0 0 0 0.445</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_49</name><pose>4.11 -15.90 0 0 0 1.495</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_50</name><pose>5.67 26.65 0 0 0 4.203</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_51</name><pose>33.34 0.64 0 0 0 1.346</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_52</name><pose>-27.41 -30.34 0 0 0 0.831</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_53</name><pose>-26.15 8.54 0 0 0 5.878</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_54</name><pose>19.57 -5.22 0 0 0 3.588</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_55</name><pose>-29.24 -7.93 0 0 0 2.97</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_56</name><pose>31.56 24.17 0 0 0 4.93</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_57</name><pose>-32.73 14.79 0 0 0 5.074</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_58</name><pose>-26.03 -4.37 0 0 0 1.196</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_59</name><pose>-3.10 30.41 0 0 0 0.609</pose></include>
+    <include><uri>model://ember_tree</uri><name>forest_tree_60</name><pose>25.18 -15.85 0 0 0 2.708</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_04</name><pose>0.04 -21.53 0 0 0 2.661</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_05</name><pose>27.65 24.82 0 0 0 2.934</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_06</name><pose>-13.50 9.31 0 0 0 4.581</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_07</name><pose>7.30 -23.26 0 0 0 4.231</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_08</name><pose>18.67 2.03 0 0 0 6.184</pose></include>
+    <include><uri>model://ember_rock</uri><name>forest_rock_09</name><pose>-33.46 -11.78 0 0 0 0.618</pose></include>
+    <include><uri>model://fallen_log</uri><name>forest_log_03</name><pose>-32.20 28.75 0 0 0 2.53</pose></include>
+    <include><uri>model://fallen_log</uri><name>forest_log_04</name><pose>25.37 22.22 0 0 0 2.132</pose></include>
+    <include><uri>model://fallen_log</uri><name>forest_log_05</name><pose>-12.90 -29.62 0 0 0 5.414</pose></include>
+    <include><uri>model://fallen_log</uri><name>forest_log_06</name><pose>25.33 29.95 0 0 0 1.562</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_05</name><pose>-27.76 -0.94 0 0 0 1.195</pose></include>
+    <include><uri>model://sensor_station</uri><name>sensor_station_06</name><pose>-28.86 17.46 0 0 0 2.819</pose></include>
+    <!-- ================= END OF DENSE OUTER FOREST ================= -->
+
+    <!-- KEY AREA: world boundary. The original small world fenced at
+         +/-19.7; this one fences at +/-34.7 to match forest_ground_large's
+         70x70 footprint. Resize together with the ground plane above. -->
+    <model name="north_fence"><static>true</static><pose>0 34.7 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>70 0.2 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>70 0.2 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="south_fence"><static>true</static><pose>0 -34.7 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>70 0.2 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>70 0.2 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="east_fence"><static>true</static><pose>34.7 0 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>0.2 70 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>0.2 70 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+    <model name="west_fence"><static>true</static><pose>-34.7 0 0.4 0 0 0</pose><link name="fence"><collision name="c"><geometry><box><size>0.2 70 0.8</size></box></geometry></collision><visual name="v"><geometry><box><size>0.2 70 0.8</size></box></geometry><material><ambient>0.18 0.12 0.05 1</ambient><diffuse>0.28 0.17 0.07 1</diffuse></material></visual></link></model>
+  </world>
+</sdf>

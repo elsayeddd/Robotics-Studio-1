@@ -2,7 +2,12 @@
 
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
-from launch.actions import SetEnvironmentVariable, TimerAction
+from launch.actions import SetEnvironmentVariable, TimerAction, OpaqueFunction, RegisterEventHandler
+from launch.event_handlers import OnShutdown
+from ament_index_python.packages import get_package_share_directory
+import tempfile
+from pathlib import Path
+import xml.etree.ElementTree as ET
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
 from launch.substitutions import Command, EnvironmentVariable, LaunchConfiguration
@@ -29,21 +34,46 @@ def generate_launch_description():
         value_type=str,
     )
 
-    gazebo = IncludeLaunchDescription(
-        PythonLaunchDescriptionSource(
-            PathJoinSubstitution([
-                FindPackageShare("ros_ign_gazebo"),
-                "launch",
-                "ign_gazebo.launch.py",
-            ])
-        ),
-        launch_arguments={
-            "ign_args": [
-                PathJoinSubstitution([package_share, "worlds", "embertrace_forest.sdf"]),
-                " -r",
-            ]
-        }.items(),
+    def launch_world(context):
+        scenario = LaunchConfiguration("scenario").perform(context)
+        gui = LaunchConfiguration("gazebo_gui").perform(context).lower() == "true"
+        if scenario not in ("fire", "no_fire", "dust", "hot_surface", "visual_decoy", "dropout"):
+            raise ValueError("Unknown scenario: " + scenario)
+        world = Path(get_package_share_directory("embertrace_sim")) / "worlds" / LaunchConfiguration("world_file").perform(context)
+        tree = ET.parse(world)
+        if scenario in ("no_fire", "dust", "hot_surface"):
+            parent = tree.getroot().find("world")
+            for item in list(parent.findall("include")):
+                if item.findtext("name") == "fire_source_visual":
+                    parent.remove(item)
+        with tempfile.NamedTemporaryFile(prefix="embertrace_", suffix=".sdf", delete=False) as handle:
+            tree.write(handle, encoding="utf-8", xml_declaration=True)
+            runtime_world = handle.name
+        def cleanup(_context):
+            Path(runtime_world).unlink(missing_ok=True)
+            return []
+        return [
+            IncludeLaunchDescription(PythonLaunchDescriptionSource(PathJoinSubstitution([
+                FindPackageShare("ros_ign_gazebo"), "launch", "ign_gazebo.launch.py"
+            ])), launch_arguments={"ign_args": [runtime_world, " -r" if gui else " -r -s -v 3"]}.items()),
+            RegisterEventHandler(OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)])),
+        ]
+
+    gazebo = OpaqueFunction(function=launch_world)
+
+    drone_bridge = Node(
+        package="ros_ign_bridge", executable="parameter_bridge", namespace="drone1",
+        name="gazebo_bridge", output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
+        parameters=[{"config_file": PathJoinSubstitution([config_dir, "gazebo_bridge_drone1.yaml"]),
+                     "use_sim_time": use_sim_time}],
     )
+    spawn_drone = TimerAction(period=4.0, actions=[Node(
+        package="ros_ign_gazebo", executable="create", name="spawn_drone1", output="screen",
+        condition=IfCondition(LaunchConfiguration("use_drone")),
+        arguments=["-file", PathJoinSubstitution([model_dir, "scout_drone", "model.sdf"]),
+                   "-name", "drone1", "-x", LaunchConfiguration("drone_x"),
+                   "-y", LaunchConfiguration("drone_y"), "-z", "8"],
+    )])
 
     robot_state_publisher = Node(
         package="robot_state_publisher",
@@ -65,8 +95,8 @@ def generate_launch_description():
             arguments=[
                 "-topic", "/husky1/robot_description",
                 "-name", "husky1",
-                "-x", "-14.0",
-                "-y", "-14.0",
+                "-x", LaunchConfiguration("rover_x"),
+                "-y", LaunchConfiguration("rover_y"),
                 "-z", "0.4",
                 "-Y", "0.7854",
             ],
@@ -140,6 +170,14 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("world_file", default_value="embertrace_forest.sdf"),
+        DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
+        DeclareLaunchArgument("rover_x", default_value="-14.0"),
+        DeclareLaunchArgument("rover_y", default_value="-14.0"),
+        DeclareLaunchArgument("drone_x", default_value="-14.0"),
+        DeclareLaunchArgument("drone_y", default_value="-12.0"),
+        DeclareLaunchArgument("scenario", default_value="fire"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("use_nav2", default_value="false"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
@@ -165,7 +203,8 @@ def generate_launch_description():
         robot_bridge,
         ekf,
         spawn_husky,
+        drone_bridge,
+        spawn_drone,
         navigation,
         rviz,
     ])
-
