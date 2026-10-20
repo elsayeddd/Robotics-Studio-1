@@ -10,6 +10,7 @@ find_package(std_msgs REQUIRED)
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/EnvironmentalReading.msg"
   "msg/VisualCue.msg"
+  "msg/ThermalCue.msg"
   "msg/PerceptionStatus.msg"
   "msg/TrialTruth.msg"
   "msg/FireAlert.msg"
@@ -20,5 +21,3 @@ rosidl_generate_interfaces(${PROJECT_NAME}
 
 ament_export_dependencies(rosidl_default_runtime)
 ament_package()
-
-

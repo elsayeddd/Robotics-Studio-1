@@ -39,13 +39,40 @@ def generate_launch_description():
         gui = LaunchConfiguration("gazebo_gui").perform(context).lower() == "true"
         if scenario not in ("fire", "no_fire", "dust", "hot_surface", "visual_decoy", "dropout"):
             raise ValueError("Unknown scenario: " + scenario)
-        world = Path(get_package_share_directory("embertrace_sim")) / "worlds" / "embertrace_forest.sdf"
+        world = Path(get_package_share_directory("embertrace_sim")) / "worlds" / LaunchConfiguration("world_file").perform(context)
         tree = ET.parse(world)
         if scenario in ("no_fire", "dust", "hot_surface"):
             parent = tree.getroot().find("world")
             for item in list(parent.findall("include")):
                 if item.findtext("name") == "fire_source_visual":
                     parent.remove(item)
+        if scenario == "visual_decoy":
+            parent = tree.getroot().find("world")
+            for item in list(parent.findall("include")):
+                if item.findtext("name") == "fire_source_visual":
+                    pose = item.findtext("pose", "12 7 0 0 0 0")
+                    parent.remove(item)
+                    decoy = ET.parse(Path(get_package_share_directory("embertrace_sim")) /
+                                     "models/fire_source/model.sdf").getroot().find("model")
+                    decoy.set("name", "visual_decoy")
+                    for visual in decoy.findall(".//visual"):
+                        for plugin in list(visual.findall("plugin")):
+                            if plugin.get("name", "").endswith("::Thermal"):
+                                plugin.find("temperature").text = "295.15"
+                    ET.SubElement(decoy, "pose").text = pose
+                    parent.append(decoy)
+        if scenario == "hot_surface":
+            # Existing rock geometry, heated without smoke/CO2 or an RGB flame cue.
+            model = ET.parse(Path(get_package_share_directory("embertrace_sim")) /
+                             "models/ember_rock/model.sdf").getroot().find("model")
+            model.set("name", "heated_rock")
+            ET.SubElement(model, "pose").text = "12 7 0 0 0 0"
+            for visual in model.findall(".//visual"):
+                plugin = ET.SubElement(visual, "plugin", {
+                    "filename": "ignition-gazebo-thermal-system",
+                    "name": "ignition::gazebo::systems::Thermal"})
+                ET.SubElement(plugin, "temperature").text = "353.15"
+            tree.getroot().find("world").append(model)
         with tempfile.NamedTemporaryFile(prefix="embertrace_", suffix=".sdf", delete=False) as handle:
             tree.write(handle, encoding="utf-8", xml_declaration=True)
             runtime_world = handle.name
@@ -170,6 +197,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("world_file", default_value="embertrace_forest.sdf"),
         DeclareLaunchArgument("use_drone", default_value="true"),
         DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
         DeclareLaunchArgument("rover_x", default_value="-14.0"),

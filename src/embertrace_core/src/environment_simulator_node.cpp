@@ -19,6 +19,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 #include "embertrace_core/plume_model.hpp"
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
@@ -76,9 +77,26 @@ public:
     } else if (scenario_ == "hot_surface") {
       parameters.emission_strength_ppm = 0.0;
     }
+    source_x_ = parameters.source_x; source_y_ = parameters.source_y;
+    evaluation_radius_ = declare_parameter<double>("evaluation_radius_m", 6);
+    if (!std::isfinite(evaluation_radius_) || evaluation_radius_ <= 0)
+    {throw std::invalid_argument("evaluation_radius_m must be positive");}
     ambient_ = parameters.ambient_temperature_c;
     baseline_ = parameters.baseline_smoke_ppm;
     plume_model_ = std::make_unique<PlumeModel>(parameters, static_cast<std::uint32_t>(seed));
+    // Reuse only the transport-field geometry: CO2 has its own baseline, emission,
+    // noise and random stream. Dust is explicitly NOT a CO2 source.
+    auto co2_parameters = parameters;
+    co2_parameters.baseline_smoke_ppm = declare_parameter<double>("baseline_co2_ppm", 420);
+    co2_parameters.emission_strength_ppm = declare_parameter<double>("co2_emission_strength_ppm", 900);
+    co2_parameters.smoke_noise_stddev = declare_parameter<double>("co2_noise_stddev_ppm", 5);
+    if (scenario_ != "fire" && scenario_ != "dropout") {co2_parameters.emission_strength_ppm = 0;}
+    if (co2_parameters.baseline_smoke_ppm < 0 || co2_parameters.emission_strength_ppm < 0 ||
+      co2_parameters.smoke_noise_stddev < 0 || !std::isfinite(co2_parameters.baseline_smoke_ppm) ||
+      !std::isfinite(co2_parameters.emission_strength_ppm) || !std::isfinite(co2_parameters.smoke_noise_stddev))
+    {throw std::invalid_argument("Invalid CO2 field parameters");}
+    co2_baseline_ = co2_parameters.baseline_smoke_ppm;
+    co2_model_ = std::make_unique<PlumeModel>(co2_parameters, static_cast<std::uint32_t>(seed) + 1009U);
 
     reading_publisher_ = create_publisher<embertrace_interfaces::msg::EnvironmentalReading>(
       output_topic, rclcpp::SensorDataQoS());
@@ -90,6 +108,7 @@ public:
         if (!std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
           message->header.frame_id != odom_frame_ || age < -0.1 || age > odometry_timeout_s_)
         {return;}
+        last_odometry_receipt_ = std::chrono::steady_clock::now();
         latest_odometry_ = *message;
         have_odometry_ = true;
         if (!have_start_) {start_ = now(); have_start_ = true;}
@@ -113,6 +132,8 @@ private:
       return;
     }
 
+    if (std::chrono::duration<double>(std::chrono::steady_clock::now() - last_odometry_receipt_).count() >
+      odometry_timeout_s_) {return;}
     const auto & position = latest_odometry_.pose.pose.position;
     auto sample = plume_model_->sample(position.x, position.y);
     const double attenuation = std::exp(-std::max(0.0, position.z) / std::max(0.1, altitude_decay_m_));
@@ -124,7 +145,7 @@ private:
     truth.scenario = scenario_;
     // This evaluation-only topic is never subscribed to by decision nodes.
     truth.fire_present = (scenario_ == "fire" || scenario_ == "dropout") &&
-      (sample.smoke_ppm >= 12.0 || sample.temperature_c >= 32.0);
+      std::hypot(position.x-source_x_, position.y-source_y_) <= evaluation_radius_;
     truth.sensor_dropout = scenario_ == "dropout" && elapsed >= dropout_start_s_ &&
       elapsed < dropout_start_s_ + dropout_duration_s_;
     truth_publisher_->publish(truth);
@@ -135,6 +156,10 @@ private:
     message.header.frame_id = odom_frame_;
     message.sample_pose.header = message.header;
     message.sample_pose.pose = latest_odometry_.pose.pose;
+    const auto gas = co2_model_->sample(position.x, position.y);
+    const double height_factor = std::exp(-std::max(0.0, position.z) / std::max(.1, altitude_decay_m_));
+    message.co2_ppm = static_cast<float>(co2_baseline_ + (gas.smoke_ppm - co2_baseline_) * height_factor);
+    message.co2_valid = true;
     message.smoke_ppm = static_cast<float>(sample.smoke_ppm);
     message.temperature_c = static_cast<float>(sample.temperature_c);
     message.wind_speed_mps = static_cast<float>(sample.wind_speed_mps);
@@ -154,7 +179,9 @@ private:
   rclcpp::Publisher<embertrace_interfaces::msg::TrialTruth>::SharedPtr truth_publisher_;
   bool have_odometry_{false};
   nav_msgs::msg::Odometry latest_odometry_;
-  std::unique_ptr<PlumeModel> plume_model_;
+  std::unique_ptr<PlumeModel> plume_model_, co2_model_;
+  double co2_baseline_{420}, source_x_{12}, source_y_{7}, evaluation_radius_{6};
+  std::chrono::steady_clock::time_point last_odometry_receipt_;
   rclcpp::Publisher<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr reading_publisher_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odometry_subscription_;
   rclcpp::TimerBase::SharedPtr timer_;

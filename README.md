@@ -153,3 +153,9 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 
 The simulation structure, Husky model, sensor bridge conventions, forest texture and meshes were adapted from the supplied `41068_ignition_bringup_v1.zip`. See [Original package audit](docs/original-package-audit.md) and [NOTICE](NOTICE.md) before publishing the repository publicly.
 
+## October 20 perception update
+
+Native IR cameras, explicit CO2, freshness/persistence and evaluation changes are documented in
+[perception validation](docs/perception-validation.md).
+Follow [VM/GitHub and simulation startup](docs/perception-vm-startup.md) for a fresh machine.
+ROS/Gazebo target-machine acceptance remains required.

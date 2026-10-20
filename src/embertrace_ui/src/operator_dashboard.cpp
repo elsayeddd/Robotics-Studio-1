@@ -53,6 +53,8 @@ public:
     reading_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
       "/embertrace/environment", rclcpp::SensorDataQoS(),
       [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr message) {
+        co2_ppm_ = message->co2_ppm; co2_valid_ = message->co2_valid;
+        thermal_peak_c_ = message->thermal_peak_c; thermal_valid_ = message->thermal_valid;
         smoke_ppm_ = message->smoke_ppm;
         temperature_c_ = message->temperature_c;
         wind_speed_mps_ = message->wind_speed_mps;
@@ -68,6 +70,7 @@ public:
       "/embertrace/perception_status", 10,
       [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr msg) {
         rover_fresh_ = msg->environment_fresh;
+        thermal_valid_ = msg->thermal_fresh; co2_valid_ = msg->co2_valid;
         rover_stamp_ = rclcpp::Time(msg->header.stamp);
       });
     drone_status_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
@@ -118,6 +121,10 @@ public:
   float temperature_c() const {return temperature_c_;}
   float wind_speed_mps() const {return wind_speed_mps_;}
   float confidence() const {return confidence_;}
+  float co2_ppm() const {return co2_ppm_;}
+  float thermal_peak_c() const {return thermal_peak_c_;}
+  bool co2_valid() const {return rover_fresh() && co2_valid_;}
+  bool thermal_valid() const {return rover_fresh() && thermal_valid_;}
 
 private:
   bool connected_{false}, rover_fresh_{false}, drone_fresh_{false};
@@ -131,7 +138,8 @@ private:
   float smoke_ppm_{0.0F};
   float temperature_c_{0.0F};
   float wind_speed_mps_{0.0F};
-  float confidence_{0.0F};
+  float confidence_{0.0F}, co2_ppm_{0}, thermal_peak_c_{0};
+  bool co2_valid_{false}, thermal_valid_{false};
 
   rclcpp::Subscription<embertrace_interfaces::msg::MissionState>::SharedPtr state_subscription_;
   rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr
@@ -179,9 +187,12 @@ public:
     sensors->addWidget(new QLabel("Temperature"), 1, 0); sensors->addWidget(temperature_, 1, 1);
     sensors->addWidget(new QLabel("Wind"), 0, 2); sensors->addWidget(wind_, 0, 3);
     sensors->addWidget(new QLabel("Fused confidence"), 1, 2); sensors->addWidget(confidence_, 1, 3);
+    co2_ = new QLabel("Unavailable"); thermal_ = new QLabel("Unavailable");
+    sensors->addWidget(new QLabel("CO2"), 2, 0); sensors->addWidget(co2_, 2, 1);
+    sensors->addWidget(new QLabel("IR peak"), 2, 2); sensors->addWidget(thermal_, 2, 3);
     health_ = new QLabel("Waiting for sensor health");
     health_->setWordWrap(true);
-    sensors->addWidget(health_, 2, 0, 1, 4);
+    sensors->addWidget(health_, 3, 0, 1, 4);
     root->addWidget(sensor_box);
 
     alert_ = new QLabel("No active alert");
@@ -235,6 +246,8 @@ private:
     temperature_->setText(QString::number(node_->temperature_c(), 'f', 1) + " °C");
     wind_->setText(QString::number(node_->wind_speed_mps(), 'f', 1) + " m/s");
     confidence_->setText(QString::number(100.0F * node_->confidence(), 'f', 0) + " %");
+    co2_->setText(node_->co2_valid() ? QString::number(node_->co2_ppm(), 'f', 1) + " ppm" : "Unavailable");
+    thermal_->setText(node_->thermal_valid() ? QString::number(node_->thermal_peak_c(), 'f', 1) + " C" : "Unavailable");
     health_->setText(QString::fromStdString(node_->sensor_health()));
     if (!node_->rover_fresh()) {
       smoke_->setText("Unavailable"); temperature_->setText("Unavailable");
@@ -255,6 +268,8 @@ private:
   QLabel * temperature_{nullptr};
   QLabel * wind_{nullptr};
   QLabel * confidence_{nullptr};
+  QLabel * co2_{nullptr};
+  QLabel * thermal_{nullptr};
   QLabel * health_{nullptr};
   QLabel * alert_{nullptr};
   QLabel * command_result_{nullptr};
@@ -275,4 +290,3 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return result;
 }
-

@@ -66,6 +66,7 @@ def run():
     node = Node('perception_integration_test')
     raw = node.create_publisher(EnvironmentalReading, '/embertrace/raw_environment', qos_profile_sensor_data)
     camera = node.create_publisher(Image, '/husky1/camera/image', qos_profile_sensor_data)
+    infrared = node.create_publisher(Image, '/husky1/thermal/image', qos_profile_sensor_data)
     state = {'value': None, 'alerts': 0, 'env': None}
     transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
     subscriptions = [
@@ -75,7 +76,7 @@ def run():
     ]
     client = node.create_client(OperatorCommand, '/embertrace/operator_command')
 
-    def pump(duration, smoke=None, heat=22, visual=True):
+    def pump(duration, smoke=None, heat=22, visual=True, thermal=True):
         end = time.monotonic() + duration
         next_sample = 0
         while time.monotonic() < end:
@@ -89,7 +90,16 @@ def run():
                 reading.smoke_ppm = float(smoke)
                 reading.temperature_c = float(heat)
                 reading.wind_speed_mps = 2.5
+                reading.co2_valid = True
+                reading.co2_ppm = 1400.0 if heat >= 80 and smoke >= 40 else 420.0
                 raw.publish(reading)
+                if thermal:
+                    image = Image(); image.header.stamp = stamp
+                    image.header.frame_id = 'husky1_camera_link'
+                    image.width = image.height = 32; image.step = 64; image.encoding = 'mono16'
+                    kelvin_units = round(((100 if heat >= 80 else 22) + 273.15) * 100)
+                    image.data = kelvin_units.to_bytes(2, 'little') * 32 * 32
+                    infrared.publish(image)
                 if visual:
                     image = Image()
                     image.header.stamp = stamp
@@ -115,10 +125,14 @@ def run():
     processes, handles = [], []
     try:
         check_recorder(logs.name)
-        for executable in ('perception_node', 'camera_verifier_node', 'mission_manager_node'):
+        for executable in ('perception_node', 'camera_verifier_node', 'thermal_verifier_node', 'mission_manager_node'):
             handle = (Path(logs.name) / (executable + '.log')).open('w')
             handles.append(handle)
-            processes.append(subprocess.Popen(['ros2', 'run', 'embertrace_core', executable],
+            options = (['--ros-args', '-p', 'require_co2:=true', '-p', 'require_thermal:=true']
+                       if executable == 'perception_node' else
+                       ['--ros-args', '-p', 'require_thermal_confirmation:=true']
+                       if executable == 'mission_manager_node' else [])
+            processes.append(subprocess.Popen(['ros2', 'run', 'embertrace_core', executable, *options],
                                              stdout=handle, stderr=subprocess.STDOUT, start_new_session=True))
         if not client.wait_for_service(timeout_sec=10):
             raise RuntimeError('Mission service did not start')
@@ -129,6 +143,9 @@ def run():
         assert state['env'] is not None and state['env'].fused_confidence == 0, 'Colour bypassed fusion gate'
         pump(3, 60, 22, visual=False)
         assert state['alerts'] == 0, 'Dust or expired camera confirmed fire'
+        pump(1.3, 60, 22, visual=False, thermal=False)
+        pump(2, 60, 80, thermal=False)
+        assert state['alerts'] == 0, 'Missing IR stream bypassed confirmation gate'
         pump(5, 60, 80)
         assert state['value'] == 'ALERT' and state['alerts'] == 1, 'Multi-sensor fire did not alert'
         assert command('E_STOP')

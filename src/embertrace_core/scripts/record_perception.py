@@ -7,11 +7,12 @@ from pathlib import Path
 import rclpy
 from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data
-from embertrace_interfaces.msg import EnvironmentalReading, TrialTruth, VisualCue
+from embertrace_interfaces.msg import EnvironmentalReading, TrialTruth, VisualCue, ThermalCue
 
 HEADER = ['trial', 'scenario', 'now_s', 'stamp_s', 'smoke_ppm', 'temperature_c',
           'wind_speed_mps', 'wind_direction_rad', 'visual_stamp_s', 'visual_confidence',
-          'visual_valid', 'environment_available', 'fire_present']
+          'visual_valid', 'environment_available', 'fire_present',
+          'co2_ppm', 'co2_valid', 'thermal_stamp_s', 'thermal_peak_c', 'thermal_hotspot', 'thermal_valid']
 
 
 def stamp(msg):
@@ -25,16 +26,18 @@ class Recorder(Node):
         root = '/embertrace' if args.robot == 'husky1' else '/drone1'
         path = Path(args.output).expanduser()
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.csv_handle = path.open('w', newline='')
+        self.csv_handle = path.open('x', newline='')
         self.writer = csv.writer(self.csv_handle)
         self.writer.writerow(HEADER)
         self.trial = args.trial
         self.raw, self.truth = {}, {}
         self.visual = None
+        self.thermal = None
         self.rows = 0
         self.subscriptions_owned = [
             self.create_subscription(EnvironmentalReading, root + '/raw_environment', self.on_raw, qos_profile_sensor_data),
             self.create_subscription(VisualCue, root + '/visual_cue', self.on_visual, qos_profile_sensor_data),
+            self.create_subscription(ThermalCue, root + '/thermal_cue', self.on_thermal, qos_profile_sensor_data),
             self.create_subscription(TrialTruth, root + '/validation/truth', self.on_truth, 10),
         ]
         self.create_timer(0.1, self.drain)
@@ -42,35 +45,45 @@ class Recorder(Node):
     def on_raw(self, msg):
         # Snapshot the visual evidence now; waiting for truth must not introduce
         # camera evidence that arrived after this environmental observation.
-        self.raw[round(stamp(msg), 9)] = (msg, self.get_clock().now().nanoseconds * 1e-9, self.visual)
+        self.raw[round(stamp(msg), 9)] = (msg, self.get_clock().now().nanoseconds * 1e-9, self.visual, self.thermal)
         self.drain()
 
     def on_visual(self, msg):
         self.visual = msg
 
+    def on_thermal(self, msg):
+        self.thermal = msg
+
     def on_truth(self, msg):
         self.truth[round(stamp(msg), 9)] = (
-            msg, time.monotonic(), self.get_clock().now().nanoseconds * 1e-9)
+            msg, time.monotonic(), self.get_clock().now().nanoseconds * 1e-9, self.visual, self.thermal)
         self.drain()
 
     def drain(self, force=False):
-        for key, (truth, received, truth_now) in sorted(list(self.truth.items())):
+        for key, (truth, received, truth_now, truth_visual, truth_thermal) in sorted(list(self.truth.items())):
             raw = self.raw.get(key)
             if raw is None and not force and time.monotonic() - received < 0.4:
                 break
             now_s = truth_now
-            v = self.visual
+            v = truth_visual
+            thermal = truth_thermal
+            co2, co2_valid = 0, False
             # A later camera frame cannot be replayed backwards into this sample.
             visual_valid = v is not None and v.valid and 0 <= now_s - stamp(v) <= 1.0
             values = [key, 0, 22, 0, 0]
             if raw is not None:
-                msg, now_s, v = raw
+                msg, now_s, v, thermal = raw
+                co2, co2_valid = msg.co2_ppm, msg.co2_valid
                 values = [stamp(msg), msg.smoke_ppm, msg.temperature_c, msg.wind_speed_mps, msg.wind_direction_rad]
                 visual_valid = v is not None and v.valid and 0 <= now_s - stamp(v) <= 1.0
+            thermal_valid = thermal is not None and thermal.valid and 0 <= now_s - stamp(thermal) <= 1
             self.writer.writerow([self.trial, truth.scenario, now_s, *values,
                                   stamp(v) if visual_valid else 0,
                                   v.confidence if visual_valid else 0,
-                                  int(visual_valid), int(raw is not None), int(truth.fire_present)])
+                                  int(visual_valid), int(raw is not None), int(truth.fire_present),
+                                  co2, int(co2_valid), stamp(thermal) if thermal_valid else 0,
+                                  thermal.peak_temperature_c if thermal_valid else 0,
+                                  int(thermal.hotspot) if thermal_valid else 0, int(thermal_valid)])
             self.rows += 1
             self.raw.pop(key, None)
             self.truth.pop(key, None)

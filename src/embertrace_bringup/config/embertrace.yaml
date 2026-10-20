@@ -36,6 +36,18 @@ camera_verifier_node:
 
 perception_node:
   ros__parameters:
+    require_co2: true
+    require_thermal: true
+    thermal_topic: /embertrace/thermal_cue
+    thermal_timeout_s: 1.0
+    co2_enter_ppm: 700.0
+    co2_exit_ppm: 600.0
+    baseline_co2_ppm: 420.0
+    co2_full_scale_ppm: 1500.0
+    detection_samples: 3
+    nominal_period_s: 0.2
+    drone_wind_limit_mps: 5.0
+    rover_wind_limit_mps: 12.0
     use_sim_time: true
     input_topic: /embertrace/raw_environment
     output_topic: /embertrace/environment
@@ -56,6 +68,7 @@ perception_node:
 
 mission_manager_node:
   ros__parameters:
+    require_thermal_confirmation: true
     use_sim_time: true
     investigate_confidence: 0.22
     track_confidence: 0.38
@@ -118,6 +131,7 @@ patrol_manager_node:
 
 sensor_health_node:
   ros__parameters:
+    require_thermal: true
     robot: husky1
     environment_topic: /embertrace/raw_environment
     ready_topic: /embertrace/sensors_ready
@@ -125,6 +139,7 @@ sensor_health_node:
 
 drone_sensor_health_node:
   ros__parameters:
+    require_thermal: true
     robot: drone1
     environment_topic: /drone1/raw_environment
     ready_topic: /drone1/sensors_ready
@@ -156,6 +171,18 @@ drone_camera_verifier_node:
 
 drone_perception_node:
   ros__parameters:
+    require_co2: true
+    require_thermal: true
+    thermal_topic: /drone1/thermal_cue
+    thermal_timeout_s: 1.0
+    co2_enter_ppm: 700.0
+    co2_exit_ppm: 600.0
+    baseline_co2_ppm: 420.0
+    co2_full_scale_ppm: 1500.0
+    detection_samples: 3
+    nominal_period_s: 0.2
+    drone_wind_limit_mps: 5.0
+    rover_wind_limit_mps: 12.0
     input_topic: /drone1/raw_environment
     output_topic: /drone1/environment
     visual_topic: /drone1/visual_cue
@@ -170,3 +197,27 @@ drone_scout_node:
     max_speed_mps: 1.5
     sweep_x: [-12.0, 12.0, 12.0, -12.0, -12.0, 12.0]
     sweep_y: [-8.0, -8.0, 0.0, 0.0, 8.0, 8.0]
+
+
+# Integer image pixels map to Kelvin using this exact resolution.
+thermal_verifier_node:
+  ros__parameters:
+    image_topic: /husky1/thermal/image
+    output_topic: /embertrace/thermal_cue
+    kelvin_per_unit: 0.01
+    hotspot_threshold_c: 50.0
+    minimum_cluster: 4
+    minimum_hot_fraction: 0.0005
+    required_frames: 2
+    image_timeout_s: 1.0
+
+drone_thermal_verifier_node:
+  ros__parameters:
+    image_topic: /drone1/thermal/image
+    output_topic: /drone1/thermal_cue
+    kelvin_per_unit: 0.01
+    hotspot_threshold_c: 50.0
+    minimum_cluster: 4
+    minimum_hot_fraction: 0.0005
+    required_frames: 2
+    image_timeout_s: 1.0

@@ -17,7 +17,7 @@ def main():
     for alpha, smoke, heat in itertools.product([0.15, 0.25, 0.4], [10.0, 12.0, 15.0], [30.0, 32.0, 35.0]):
         command = [args.evaluator, args.training_csv, '--alpha', str(alpha), '--smoke-enter', str(smoke), '--heat-enter', str(heat)]
         rows = list(csv.DictReader(io.StringIO(subprocess.check_output(command, text=True))))
-        tp, fp, fn = (sum(int(row[key]) for row in rows) for key in ('tp', 'fp', 'fn'))
+        tp, fp, fn = (sum(int(row[key]) for row in rows) for key in ('tp', 'fp', 'fn_including_unavailable'))
         # False confirmations are weighted twice as heavily as missed positive frames.
         cost = 4 * fp + 2 * fn
         results.append(dict(alpha=alpha, smoke_enter=smoke, heat_enter=heat, tp=tp, fp=fp, fn=fn, cost=cost))

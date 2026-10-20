@@ -1,5 +1,7 @@
 /** Acquisition-time health for every bridged sensor on one vehicle. */
 #include <chrono>
+#include <cmath>
+#include <stdexcept>
 #include <map>
 #include <memory>
 #include <string>
@@ -24,6 +26,8 @@ public:
     const auto robot = declare_parameter<std::string>("robot", "husky1");
     const auto root = "/" + robot;
     timeout_ = declare_parameter<double>("sensor_timeout_s", 2.0);
+    if (!std::isfinite(timeout_) || timeout_ <= 0) {throw std::invalid_argument("Invalid sensor timeout");}
+    monitor<sensor_msgs::msg::Image>(root + "/thermal/image", declare_parameter<bool>("require_thermal", false));
     monitor<nav_msgs::msg::Odometry>(root + "/odometry", true);
     monitor<sensor_msgs::msg::Imu>(root + "/imu", true);
     monitor<sensor_msgs::msg::LaserScan>(root + "/scan", true);
@@ -39,22 +43,24 @@ public:
     timer_ = create_wall_timer(200ms, [this]() {publish();});
   }
 private:
-  struct Stream {bool required{false}; bool seen{false}; double stamp{0};};
+  struct Stream {bool required{false}; bool seen{false}; double stamp{0}; double receipt{0};};
   template<typename Message> void monitor(const std::string & topic, bool required)
   {
     streams_[topic].required = required;
     subscriptions_.push_back(create_subscription<Message>(topic, rclcpp::SensorDataQoS(),
       [this, topic](const typename Message::SharedPtr msg) {
         auto & stream = streams_.at(topic);
-        const double stamp = rclcpp::Time(msg->header.stamp).seconds();
+        const double stamp = msg->header.stamp.sec + msg->header.stamp.nanosec * 1e-9;
         const double clock = now().seconds();
         if (clock < last_clock_) {for (auto & entry : streams_) {entry.second.seen = false;}}
         last_clock_ = clock;
         if (stamp <= 0 || clock - stamp < -0.1 || clock - stamp > timeout_ ||
           (stream.seen && stamp <= stream.stamp)) {return;}
-        stream.stamp = stamp; stream.seen = true;
+        stream.stamp = stamp; stream.receipt = steady(); stream.seen = true;
       }));
   }
+  static double steady()
+  {return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
   void publish()
   {
     const double clock = now().seconds();
@@ -67,7 +73,7 @@ private:
     for (const auto & entry : streams_) {
       const auto & stream = entry.second;
       const double age = clock - stream.stamp;
-      const bool fresh = stream.seen && age >= -0.1 && age <= timeout_;
+      const bool fresh = stream.seen && age >= -0.1 && age <= timeout_ && steady() - stream.receipt <= timeout_;
       diagnostic_msgs::msg::DiagnosticStatus status;
       status.name = "sensor:" + entry.first;
       status.hardware_id = entry.first;

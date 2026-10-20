@@ -14,3 +14,12 @@ bool temperature_anomaly
 float32 visual_confidence
 float32 fused_confidence
 
+
+# Explicit simulated CO2: independent background/enrichment/noise, not renamed smoke.
+float32 co2_ppm
+bool co2_valid
+bool co2_detected
+# IR image evidence stays separate from the scalar local temperature used for source fitting.
+bool thermal_valid
+bool thermal_hotspot
+float32 thermal_peak_c

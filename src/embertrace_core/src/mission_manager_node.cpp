@@ -16,6 +16,7 @@
 #include <functional>
 #include <memory>
 #include <string>
+#include <stdexcept>
 
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
 #include "embertrace_interfaces/msg/perception_status.hpp"
@@ -46,13 +47,17 @@ public:
     alert_confidence_ = declare_parameter<double>("alert_confidence", 0.74);
     lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
     visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
+    require_thermal_ = declare_parameter<bool>("require_thermal_confirmation", false);
     reading_timeout_s_ = declare_parameter<double>("reading_timeout_s", 2.0);
+    if (!std::isfinite(reading_timeout_s_) || reading_timeout_s_ <= 0) {
+      throw std::invalid_argument("reading_timeout_s must be finite and positive");
+    }
     max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
     max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
     required_detection_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_detection_samples", 3));
+      1L, declare_parameter<int>("required_detection_samples", 3));
     required_confirmation_samples_ = std::max<int>(
-      1, declare_parameter<int>("required_confirmation_samples", 3));
+      1L, declare_parameter<int>("required_confirmation_samples", 3));
 
     state_publisher_ = create_publisher<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable());
@@ -70,7 +75,10 @@ public:
     health_subscription_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
       "/embertrace/perception_status", 10,
       [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr status) {
-        if (!status->environment_fresh) {detection_count_ = confirmation_count_ = 0;}
+        perception_available_ = status->environment_fresh;
+        if (!perception_available_) {detection_count_ = confirmation_count_ = 0;}
+        // IR loss suppresses confirmation, while gas-only investigation can continue.
+        if (require_thermal_ && !status->thermal_fresh) {confirmation_count_ = 0;}
       });
     scout_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
       "/drone1/environment", rclcpp::SensorDataQoS(),
@@ -78,7 +86,7 @@ public:
         const double age = (now() - rclcpp::Time(sample->header.stamp)).seconds();
         if (state_ == MissionState::PATROL && age >= 0 && age <= reading_timeout_s_ &&
           sample->header.frame_id == "husky1_odom" &&
-          (sample->smoke_detected || sample->temperature_anomaly) &&
+          (sample->smoke_detected || sample->co2_detected || sample->temperature_anomaly) &&
           sample->fused_confidence >= track_confidence_)
         {
           transition_to(MissionState::INVESTIGATE, "Aerial environmental cue; rover must verify locally");
@@ -140,11 +148,24 @@ private:
 
   void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading)
   {
-    const double age = (now() - rclcpp::Time(reading->header.stamp)).seconds();
-    if (age < 0 || age > reading_timeout_s_ || !std::isfinite(reading->fused_confidence) ||
+    const auto current = now();
+    if (current < last_clock_) {
+      have_reading_ = have_estimate_ = false; detection_count_ = confirmation_count_ = 0;
+    }
+    last_clock_ = current;
+    if (reading->header.stamp.sec < 0) {detection_count_ = confirmation_count_ = 0; return;}
+    const double age = (current - rclcpp::Time(reading->header.stamp)).seconds();
+    if (age < -0.1 || age > reading_timeout_s_ || !std::isfinite(reading->fused_confidence) ||
+      reading->fused_confidence < 0 || reading->fused_confidence > 1 ||
+      !std::isfinite(reading->visual_confidence) ||
       reading->header.frame_id.empty() ||
       (have_reading_ && rclcpp::Time(reading->header.stamp) <= last_reading_stamp_))
-    {return;}
+    {detection_count_ = confirmation_count_ = 0; return;}
+    if (have_reading_ && (current - last_reading_stamp_).seconds() > reading_timeout_s_) {
+      detection_count_ = confirmation_count_ = 0;
+    }
+    last_receipt_ = std::chrono::steady_clock::now();
+    perception_available_ = true;
     last_reading_stamp_ = rclcpp::Time(reading->header.stamp);
     latest_reading_ = *reading;
     have_reading_ = true;
@@ -156,9 +177,11 @@ private:
       return;
     }
 
-    detection_count_ = reading->fused_confidence >= investigate_confidence_ || reading->smoke_detected ?
+    detection_count_ = reading->fused_confidence >= investigate_confidence_ ||
+      reading->smoke_detected || reading->co2_detected || reading->temperature_anomaly ?
       detection_count_ + 1 : 0;
-    confirmation_count_ = confirmation_allowed(true, reading->smoke_detected,
+    confirmation_count_ = confirmation_allowed(!require_thermal_ || reading->thermal_valid,
+      reading->smoke_detected || reading->co2_detected,
       reading->temperature_anomaly, reading->visual_confidence, reading->fused_confidence,
       visual_confirmation_, alert_confidence_) ?
       confirmation_count_ + 1 : 0;
@@ -182,7 +205,7 @@ private:
         }
         break;
       case MissionState::RECOVER:
-        if (reading->smoke_detected && reading->fused_confidence >= track_confidence_) {
+        if ((reading->smoke_detected || reading->co2_detected) && reading->fused_confidence >= track_confidence_) {
           transition_to(MissionState::TRACK, "Plume reacquired");
         }
         break;
@@ -251,7 +274,9 @@ private:
     if (state_ != MissionState::IDLE && state_ != MissionState::ALERT &&
       state_ != MissionState::RETURN_TO_BASE && state_ != MissionState::PAUSED &&
       state_ != MissionState::EMERGENCY_STOP &&
-      (!have_reading_ || (current - last_reading_stamp_).seconds() > reading_timeout_s_))
+      (!have_reading_ || !perception_available_ ||
+        (current - last_reading_stamp_).seconds() > reading_timeout_s_ ||
+        std::chrono::duration<double>(std::chrono::steady_clock::now() - last_receipt_).count() > reading_timeout_s_))
     {
       pre_pause_state_ = state_;
       state_ = MissionState::PAUSED;
@@ -300,7 +325,9 @@ private:
     }
     alert.confidence = latest_reading_.fused_confidence;
     alert.confirmed = true;
-    alert.evidence = "Persistent smoke plus thermal or visual confirmation";
+    alert.evidence = "Persistent local gas/heat evidence with corroboration";
+    if (latest_reading_.co2_valid) {alert.evidence += "; CO2=" + std::to_string(latest_reading_.co2_ppm) + " ppm";}
+    if (latest_reading_.thermal_valid) {alert.evidence += "; IR peak=" + std::to_string(latest_reading_.thermal_peak_c) + " C";}
     if (!fresh_estimate) {
       alert.evidence += "; source location unresolved (pose is latest sample)";
     }
@@ -328,7 +355,8 @@ private:
   rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr scout_subscription_;
   double max_estimate_age_s_{5.0};
   double max_estimate_stddev_m_{4.0};
-  bool have_reading_{false};
+  bool have_reading_{false}, perception_available_{false}, require_thermal_{false};
+  std::chrono::steady_clock::time_point last_receipt_;
   bool have_estimate_{false};
   embertrace_interfaces::msg::EnvironmentalReading latest_reading_;
   geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
@@ -352,4 +380,3 @@ int main(int argc, char ** argv)
   rclcpp::shutdown();
   return 0;
 }
-

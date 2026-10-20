@@ -98,6 +98,10 @@ def trial(output, split, scenario, seed, duration):
         rows = list(csv.DictReader(path.open()))
         if len(rows) < 30 or sum(int(row['environment_available']) for row in rows) < 20:
             raise RuntimeError(f'{name}/{robot}: insufficient recorded samples')
+        if not any(row['co2_valid'] == '1' for row in rows):
+            raise RuntimeError(f'{name}/{robot}: no explicit CO2 observations')
+        if not any(row['thermal_valid'] == '1' for row in rows):
+            raise RuntimeError(f'{name}/{robot}: no valid radiometric IR observations')
         if scenario == 'dropout' and not any(row['environment_available'] == '0' for row in rows):
             raise RuntimeError(f'{name}/{robot}: dropout was not recorded')
         if scenario == 'visual_decoy' and robot == 'husky1' and not any(

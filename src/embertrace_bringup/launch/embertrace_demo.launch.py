@@ -4,7 +4,7 @@ from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, TimerAction
 from launch.conditions import IfCondition
 from launch.launch_description_sources import PythonLaunchDescriptionSource
-from launch.substitutions import LaunchConfiguration, PathJoinSubstitution
+from launch.substitutions import LaunchConfiguration, PathJoinSubstitution, PythonExpression
 from launch_ros.actions import Node
 from launch_ros.substitutions import FindPackageShare
 
@@ -14,6 +14,7 @@ def generate_launch_description():
     use_nav2 = LaunchConfiguration("use_nav2")
     use_rviz = LaunchConfiguration("use_rviz")
     use_dashboard = LaunchConfiguration("use_dashboard")
+    world_file = LaunchConfiguration("world_file")
     parameters = PathJoinSubstitution([
         FindPackageShare("embertrace_bringup"), "config", "embertrace.yaml"
     ])
@@ -31,6 +32,7 @@ def generate_launch_description():
             "use_sim_time": use_sim_time,
             "use_nav2": use_nav2,
             "use_rviz": use_rviz,
+            "world_file": world_file,
             "use_drone": LaunchConfiguration("use_drone"),
             "scenario": LaunchConfiguration("scenario"),
             "gazebo_gui": LaunchConfiguration("gazebo_gui"),
@@ -39,17 +41,23 @@ def generate_launch_description():
     )
 
     core_nodes = TimerAction(period=2.0, actions=[
+        Node(package="embertrace_core", executable="thermal_verifier_node", name="thermal_verifier_node",
+             output="screen", condition=IfCondition(LaunchConfiguration("use_thermal")),
+             parameters=[parameters, {"use_sim_time": use_sim_time}]),
+        Node(package="embertrace_core", executable="thermal_verifier_node", name="drone_thermal_verifier_node",
+             output="screen", condition=IfCondition(PythonExpression(["'", LaunchConfiguration("use_drone"), "' == 'true' and '", LaunchConfiguration("use_thermal"), "' == 'true'"])),
+             parameters=[parameters, {"use_sim_time": use_sim_time}]),
         Node(package="embertrace_core", executable="velocity_guard_node", name="velocity_guard_node",
              output="screen", parameters=[parameters, {"use_sim_time": use_sim_time}]),
         Node(package="embertrace_core", executable="sensor_health_node", name="sensor_health_node",
-             output="screen", parameters=[parameters, {"use_sim_time": use_sim_time}]),
+             output="screen", parameters=[parameters, {"use_sim_time": use_sim_time, "require_thermal": LaunchConfiguration("use_thermal")}]),
         Node(package="embertrace_core", executable="drone_scout_node", name="drone_scout_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
              parameters=[parameters, {"use_sim_time": use_sim_time}],
              remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")]),
         Node(package="embertrace_core", executable="sensor_health_node", name="drone_sensor_health_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
-             parameters=[parameters, {"use_sim_time": use_sim_time}]),
+             parameters=[parameters, {"use_sim_time": use_sim_time, "require_thermal": LaunchConfiguration("use_thermal")}]),
         Node(package="embertrace_core", executable="environment_simulator_node", name="drone_environment_simulator_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
              parameters=[parameters, {"use_sim_time": use_sim_time, "scenario": LaunchConfiguration("scenario"),
@@ -61,7 +69,7 @@ def generate_launch_description():
              parameters=[parameters, {"use_sim_time": use_sim_time}]),
         Node(package="embertrace_core", executable="perception_node", name="drone_perception_node",
              output="screen", condition=IfCondition(LaunchConfiguration("use_drone")),
-             parameters=[parameters, {"use_sim_time": use_sim_time}]),
+             parameters=[parameters, {"use_sim_time": use_sim_time, "require_thermal": LaunchConfiguration("use_thermal")}]),
         Node(
             package="embertrace_core",
             executable="environment_simulator_node",
@@ -84,14 +92,14 @@ def generate_launch_description():
             executable="perception_node",
             name="perception_node",
             output="screen",
-            parameters=[parameters, {"use_sim_time": use_sim_time}],
+            parameters=[parameters, {"use_sim_time": use_sim_time, "require_thermal": LaunchConfiguration("use_thermal")}],
         ),
         Node(
             package="embertrace_core",
             executable="mission_manager_node",
             name="mission_manager_node",
             output="screen",
-            parameters=[parameters, {"use_sim_time": use_sim_time}],
+            parameters=[parameters, {"use_sim_time": use_sim_time, "require_thermal_confirmation": LaunchConfiguration("use_thermal")}],
         ),
         Node(
             package="embertrace_core",
@@ -144,6 +152,8 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("use_thermal", default_value="true", choices=["true", "false"],
+                              description="Require native IR sensor; false is a labelled reduced debug mode"),
         DeclareLaunchArgument("use_drone", default_value="true"),
         DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
         DeclareLaunchArgument("random_seed", default_value="42"),
@@ -159,6 +169,15 @@ def generate_launch_description():
         DeclareLaunchArgument("use_nav2", default_value="true"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument("use_dashboard", default_value="true"),
+        DeclareLaunchArgument(
+            "world_file",
+            default_value="embertrace_forest.sdf",
+            description=(
+                "World SDF filename under embertrace_sim/worlds/ to load. "
+                "Use the small/sparse default for fast iteration, or "
+                "'embertrace_forest_dense.sdf' for the larger final-demo world."
+            ),
+        ),
         simulation,
         core_nodes,
         dashboard,
