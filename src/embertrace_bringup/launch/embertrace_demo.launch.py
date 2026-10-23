@@ -116,7 +116,14 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
-        DeclareLaunchArgument("use_nav2", default_value="false"),
+        DeclareLaunchArgument(
+            "use_nav2",
+            default_value="true",
+            description=(
+                "Start SLAM, Nav2 and nav2_goal_adapter_node. Required for the rover "
+                "to move; set false only to run the sim without navigation."
+            ),
+        ),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         DeclareLaunchArgument("use_dashboard", default_value="true"),
         DeclareLaunchArgument(

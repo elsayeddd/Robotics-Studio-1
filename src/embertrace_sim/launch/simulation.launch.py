@@ -19,6 +19,7 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_nav2 = LaunchConfiguration("use_nav2")
     use_rviz = LaunchConfiguration("use_rviz")
+    world_file = LaunchConfiguration("world_file")
 
     robot_description = ParameterValue(
         Command([
@@ -39,7 +40,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "ign_args": [
-                PathJoinSubstitution([package_share, "worlds", "embertrace_forest.sdf"]),
+                PathJoinSubstitution([package_share, "worlds", world_file]),
                 " -r",
             ]
         }.items(),
@@ -143,6 +144,15 @@ def generate_launch_description():
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("use_nav2", default_value="false"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
+        DeclareLaunchArgument(
+            "world_file",
+            default_value="embertrace_forest.sdf",
+            description=(
+                "World SDF filename under embertrace_sim/worlds/ to load. "
+                "Use the small/sparse default for fast iteration, or "
+                "'embertrace_forest_dense.sdf' for the larger final-demo world."
+            ),
+        ),
         SetEnvironmentVariable(
             "IGN_GAZEBO_RESOURCE_PATH",
             [model_dir, ":", EnvironmentVariable("IGN_GAZEBO_RESOURCE_PATH", default_value="")],
@@ -168,4 +178,3 @@ def generate_launch_description():
         navigation,
         rviz,
     ])
-

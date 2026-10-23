@@ -135,11 +135,18 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode()
         RCLCPP_WARN(get_logger(), "Ignoring goal; mission does not permit motion or invalid pose");
         return;
       }
+      RCLCPP_INFO(
+        get_logger(), "Goal received: (%.2f, %.2f) in frame '%s'",
+        goal_msg->pose.position.x, goal_msg->pose.position.y,
+        goal_msg->header.frame_id.c_str());
       const rclcpp::Time stamp(goal_msg->header.stamp);
       if (stamp.nanoseconds() > 0) {
         const double age = (now() - stamp).seconds();
         if (age > max_goal_age_s_ || age < -1.0) {
           publish_status("STALE");
+          RCLCPP_WARN(
+            get_logger(), "Dropping stale goal (age %.1f s, allowed %.1f s)",
+            age, max_goal_age_s_);
           return;
         }
       }
@@ -163,8 +170,13 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode()
   odom_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
     "/husky1/odometry", 50,
     [this](const nav_msgs::msg::Odometry::SharedPtr odom) {
-      std::scoped_lock lock(poseMtx_);
-      pose_ = odom->pose.pose;
+      RCLCPP_INFO_ONCE(
+        get_logger(), "First odometry message received (%.2f, %.2f)",
+        odom->pose.pose.position.x, odom->pose.pose.position.y);
+      {
+        std::scoped_lock lock(poseMtx_);
+        pose_ = odom->pose.pose;
+      }
       updateDistAndAngleToGoal();
     });
 }
@@ -208,11 +220,17 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped & r
   
   if ((now() - pending_since_).seconds() > pending_timeout_s_) {
     publish_status("STALE");
+    RCLCPP_WARN(
+      get_logger(), "Goal waited more than %.0f s for Nav2 and was dropped (STALE)",
+      pending_timeout_s_);
     return;
   }
   
-  if (!action_client_->wait_for_action_server(std::chrono::seconds(1))) {
-    RCLCPP_DEBUG(get_logger(), "Nav2 action server not yet available");
+  if (!action_client_->wait_for_action_server(std::chrono::seconds(0))) {
+    RCLCPP_WARN_THROTTLE(
+      get_logger(), *get_clock(), 5000,
+      "Waiting for Nav2 action server '%s' (is Nav2 active? "
+      "ros2 action list | grep navigate)", action_name_.c_str());
     {
       std::scoped_lock lock(goalMtx_);
       if (!pending_goal_) {
@@ -223,7 +241,11 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped & r
   }
   
   if (!action_client_->action_server_is_ready()) {
-    RCLCPP_WARN(get_logger(), "Nav2 action server not ready; dropping goal");
+    RCLCPP_WARN(get_logger(), "Nav2 action server not ready; will retry");
+    std::scoped_lock lock(goalMtx_);
+    if (!pending_goal_) {
+      pending_goal_ = local_pending;
+    }
     return;
   }
 
@@ -240,7 +262,14 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped & r
       goal_in_map = tf_buffer_->transform(temp, map_frame_);
     } catch (const tf2::TransformException & ex) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
-                          "Skipping goal; TF unavailable: %s", ex.what());
+                          "Goal transform to '%s' unavailable, will retry: %s",
+                          map_frame_.c_str(), ex.what());
+      {
+        std::scoped_lock lock(goalMtx_);
+        if (!pending_goal_) {
+          pending_goal_ = local_pending;
+        }
+      }
       return;
     }
   }

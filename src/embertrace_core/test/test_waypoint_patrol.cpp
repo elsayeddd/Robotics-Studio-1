@@ -210,4 +210,158 @@ TEST(WaypointPatrol, LeavingAndResumingPatrolRepeatedlyStaysConsistent)
   EXPECT_TRUE(patrol.is_patrolling());
 }
 
+
+// ---------------------------------------------------------------------------
+// Nav2 integration behaviour (nav2_goal_adapter_node status feedback)
+// ---------------------------------------------------------------------------
+
+TEST(WaypointPatrolNav2, KeepsPatrollingWhenNav2StopsInsideItsGoalTolerance)
+{
+  // nav2_params_husky1.yaml sets xy_goal_tolerance = 1.0, so Nav2 declares a
+  // goal reached and stops the rover up to 1 m short of the waypoint. A patrol
+  // arrival tolerance below that value stalls forever; 1.2 m does not.
+  const double nav2_stop_distance = 0.9;
+  auto drive = [&](WaypointPatrol & patrol, const Waypoint & goal) {
+      // rover stops nav2_stop_distance short of `goal`, approaching along +x
+      return patrol.update_pose(goal.x - nav2_stop_distance, goal.y);
+    };
+
+  WaypointPatrol stalled(0.5);
+  stalled.set_waypoints(square_route(), "a");
+  auto goal = stalled.on_mission_state(PatrolTrigger::kPatrol);
+  ASSERT_TRUE(goal.has_value());
+  EXPECT_FALSE(drive(stalled, *goal).has_value());  // never advances
+
+  WaypointPatrol patrol(1.2);
+  patrol.set_waypoints(square_route(), "a");
+  goal = patrol.on_mission_state(PatrolTrigger::kPatrol);
+  for (int leg = 0; leg < 8; ++leg) {  // two laps of the four-waypoint square
+    ASSERT_TRUE(goal.has_value());
+    goal = drive(patrol, *goal);
+  }
+  EXPECT_EQ(patrol.loops_completed(), 2U);
+}
+
+TEST(WaypointPatrolNav2, SuccessResultAdvancesWhenProximityNeverFires)
+{
+  WaypointPatrol patrol(0.5);
+  patrol.set_waypoints(square_route(), "a");
+  patrol.tick(10.0);
+  ASSERT_EQ(patrol.on_mission_state(PatrolTrigger::kPatrol)->name, "a");
+
+  patrol.tick(12.0);  // two seconds later Nav2 reports success
+  const auto next = patrol.on_nav_result(NavResult::kSucceeded);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_EQ(next->name, "b");
+}
+
+TEST(WaypointPatrolNav2, IgnoresASuccessThatArrivesRightAfterANewGoal)
+{
+  WaypointPatrol patrol(0.5);
+  patrol.set_waypoints(square_route(), "a");
+  patrol.tick(10.0);
+  patrol.on_mission_state(PatrolTrigger::kPatrol);
+
+  patrol.tick(10.2);  // 0.2 s after issuing "a": this is the previous goal's result
+  EXPECT_FALSE(patrol.on_nav_result(NavResult::kSucceeded).has_value());
+  EXPECT_EQ(patrol.current_index(), 0U);
+}
+
+TEST(WaypointPatrolNav2, ResendsTheSameWaypointAfterAFailureThenSkipsIt)
+{
+  RecoveryPolicy policy;
+  policy.retry_delay_s = 2.0;
+  policy.max_goal_attempts = 3;
+  WaypointPatrol patrol(0.5);
+  patrol.set_recovery_policy(policy);
+  patrol.set_waypoints(square_route(), "a");
+  patrol.tick(0.0);
+  ASSERT_EQ(patrol.on_mission_state(PatrolTrigger::kPatrol)->name, "a");  // attempt 1
+
+  // e.g. the adapter reported REJECTED because motion was not yet allowed
+  EXPECT_FALSE(patrol.on_nav_result(NavResult::kFailed).has_value());
+  EXPECT_FALSE(patrol.tick(1.0).has_value());          // retry delay not elapsed
+  const auto retry_1 = patrol.tick(2.1);               // attempt 2
+  ASSERT_TRUE(retry_1.has_value());
+  EXPECT_EQ(retry_1->name, "a");
+
+  patrol.on_nav_result(NavResult::kFailed);
+  const auto retry_2 = patrol.tick(4.5);               // attempt 3
+  ASSERT_TRUE(retry_2.has_value());
+  EXPECT_EQ(retry_2->name, "a");
+  EXPECT_EQ(patrol.goal_attempts(), 3);
+
+  patrol.on_nav_result(NavResult::kFailed);
+  const auto skipped = patrol.tick(7.0);               // out of attempts: move on
+  ASSERT_TRUE(skipped.has_value());
+  EXPECT_EQ(skipped->name, "b");
+  EXPECT_EQ(patrol.skipped_waypoints(), 1U);
+  EXPECT_EQ(patrol.goal_attempts(), 1);
+}
+
+TEST(WaypointPatrolNav2, OutOfBoundsWaypointIsSkippedImmediately)
+{
+  WaypointPatrol patrol;
+  patrol.set_waypoints(square_route(), "a");
+  patrol.on_mission_state(PatrolTrigger::kPatrol);
+  const auto next = patrol.on_nav_result(NavResult::kOutOfBounds);
+  ASSERT_TRUE(next.has_value());
+  EXPECT_EQ(next->name, "b");
+  EXPECT_EQ(patrol.skipped_waypoints(), 1U);
+}
+
+TEST(WaypointPatrolNav2, WatchdogResendsAGoalThatNeverCompletes)
+{
+  RecoveryPolicy policy;
+  policy.goal_timeout_s = 30.0;
+  WaypointPatrol patrol(0.5);
+  patrol.set_recovery_policy(policy);
+  patrol.set_waypoints(square_route(), "a");
+  patrol.tick(0.0);
+  patrol.on_mission_state(PatrolTrigger::kPatrol);
+
+  EXPECT_FALSE(patrol.tick(29.0).has_value());
+  const auto resent = patrol.tick(31.0);
+  ASSERT_TRUE(resent.has_value());
+  EXPECT_EQ(resent->name, "a");
+  EXPECT_EQ(patrol.goal_attempts(), 2);
+}
+
+TEST(WaypointPatrolNav2, NothingIsResentWhilePausedForAnInvestigation)
+{
+  WaypointPatrol patrol(0.5);
+  patrol.set_waypoints(square_route(), "a");
+  patrol.tick(0.0);
+  patrol.on_mission_state(PatrolTrigger::kPatrol);
+  patrol.on_nav_result(NavResult::kFailed);          // retry now pending
+  patrol.on_mission_state(PatrolTrigger::kHold);     // smoke detected -> INVESTIGATE
+
+  EXPECT_FALSE(patrol.tick(100.0).has_value());      // no resend, no timeout resend
+  EXPECT_FALSE(patrol.on_nav_result(NavResult::kSucceeded).has_value());
+  EXPECT_FALSE(patrol.on_nav_result(NavResult::kOutOfBounds).has_value());
+  EXPECT_EQ(patrol.current_index(), 0U);
+}
+
+TEST(WaypointPatrolNav2, ReturnToBaseRetriesUntilNav2ReportsSuccess)
+{
+  auto waypoints = square_route();
+  waypoints.push_back({"ranger_base", -5.0, -5.0, 0.0});
+  WaypointPatrol patrol(0.5);
+  patrol.set_waypoints(waypoints, "ranger_base");
+  patrol.tick(0.0);
+  patrol.on_mission_state(PatrolTrigger::kPatrol);
+  patrol.tick(5.0);
+  ASSERT_EQ(patrol.on_mission_state(PatrolTrigger::kReturnToBase)->name, "ranger_base");
+
+  patrol.on_nav_result(NavResult::kFailed);
+  const auto retry = patrol.tick(7.5);
+  ASSERT_TRUE(retry.has_value());
+  EXPECT_EQ(retry->name, "ranger_base");
+
+  patrol.tick(10.0);
+  EXPECT_FALSE(patrol.on_nav_result(NavResult::kSucceeded).has_value());
+  EXPECT_TRUE(patrol.has_reached_base());
+  EXPECT_FALSE(patrol.tick(200.0).has_value());      // arrived: nothing more to send
+}
+
 }  // namespace embertrace_core

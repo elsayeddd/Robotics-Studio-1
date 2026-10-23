@@ -100,7 +100,38 @@ patrol_manager_node:
     # waypoints_file is supplied by embertrace_demo.launch.py, which
     # resolves it to the installed path of patrol_waypoints.yaml.
     base_waypoint_name: ranger_base
-    arrival_tolerance_m: 0.5
-    odometry_topic: /husky1/odometry
+    # A waypoint counts as reached inside this radius. It MUST be larger than
+    # Nav2's xy_goal_tolerance (1.0 m in embertrace_sim/config/
+    # nav2_params_husky1.yaml): Nav2 stops the rover as soon as it is inside
+    # its own tolerance, so a smaller value here stalls the patrol short of
+    # the waypoint. Keep it well below the spacing between waypoints (~4 m).
+    arrival_tolerance_m: 1.2
+    base_frame: husky1_base_link   # robot pose is read from TF: frame_id -> base_frame
     frame_id: husky1_map
+    status_topic: /embertrace/navigation_status
+    retry_delay_s: 2.0       # wait before re-sending a goal the adapter dropped/aborted
+    goal_timeout_s: 90.0     # re-send a goal that has not completed after this long
+    max_goal_attempts: 3     # then skip that waypoint and carry on with the loop
+    min_success_age_s: 1.0   # ignore a SUCCEEDED this soon after a new goal (stale)
 
+# Goals outside this box are rejected by the adapter (status OUT_OF_BOUNDS).
+# Keep in step with search_planner_node's world_min/max above. For the dense
+# 70 m world (embertrace_forest_dense.sdf) the fences are at +/-34.7, so use
+# about +/-33.5 if you want search goals to reach the outer forest.
+nav2_goal_adapter_node:
+  ros__parameters:
+    use_sim_time: true
+    # The adapter's defaults are for a single un-namespaced robot ("/navigate_to_pose").
+    # Nav2 here runs inside the husky1 namespace, so without these four lines
+    # the adapter waits forever for "/navigate_to_pose" and the rover never moves.
+    robot_namespace: husky1
+    action_name: /husky1/navigate_to_pose
+    odom_topic: /husky1/odometry
+    odom_frame: husky1_odom
+    map_frame: husky1_map
+    max_goal_age_s: 5.0
+    pending_timeout_s: 15.0
+    world_min_x: -18.5
+    world_max_x: 18.5
+    world_min_y: -18.5
+    world_max_y: 18.5

@@ -146,7 +146,7 @@ controller_server:
       sim_time: 2.0
       linear_granularity: 0.2
       angular_granularity: 0.2
-      transform_tolerance: 0.2
+      transform_tolerance: 1.0
       xy_goal_tolerance: 1.0
       yaw_goal_tolerance: 1.57
       trans_stopped_velocity: 0.25

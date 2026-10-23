@@ -53,6 +53,7 @@ def generate_launch_description():
                     config_dir, "nav2_params_husky1.yaml"
                 ]),
                 "autostart": "true",
+                "namespace": "husky1",
             }.items(),
         )
     ])
