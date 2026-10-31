@@ -156,7 +156,7 @@ def generate_launch_description():
             output="screen",
             parameters=[parameters, {"use_sim_time": use_sim_time}],
             # Simulation and SLAM publish TF within the Husky namespace.
-            #remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
         Node(
             package="embertrace_core",
@@ -174,7 +174,7 @@ def generate_launch_description():
                 parameters,
                 {"use_sim_time": use_sim_time, "waypoints_file": patrol_waypoints_file},
             ],
-            #remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
         Node(
             package="embertrace_core",
@@ -183,7 +183,7 @@ def generate_launch_description():
             output="screen",
             condition=IfCondition(use_nav2),
             parameters=[parameters, {"use_sim_time": use_sim_time}],
-            #remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
+            remappings=[("/tf", "/husky1/tf"), ("/tf_static", "/husky1/tf_static")],
         ),
     ])
 
@@ -202,21 +202,21 @@ def generate_launch_description():
 
     return LaunchDescription([
         DeclareLaunchArgument("use_sim_time", default_value="true"),
-                DeclareLaunchArgument("use_nav2", default_value="false"),
-                DeclareLaunchArgument("use_rviz", default_value="true"),
-                DeclareLaunchArgument("use_dashboard", default_value="true"),
-                simulation,
-                core_nodes,
-                dashboard,
-        DeclareLaunchArgument(
+        DeclareLaunchArgument("use_nav2", default_value="false"),
+        DeclareLaunchArgument("use_rviz", default_value="true"),
+        DeclareLaunchArgument("use_dashboard", default_value="true"),
+        DeclareLaunchArgument(# will probably need to add nodes here
             'platform',
             default_value='auto',
             description="'auto' = random roll, or force 'husky' / 'quad'",
         ),
-        DeclareLaunchArgument(
+        DeclareLaunchArgument(# and here
             'seed',
             default_value='',
             description='Integer seed for a reproducible roll. Empty = fresh randomness.',
         ),
         OpaqueFunction(function=_select_platform),
+        simulation,
+        core_nodes,
+        dashboard,
     ])
