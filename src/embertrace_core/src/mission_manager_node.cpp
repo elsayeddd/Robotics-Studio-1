@@ -24,6 +24,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/empty.hpp"
 
 using namespace std::chrono_literals;
 
@@ -63,6 +64,17 @@ public:
       [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr message) {
         latest_estimate_ = *message;
         have_estimate_ = true;
+      });
+    // patrol_manager_node publishes this when the rover has finished driving to the
+    // base after RETURN. It is a request, not a command: it only has an effect
+    // while the mission really is RETURN_TO_BASE, so a late message can never
+    // release a latched E_STOP or interrupt a patrol the operator has restarted.
+    return_complete_subscription_ = create_subscription<std_msgs::msg::Empty>(
+      "/embertrace/return_complete", 10,
+      [this](const std_msgs::msg::Empty::SharedPtr) {
+        if (state_ == MissionState::RETURN_TO_BASE) {
+          transition_to(MissionState::IDLE, "Returned to base; waiting for START");
+        }
       });
     command_service_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
       "/embertrace/operator_command",
@@ -179,6 +191,28 @@ private:
     const std::string command = uppercase(request->command);
     response->accepted = true;
 
+    if (state_ == MissionState::EMERGENCY_STOP) {
+      if (command == "E_STOP_RELEASE") {
+        // Always lands in IDLE (never back in the state that was interrupted), so the
+        // operator has to press START again before the rover moves.
+        transition_to(MissionState::IDLE, "Emergency stop released; waiting for START");
+        response->message = "Accepted: E_STOP_RELEASE";
+        return;
+      }
+      if (command == "START" || command == "PAUSE" || command == "RESUME" ||
+        command == "RETURN" || command == "RESET")
+      {
+        response->accepted = false;
+        response->message = "Emergency stop is engaged: release it first";
+        RCLCPP_WARN(get_logger(), "%s refused: emergency stop is engaged", command.c_str());
+        return;
+      }
+    } else if (command == "E_STOP_RELEASE") {
+      response->accepted = false;
+      response->message = "Emergency stop is not engaged";
+      return;
+    }
+
     if (command == "START") {
       detection_count_ = 0;
       confirmation_count_ = 0;
@@ -285,6 +319,7 @@ private:
     reading_subscription_;
   rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
     estimate_subscription_;
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr return_complete_subscription_;
   rclcpp::Service<embertrace_interfaces::srv::OperatorCommand>::SharedPtr command_service_;
   rclcpp::TimerBase::SharedPtr state_timer_;
 };

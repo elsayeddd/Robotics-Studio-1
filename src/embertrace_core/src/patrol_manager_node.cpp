@@ -12,6 +12,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/empty.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "tf2/exceptions.h"
 #include "tf2_ros/buffer.h"
@@ -44,6 +45,7 @@ public:
     policy.max_goal_attempts = static_cast<int>(
       declare_parameter<std::int64_t>("max_goal_attempts", 3));
     policy.min_success_age_s = declare_parameter<double>("min_success_age_s", 1.0);
+    policy.base_settle_s = declare_parameter<double>("base_settle_s", 6.0);
 
     // Robot TF lives in the husky1 namespace; the launch file remaps /tf
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
@@ -73,6 +75,8 @@ public:
 
     goal_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
       "/embertrace/navigation_goal", 10);
+    return_complete_publisher_ = create_publisher<std_msgs::msg::Empty>(
+      "/embertrace/return_complete", 10);
     state_subscription_ = create_subscription<MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable(),
       std::bind(&PatrolManagerNode::on_mission_state, this, std::placeholders::_1));
@@ -141,6 +145,20 @@ private:
     if (goal) {
       publish_goal(*goal);
     }
+
+  const bool home = patrol_->return_complete();
+  if (home && !arrival_announced_) {
+    arrival_announced_ = true;
+    RCLCPP_INFO(get_logger(), "Rover is parked at the base; requesting IDLE");
+    announce_arrival();
+  } else if (!home) {
+      arrival_announced_ = false;
+    }
+  }
+ 
+  void announce_arrival()
+  {
+    return_complete_publisher_->publish(std_msgs::msg::Empty());
   }
 
   void on_mission_state(const MissionState::SharedPtr message)
@@ -148,8 +166,12 @@ private:
     if (!ready()) {
       return;
     }
+    const bool announced_before = arrival_announced_;
     patrol_->set_time(now().seconds());
     emit(patrol_->on_mission_state(to_trigger(message->state)));
+    if (announced_before && arrival_announced_ && message->state == MissionState::RETURN_TO_BASE) {
+      announce_arrival();
+    }
   }
 
   void on_status(const std_msgs::msg::String::SharedPtr message)
@@ -206,10 +228,12 @@ private:
   std::string base_frame_{"husky1_base_link"};
   std::size_t loops_logged_{0};
   std::size_t skips_logged_{0};
+  bool arrival_announced_{false};
   std::unique_ptr<WaypointPatrol> patrol_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
   std::shared_ptr<tf2_ros::TransformListener> tf_listener_;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goal_publisher_;
+  rclcpp::Publisher<std_msgs::msg::Empty>::SharedPtr return_complete_publisher_;
   rclcpp::Subscription<MissionState>::SharedPtr state_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr status_subscription_;
   rclcpp::TimerBase::SharedPtr pose_timer_;

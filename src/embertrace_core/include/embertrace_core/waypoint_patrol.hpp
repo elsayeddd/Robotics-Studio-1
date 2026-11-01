@@ -67,6 +67,11 @@ struct RecoveryPolicy
   int max_goal_attempts{3};        ///< after this many sends, skip the waypoint
   double min_success_age_s{1.0};   ///< ignore a "SUCCEEDED" that arrives this soon
                                    ///< after a new goal was issued (it is stale)
+  double base_settle_s{6.0};       ///< RETURN_TO_BASE fallback: if Nav2 never reports
+                                   ///< SUCCEEDED, the return still counts as complete once
+                                   ///< the rover has stayed inside the arrival tolerance
+                                   ///< this long. Long enough for a 180 degree turn onto
+                                   ///< the base heading (~5 s at max_vel_theta 0.8 rad/s).
 };
 
 /// Pure sequencing/geometry logic for the waypoint patrol: no ROS types, no
@@ -142,6 +147,7 @@ public:
   bool is_patrolling() const { return mode_ == Mode::kPatrolling; }
   bool is_returning() const { return mode_ == Mode::kReturning; }
   bool has_reached_base() const { return returned_to_base_; }
+  bool return_complete() const;
   std::size_t skipped_waypoints() const { return skipped_waypoints_; }
   int goal_attempts() const { return attempts_; }
 
@@ -166,6 +172,8 @@ private:
   Mode mode_{Mode::kInactive};
   bool have_pose_{false};
   bool returned_to_base_{false};
+  bool base_goal_succeeded_{false};
+  std::optional<double> near_base_since_;
   double pose_x_{0.0};
   double pose_y_{0.0};
   RecoveryPolicy policy_;

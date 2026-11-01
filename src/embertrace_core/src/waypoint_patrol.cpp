@@ -82,6 +82,8 @@ void WaypointPatrol::set_waypoints(
   loops_completed_ = 0;
   mode_ = Mode::kInactive;
   returned_to_base_ = false;
+  base_goal_succeeded_ = false;
+  near_base_since_.reset();
   base_index_ = 0;
   for (std::size_t i = 0; i < waypoints_.size(); ++i) {
     if (waypoints_[i].name == base_waypoint_name) {
@@ -145,10 +147,15 @@ std::optional<Waypoint> WaypointPatrol::update_pose(const double x, const double
     {
       returned_to_base_ = true;
       retry_due_at_.reset();
+      if (!near_base_since_) {
+        near_base_since_ = now_s_;
+      }
+    } else {
+      near_base_since_.reset();
     }
     return std::nullopt;
   }
-
+ 
   if (mode_ != Mode::kPatrolling || waypoints_.empty()) {
     return std::nullopt;
   }
@@ -183,6 +190,8 @@ std::optional<Waypoint> WaypointPatrol::on_mission_state(const PatrolTrigger tri
       }
       mode_ = Mode::kReturning;
       returned_to_base_ = false;
+      base_goal_succeeded_ = false;  // a fresh journey: forget any earlier arrival
+      near_base_since_.reset();
       return issue(false);
 
     case PatrolTrigger::kHold:
@@ -193,6 +202,17 @@ std::optional<Waypoint> WaypointPatrol::on_mission_state(const PatrolTrigger tri
       retry_due_at_.reset();
       return std::nullopt;
   }
+}
+
+bool WaypointPatrol::return_complete() const
+{
+  if (mode_ != Mode::kReturning) {
+    return false;
+  }
+  if (base_goal_succeeded_) {
+    return true;
+  }
+  return near_base_since_.has_value() && (now_s_ - *near_base_since_) >= policy_.base_settle_s;
 }
 
 std::optional<Waypoint> WaypointPatrol::tick(const double now_s)
@@ -226,6 +246,7 @@ std::optional<Waypoint> WaypointPatrol::on_nav_result(const NavResult result)
       }
       if (mode_ == Mode::kReturning) {
         returned_to_base_ = true;
+        base_goal_succeeded_ = true;
         retry_due_at_.reset();
         return std::nullopt;
       }
