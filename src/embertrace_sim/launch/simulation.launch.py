@@ -140,6 +140,7 @@ def generate_launch_description():
     )
 
     return LaunchDescription([
+        DeclareLaunchArgument("platform", default_value="auto"), # allows for launching of different platforms 
         DeclareLaunchArgument("use_sim_time", default_value="true"),
         DeclareLaunchArgument("use_nav2", default_value="false"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
