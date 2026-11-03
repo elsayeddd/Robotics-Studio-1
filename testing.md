@@ -1,0 +1,78 @@
+# Testing and acceptance
+
+The November 2 standalone results and requirement matrix are in
+[completion-handover.md](completion-handover.md). Native ROS/Gazebo/Qt acceptance
+has not been executed in the preparation environment. Run the following layers
+on the target Ubuntu 22.04/Humble/Fortress VM and retain failures.
+
+## 1. Standalone logic and fixtures
+
+```bash
+bash scripts/validate_all.sh
+```
+
+This compiles the actual pure C++ perception, mission and numerical libraries,
+runs scene/replay Python checks, and generates six-scenario synthetic metrics.
+Expected current result: 79 perception + 45 mission + 41 system checks and eight
+Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
+
+## 2. Clean native build and unit/transport tests
+
+Stop other EmberTrace launches first. Source Humble and the new workspace.
+
+```bash
+colcon build --symlink-install --parallel-workers 2
+source install/setup.bash
+ROS_DOMAIN_ID=73 colcon test --packages-select embertrace_core --event-handlers console_direct+
+colcon test-result --verbose
+```
+
+The suite includes existing plume, search, YAML patrol and Nav2 action tests, the
+pure regressions, scene/replay checks, and two ROS transport tests. The latter test
+real perception/mission nodes with controlled messages, both platform confirmation
+paths, wind selection, stale/IR loss, vision-only rejection and E-stop. ROS tests
+are serialised to avoid shared-topic collisions. They do not launch Gazebo.
+
+## 3. Native scene/sensor/controller integration
+
+Use [perception-vm-startup.md](perception-vm-startup.md) for terminal-by-terminal
+commands, preflight, IR inspection, wind/tree/battery controls and map/TF checks.
+The smoke script starts its own launch; do not run it over a manual demo.
+
+```bash
+ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py
+```
+
+It checks native sensors, map/TF/Nav2 readiness, selected drone movement, held rover
+and zero output after E-stop. The launch log stays in log/demo-smoke. Use
+`LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` if a virtual display is needed.
+
+## 4. Recorded perception evidence
+
+```bash
+ROS_DOMAIN_ID=74 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
+```
+
+This launches six near-source scenarios for both platforms with separate training
+and held-out seeds. It records actual inputs, checks CO2/IR presence, tunes only
+on training data and reports confusion matrices, availability, missed events and
+latency. At least three recorded scenarios are required; all six are preferred.
+Use a new output directory each run. A failed/negative trial remains evidence.
+
+## 5. Autonomous mission evidence
+
+```bash
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-clear-01 --trials 10 --scenario no_fire
+```
+
+Trials alternate drone/rover selection and retain individual launch logs and JSON.
+Record completion/return, path length, recoveries, local-exposure alert latency,
+false alerts and resolved source error. Missing estimates must be reported, not
+silently removed to make a median look better. The source-fit numerical test's
+0.282843 m median does not establish the roadmap's autonomous <2 m acceptance.
+Manually inspect collisions and map/TF, which the metrics script cannot certify.
+
+Include image occlusion, tree transitions, wind threshold noise, missing/frozen
+streams, battery return, goal cancellation, manual release/focus loss, alert ACK,
+RESET and E-stop. Repeat in the dense world after the small world passes.
