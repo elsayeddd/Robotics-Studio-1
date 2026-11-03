@@ -28,7 +28,10 @@ sudo apt-get install -y \
   python3-rosdep \
   qtbase5-dev
 
+# ROS setup scripts read optional variables before defining them.
+set +u
 source /opt/ros/humble/setup.bash
+set -u
 
 if [[ ! -f /etc/ros/rosdep/sources.list.d/20-default.list ]]; then
   sudo rosdep init

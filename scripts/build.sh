@@ -9,9 +9,13 @@ if [[ ! -f /opt/ros/humble/setup.bash ]]; then
   exit 1
 fi
 
+# ROS setup scripts read optional variables before defining them.
+set +u
 source /opt/ros/humble/setup.bash
+set -u
 cd "$REPO_ROOT"
-colcon build --symlink-install --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
+export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+colcon build --symlink-install --parallel-workers 2 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 echo
 echo "Build complete. Run: source $REPO_ROOT/install/setup.bash"
