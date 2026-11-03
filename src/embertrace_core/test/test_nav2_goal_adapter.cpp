@@ -89,7 +89,6 @@ protected:
         odom_pub_->publish(*msg);
     }
 
-    // Fixed: Use rclcpp::spin_with_timeout instead of spin_some with duration
     void spinFor(int duration_ms) {
         auto end_time = std::chrono::steady_clock::now() + std::chrono::milliseconds(duration_ms);
         while (std::chrono::steady_clock::now() < end_time && rclcpp::ok()) {
