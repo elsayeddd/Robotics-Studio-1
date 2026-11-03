@@ -57,9 +57,18 @@ public:
     const auto base_waypoint_name = declare_parameter<std::string>(
       "base_waypoint_name", "ranger_base");
     const auto arrival_tolerance_m = declare_parameter<double>("arrival_tolerance_m", 0.5);
-    const auto odometry_topic = declare_parameter<std::string>(
-      "odometry_topic", "/husky1/odometry");
-    frame_id_ = declare_parameter<std::string>("frame_id", "husky1_map");
+    // const auto odometry_topic = declare_parameter<std::string>(
+    //   "odometry_topic", "/husky1/odometry");
+    // frame_id_ = declare_parameter<std::string>("frame_id", "husky1_map");
+    
+    // trying to fix target_frame does not exist error
+    this->declare_parameter<std::string>("map_frame", "husky1_map");
+    this->declare_parameter<std::string>("odom_frame", "husky1_odom");
+    this->declare_parameter<std::string>("odometry_topic", "/husky1/odometry");
+    std::string map_frame_ = this->get_parameter("map_frame").as_string();
+    std::string odom_frame_ = this->get_parameter("odom_frame").as_string();
+    std::string odometry_topic = this->get_parameter("odometry_topic").as_string();
+  
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
 

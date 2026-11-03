@@ -34,7 +34,7 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode()
   // Change these via launch file to adapt to different robots
   // ==========================================================================
   
-  // Namespace prefix for topics (e.g., "husky1", "quadcopter1", "" for single robot)
+  // Namespace prefix for topics (e.g., "husky1", "parrot1", "" for single robot)
   robot_namespace_ = declare_parameter<std::string>("robot_namespace", "");
   
   // TF frame IDs
