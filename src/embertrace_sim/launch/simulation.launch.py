@@ -179,7 +179,7 @@ def generate_launch_description():
         DeclareLaunchArgument("drone_y", default_value="-12.0"),
         DeclareLaunchArgument("scenario", default_value="fire"),
         DeclareLaunchArgument("use_sim_time", default_value="true"),
-        DeclareLaunchArgument("use_nav2", default_value="false"),
+        DeclareLaunchArgument("use_nav2", default_value="true"),
         DeclareLaunchArgument("use_rviz", default_value="true"),
         SetEnvironmentVariable(
             "IGN_GAZEBO_RESOURCE_PATH",
