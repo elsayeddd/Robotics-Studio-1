@@ -9,9 +9,12 @@
  * acknowledgement, event history and user testing with a non-robotics participant.
  */
 
+#include <chrono>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include <QApplication>
 #include <QGridLayout>
@@ -44,6 +47,11 @@ public:
     state_subscription_ = create_subscription<embertrace_interfaces::msg::MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable(),
       [this](const embertrace_interfaces::msg::MissionState::SharedPtr message) {
+        const bool was_latched = emergency_stop_latched();
+        state_ = message->state;
+        if (emergency_stop_latched() && !was_latched) {
+          latched_since_ = std::chrono::steady_clock::now();
+        }
         state_name_ = message->state_name;
         detail_ = message->detail;
         progress_ = message->progress;
@@ -109,6 +117,20 @@ public:
     return std::string("Rover perception: ") + (rover_fresh() ? "fresh" : "waiting / stale") +
       " | Drone perception: " + (drone_fresh_ && fresh(drone_stamp_) ? "fresh" : "disabled / waiting / stale");
   }
+  /// True while the mission manager reports an engaged emergency stop. Every button
+  /// except the emergency stop button itself (which then releases it) is locked.
+  bool emergency_stop_latched() const
+  {
+    return state_ == embertrace_interfaces::msg::MissionState::EMERGENCY_STOP;
+  }
+  /// True once the engaged stop may be released. Releasing is held back for a moment
+  /// after the stop engages so a double-click on EMERGENCY STOP cannot engage and
+  /// release it in one go.
+  bool release_ready() const
+  {
+    return emergency_stop_latched() &&
+           std::chrono::steady_clock::now() - latched_since_ >= kReleaseHoldOff;
+  }
   const std::string & state_name() const {return state_name_;}
   const std::string & detail() const {return detail_;}
   const std::string & alert_text() const {return alert_text_;}
@@ -123,6 +145,10 @@ private:
   bool connected_{false}, rover_fresh_{false}, drone_fresh_{false};
   rclcpp::Time state_stamp_{0, 0, RCL_ROS_TIME}, rover_stamp_{0, 0, RCL_ROS_TIME}, drone_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr rover_status_, drone_status_;
+  static constexpr std::chrono::milliseconds kReleaseHoldOff{1000};
+
+  std::uint8_t state_{embertrace_interfaces::msg::MissionState::IDLE};
+  std::chrono::steady_clock::time_point latched_since_{};
   std::string state_name_{"WAITING"};
   std::string detail_{"Waiting for mission manager"};
   std::string alert_text_{"No active alert"};
@@ -196,8 +222,8 @@ public:
     add_button(buttons, "Resume", "RESUME", 0, 2);
     add_button(buttons, "Return", "RETURN", 1, 0);
     add_button(buttons, "Reset", "RESET", 1, 1);
-    auto * stop = add_button(buttons, "EMERGENCY STOP", "E_STOP", 1, 2);
-    stop->setStyleSheet("background: #b91c1c; color: white; font-weight: 700; padding: 8px;");
+    stop_button_ = add_button(buttons, "EMERGENCY STOP", "E_STOP", 1, 2);
+    stop_button_->setStyleSheet(kStopStyle);
     root->addWidget(controls);
 
     command_result_ = new QLabel("Ready");
@@ -219,9 +245,12 @@ private:
   {
     auto * button = new QPushButton(label);
     QObject::connect(button, &QPushButton::clicked, this, [this, command]() {
-      node_->send_command(command);
+      // While the stop is engaged the emergency stop button is the release button.
+      const bool release = command == "E_STOP" && node_->emergency_stop_latched();
+      node_->send_command(release ? "E_STOP_RELEASE" : command);
     });
     layout->addWidget(button, row, column);
+    buttons_.push_back({command, button});
     return button;
   }
 
@@ -245,9 +274,50 @@ private:
       alert_->setStyleSheet("padding: 10px; background: #7f1d1d; color: white; font-weight: 700;");
     }
     command_result_->setText(QString::fromStdString(node_->command_result()));
+
+    // While the emergency stop is engaged NOTHING works except releasing it: every
+    // button is locked (Reset included; it only clears a false alarm) and the
+    // emergency stop button turns into RELEASE E-STOP. mission_manager_node refuses
+    // the other commands as well; this makes that visible.
+    const bool latched = node_->emergency_stop_latched();
+    const bool release_ready = node_->release_ready();
+    for (const auto & control : buttons_) {
+      const bool is_stop = control.command == "E_STOP";
+      const bool allowed = !latched || (is_stop && release_ready);
+      control.button->setEnabled(allowed);
+      QString tip;
+      if (latched && !is_stop) {
+        tip = "Emergency stop is engaged: release it first";
+      } else if (latched && is_stop) {
+        tip = release_ready ? "Release the emergency stop" : "Release unlocks in a moment";
+      }
+      if (control.button->toolTip() != tip) {
+        control.button->setToolTip(tip);
+      }
+    }
+    const QString stop_text = latched ? "RELEASE E-STOP" : "EMERGENCY STOP";
+    if (stop_button_->text() != stop_text) {
+      stop_button_->setText(stop_text);
+      stop_button_->setStyleSheet(latched ? kReleaseStyle : kStopStyle);
+    }
   }
 
+  struct ControlButton
+  {
+    std::string command;
+    QPushButton * button;
+  };
+
+  inline static const QString kStopStyle =
+    "QPushButton { background: #b91c1c; color: white; font-weight: 700; padding: 8px; }"
+    "QPushButton:disabled { background: #9ca3af; color: #f3f4f6; }";
+  inline static const QString kReleaseStyle =
+    "QPushButton { background: #1d4ed8; color: white; font-weight: 700; padding: 8px; }"
+    "QPushButton:disabled { background: #9ca3af; color: #f3f4f6; }";
+
   std::shared_ptr<DashboardNode> node_;
+  std::vector<ControlButton> buttons_;
+  QPushButton * stop_button_{nullptr};
   QLabel * title_{nullptr};
   QLabel * state_{nullptr};
   QLabel * detail_{nullptr};

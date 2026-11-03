@@ -82,6 +82,8 @@ void WaypointPatrol::set_waypoints(
   loops_completed_ = 0;
   mode_ = Mode::kInactive;
   returned_to_base_ = false;
+  base_goal_succeeded_ = false;
+  near_base_since_.reset();
   base_index_ = 0;
   for (std::size_t i = 0; i < waypoints_.size(); ++i) {
     if (waypoints_[i].name == base_waypoint_name) {
@@ -105,6 +107,33 @@ std::size_t WaypointPatrol::nearest_index(const double x, const double y) const
   return best_index;
 }
 
+std::optional<Waypoint> WaypointPatrol::issue(const bool is_retry)
+{
+  goal_issued_at_ = now_s_;
+  retry_due_at_.reset();
+  attempts_ = is_retry ? attempts_ + 1 : 1;
+  return mode_ == Mode::kReturning ? waypoints_[base_index_] : waypoints_[current_index_];
+}
+
+std::optional<Waypoint> WaypointPatrol::advance_and_issue()
+{
+  const std::size_t previous_index = current_index_;
+  current_index_ = (current_index_ + 1) % waypoints_.size();
+  if (current_index_ <= previous_index) {
+    ++loops_completed_;  // wrapped back to the front: one lap of the route is done
+  }
+  return issue(false);
+}
+
+std::optional<Waypoint> WaypointPatrol::retry_or_skip()
+{
+  if (mode_ == Mode::kPatrolling && attempts_ >= policy_.max_goal_attempts) {
+    ++skipped_waypoints_;  // give up on this waypoint and carry on with the loop
+    return advance_and_issue();
+  }
+  return issue(true);
+}
+
 std::optional<Waypoint> WaypointPatrol::update_pose(const double x, const double y)
 {
   pose_x_ = x;
@@ -117,10 +146,16 @@ std::optional<Waypoint> WaypointPatrol::update_pose(const double x, const double
       arrival_tolerance_m_)
     {
       returned_to_base_ = true;
+      retry_due_at_.reset();
+      if (!near_base_since_) {
+        near_base_since_ = now_s_;
+      }
+    } else {
+      near_base_since_.reset();
     }
     return std::nullopt;
   }
-
+ 
   if (mode_ != Mode::kPatrolling || waypoints_.empty()) {
     return std::nullopt;
   }
@@ -130,13 +165,7 @@ std::optional<Waypoint> WaypointPatrol::update_pose(const double x, const double
   if (distance_to_goal > arrival_tolerance_m_) {
     return std::nullopt;  // still travelling toward the current goal
   }
-
-  const std::size_t previous_index = current_index_;
-  current_index_ = (current_index_ + 1) % waypoints_.size();
-  if (current_index_ <= previous_index) {
-    ++loops_completed_;  // wrapped back to the front: one lap of the route is done
-  }
-  return waypoints_[current_index_];
+  return advance_and_issue();
 }
 
 std::optional<Waypoint> WaypointPatrol::on_mission_state(const PatrolTrigger trigger)
@@ -153,7 +182,7 @@ std::optional<Waypoint> WaypointPatrol::on_mission_state(const PatrolTrigger tri
       mode_ = Mode::kPatrolling;
       returned_to_base_ = false;
       current_index_ = have_pose_ ? nearest_index(pose_x_, pose_y_) : base_index_;
-      return waypoints_[current_index_];
+      return issue(false);
 
     case PatrolTrigger::kReturnToBase:
       if (mode_ == Mode::kReturning) {
@@ -161,13 +190,80 @@ std::optional<Waypoint> WaypointPatrol::on_mission_state(const PatrolTrigger tri
       }
       mode_ = Mode::kReturning;
       returned_to_base_ = false;
-      return waypoints_[base_index_];
+      base_goal_succeeded_ = false;  // a fresh journey: forget any earlier arrival
+      near_base_since_.reset();
+      return issue(false);
 
     case PatrolTrigger::kHold:
     default:
-      // Freeze current_index_ (and the returning flag) so PATROL can resume
-      // sensibly afterward instead of restarting the loop from scratch.
+      // Freeze current_index_ so PATROL can resume sensibly afterward instead
+      // of restarting the loop from scratch, and drop any pending retry.
       mode_ = Mode::kInactive;
+      retry_due_at_.reset();
+      return std::nullopt;
+  }
+}
+
+bool WaypointPatrol::return_complete() const
+{
+  if (mode_ != Mode::kReturning) {
+    return false;
+  }
+  if (base_goal_succeeded_) {
+    return true;
+  }
+  return near_base_since_.has_value() && (now_s_ - *near_base_since_) >= policy_.base_settle_s;
+}
+
+std::optional<Waypoint> WaypointPatrol::tick(const double now_s)
+{
+  now_s_ = now_s;
+  if (waypoints_.empty() || mode_ == Mode::kInactive ||
+    (mode_ == Mode::kReturning && returned_to_base_))
+  {
+    return std::nullopt;
+  }
+  if (!retry_due_at_ && (now_s_ - goal_issued_at_) > policy_.goal_timeout_s) {
+    retry_due_at_ = now_s_;  // a goal that never completes counts as a failure
+  }
+  if (retry_due_at_ && now_s_ >= *retry_due_at_) {
+    return retry_or_skip();
+  }
+  return std::nullopt;
+}
+
+std::optional<Waypoint> WaypointPatrol::on_nav_result(const NavResult result)
+{
+  if (waypoints_.empty() || mode_ == Mode::kInactive) {
+    return std::nullopt;
+  }
+  const bool settled = (mode_ == Mode::kReturning && returned_to_base_);
+
+  switch (result) {
+    case NavResult::kSucceeded:
+      if ((now_s_ - goal_issued_at_) < policy_.min_success_age_s) {
+        return std::nullopt;  // almost certainly the previous goal's result
+      }
+      if (mode_ == Mode::kReturning) {
+        returned_to_base_ = true;
+        base_goal_succeeded_ = true;
+        retry_due_at_.reset();
+        return std::nullopt;
+      }
+      return advance_and_issue();
+
+    case NavResult::kFailed:
+      if (!settled && !retry_due_at_) {
+        retry_due_at_ = now_s_ + policy_.retry_delay_s;
+      }
+      return std::nullopt;
+
+    case NavResult::kOutOfBounds:
+    default:
+      if (mode_ == Mode::kPatrolling) {
+        ++skipped_waypoints_;
+        return advance_and_issue();
+      }
       return std::nullopt;
   }
 }

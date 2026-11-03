@@ -26,6 +26,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/empty.hpp"
 
 using namespace std::chrono_literals;
 
@@ -82,6 +83,13 @@ public:
           sample->fused_confidence >= track_confidence_)
         {
           transition_to(MissionState::INVESTIGATE, "Aerial environmental cue; rover must verify locally");
+        }
+      });
+    return_complete_subscription_ = create_subscription<std_msgs::msg::Empty>(
+      "/embertrace/return_complete", 10,
+      [this](const std_msgs::msg::Empty::SharedPtr) {
+        if (state_ == MissionState::RETURN_TO_BASE) {
+          transition_to(MissionState::IDLE, "Returned to base; waiting for START");
         }
       });
     command_service_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
@@ -206,7 +214,7 @@ private:
     const std::string command = uppercase(request->command);
     response->accepted = true;
 
-    if (state_ == MissionState::EMERGENCY_STOP && command != "RESET" && command != "E_STOP") {
+    if (state_ == MissionState::EMERGENCY_STOP && command != "RESET" && command != "E_STOP_RELEASE" && command != "E_STOP") {
       response->accepted = false;
       response->message = "Emergency stop is latched; RESET is required";
       return;
@@ -225,7 +233,8 @@ private:
       transition_to(MissionState::RETURN_TO_BASE, "Return requested by operator");
     } else if (command == "E_STOP") {
       transition_to(MissionState::EMERGENCY_STOP, "Emergency stop latched");
-    } else if (command == "RESET") {
+    } else if (command == "RESET" ||
+      (command == "E_STOP_RELEASE" && state_ == MissionState::EMERGENCY_STOP)) {
       detection_count_ = 0;
       confirmation_count_ = 0;
       have_estimate_ = false;
@@ -333,6 +342,7 @@ private:
   embertrace_interfaces::msg::EnvironmentalReading latest_reading_;
   geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
 
+  rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr return_complete_subscription_;
   rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;
   rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_publisher_;
   rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr

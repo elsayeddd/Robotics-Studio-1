@@ -8,6 +8,7 @@
     odom_frame: husky1_odom
     base_link_frame: husky1_base_link
     world_frame: husky1_odom
+    # initial_state: [-14.0, -14.0, 0.0, 0.0, 0.0, 0.7854, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0]
     odom0: odometry
     odom0_config:
     - true
@@ -25,6 +26,7 @@
     - false
     - false
     - false
+ 
     imu0: imu
     imu0_config:
     - false
@@ -42,3 +44,4 @@
     - false
     - false
     - false
+
