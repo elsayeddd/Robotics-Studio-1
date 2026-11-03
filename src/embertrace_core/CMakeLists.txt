@@ -31,7 +31,7 @@ else()
   set(YAML_CPP_TARGET yaml-cpp)
 endif()
 
-add_library(perception_filter src/perception_filter.cpp src/visual_classifier.cpp)
+add_library(perception_filter src/perception_filter.cpp src/visual_classifier.cpp src/thermal_detector.cpp)
 target_include_directories(perception_filter PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -81,6 +81,8 @@ target_link_libraries(environment_simulator_node plume_model)
 
 add_embertrace_node(camera_verifier_node src/camera_verifier_node.cpp)
 target_link_libraries(camera_verifier_node perception_filter)
+add_embertrace_node(thermal_verifier_node src/thermal_verifier_node.cpp)
+target_link_libraries(thermal_verifier_node perception_filter)
 add_embertrace_node(perception_node src/perception_node.cpp)
 target_link_libraries(perception_node perception_filter)
 add_embertrace_node(mission_manager_node src/mission_manager_node.cpp)

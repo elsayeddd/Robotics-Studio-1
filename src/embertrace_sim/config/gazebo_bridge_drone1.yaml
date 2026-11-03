@@ -59,3 +59,10 @@
   ros_type_name: "sensor_msgs/msg/CameraInfo"
   gz_type_name: "ignition.msgs.CameraInfo"
   direction: GZ_TO_ROS
+
+# Radiometric IR camera (16-bit Kelvin at 0.01 K/unit).
+- ros_topic_name: 'thermal/image'
+  gz_topic_name: '/model/drone1/thermal/image'
+  ros_type_name: 'sensor_msgs/msg/Image'
+  gz_type_name: 'ignition.msgs.Image'
+  direction: GZ_TO_ROS

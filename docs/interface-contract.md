@@ -87,3 +87,16 @@ simulation. Drone frames are `drone1_base_link` and `drone1_camera_link`.
 The drone's environmental pose is its measured position, not a source estimate.
 The aerial hint is checked for acquisition age and never supplies fire ground
 truth to the rover. The source estimator continues using rover samples only.
+
+## October 20 full perception sensors
+
+- `/husky1/thermal/image`, `/drone1/thermal/image`: SensorDataQoS Image, radiometric
+  mono16 / 16UC1, 0.01 K per unit. Not an RGB display image.
+- `/embertrace/thermal_cue`, `/drone1/thermal_cue`: SensorDataQoS ThermalCue with
+  acquisition header, explicit validity, persistent hotspot, peak C and cluster data.
+- EnvironmentalReading now also includes explicit CO2 concentration/validity/detection
+  and IR validity/hotspot/peak. Scalar `temperature_c` stays the local field measurement.
+- PerceptionStatus includes CO2 validity, IR freshness and wind classification constants.
+- Full launch requires CO2-valid raw data and fresh IR before confirmation. Legacy
+  recordings and explicit reduced debug mode remain separate from C1 acceptance.
+- Message changes require rebuilding every dependent package and re-sourcing all shells.

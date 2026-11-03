@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--timeout', type=float, default=30)
     parser.add_argument('--no-drone', action='store_true')
     parser.add_argument('--no-nav2', action='store_true')
+    parser.add_argument('--no-thermal', action='store_true', help='Explicit reduced sensor debug mode')
     parser.add_argument('--waypoints-file')
     args, ros_args = parser.parse_known_args()
     rclpy.init(args=ros_args)
@@ -51,7 +52,7 @@ def main():
     for key, topic in [('rover perception', '/embertrace/perception_status'), ('drone perception', '/drone1/perception_status')]:
         if key in checks:
             subscriptions.append(node.create_subscription(PerceptionStatus, topic,
-                lambda msg, key=key: update(key, msg.environment_fresh), 10))
+                lambda msg, key=key: update(key, msg.environment_fresh and msg.co2_valid and (args.no_thermal or msg.thermal_fresh)), 10))
     transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
     subscriptions.append(node.create_subscription(MissionState, '/embertrace/mission_state',
         lambda msg: update('mission heartbeat', True), transient))
