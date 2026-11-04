@@ -72,6 +72,12 @@ for path in sorted(list(ROOT.glob("src/**/*.py")) + list(ROOT.glob("scripts/*.py
     except SyntaxError as exc:
         fail(f"invalid Python syntax in {path.relative_to(ROOT)}: {exc}")
 
+# Symlink installs retain the source mode; a non-executable script builds but
+# cannot be started by ROS launch even when CMake installs it with PROGRAMS.
+for path in sorted(ROOT.glob("src/embertrace_core/scripts/*.py")):
+    if not path.stat().st_mode & 0o111:
+        fail(f"runtime node is not executable: {path.relative_to(ROOT)}")
+
 text_suffixes = {".md", ".txt", ".py", ".cpp", ".hpp", ".xml", ".yaml", ".yml", ".sdf", ".xacro"}
 for path in ROOT.rglob("*"):
     if path.is_file() and path.suffix in text_suffixes:
