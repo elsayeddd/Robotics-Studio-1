@@ -28,6 +28,8 @@
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "std_msgs/msg/empty.hpp"
+#include "std_msgs/msg/bool.hpp"
+#include "std_msgs/msg/string.hpp"
 
 using namespace std::chrono_literals;
 
@@ -55,6 +57,9 @@ public:
     }
     max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
     max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
+    require_scout_return_ = declare_parameter<bool>("require_scout_return", false);
+    aerial_mission_ = declare_parameter<bool>("aerial_mission", false);
+    verification_timeout_s_ = declare_parameter<double>("verification_timeout_s", 15.0);
     required_detection_samples_ = std::max<int>(
       1L, declare_parameter<int>("required_detection_samples", 3));
     required_confirmation_samples_ = std::max<int>(
@@ -96,8 +101,24 @@ public:
     return_complete_subscription_ = create_subscription<std_msgs::msg::Empty>(
       "/embertrace/return_complete", 10,
       [this](const std_msgs::msg::Empty::SharedPtr) {
-        if (state_ == MissionState::RETURN_TO_BASE) {
-          transition_to(MissionState::IDLE, "Returned to base; waiting for START");
+        rover_home_ = state_ == MissionState::RETURN_TO_BASE;
+        check_return_complete();
+      });
+    scout_return_subscription_ = create_subscription<std_msgs::msg::Bool>(
+      "/drone1/return_complete", 10, [this](const std_msgs::msg::Bool::SharedPtr msg) {
+        scout_home_ = msg->data;
+        if (aerial_mission_) {rover_home_ = msg->data;}
+        check_return_complete();
+      });
+    search_status_subscription_ = create_subscription<std_msgs::msg::String>(
+      "/embertrace/search_status", 10, [this](const std_msgs::msg::String::SharedPtr msg) {
+        if ((state_ == MissionState::INVESTIGATE || state_ == MissionState::TRACK ||
+          state_ == MissionState::RECOVER) &&
+          (msg->data == "TIMED_OUT" || msg->data == "SIGNAL_LOST"))
+        {
+          detection_count_ = confirmation_count_ = 0;
+          dismissed_anomaly_ = true;
+          transition_to(MissionState::PATROL, "Investigation ended; resuming patrol");
         }
       });
     command_service_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
@@ -145,6 +166,8 @@ private:
   void transition_to(const std::uint8_t next_state, const std::string & detail)
   {
     if (state_ != next_state) {
+      state_entered_ = now();
+      if (next_state == MissionState::RETURN_TO_BASE) {rover_home_ = scout_home_ = false;}
       RCLCPP_INFO(
         get_logger(), "Mission transition: %s -> %s (%s)", state_name(state_),
         state_name(next_state), detail.c_str());
@@ -154,6 +177,14 @@ private:
     publish_state();
   }
 
+  void check_return_complete()
+  {
+    // I wait for both vehicles so parking the rover cannot strand the scout.
+    if (state_ == MissionState::RETURN_TO_BASE && rover_home_ &&
+      (!require_scout_return_ || scout_home_))
+    {transition_to(MissionState::IDLE, "Vehicles returned to base; waiting for START");}
+  }
+
   void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading)
   {
     const auto current = now();
@@ -161,6 +192,14 @@ private:
       have_reading_ = have_estimate_ = false; detection_count_ = confirmation_count_ = 0;
     }
     last_clock_ = current;
+    if (state_ == MissionState::VERIFY &&
+      (current - state_entered_).seconds() > verification_timeout_s_)
+    {
+      state_ = MissionState::TRACK;
+      state_entered_ = current;
+      detail_ = "Verification timed out; continue local investigation";
+      confirmation_count_ = 0;
+    }
     if (reading->header.stamp.sec < 0) {detection_count_ = confirmation_count_ = 0; return;}
     const double age = (current - rclcpp::Time(reading->header.stamp)).seconds();
     if (age < -0.1 || age > reading_timeout_s_ || !std::isfinite(reading->fused_confidence) ||
@@ -185,6 +224,11 @@ private:
       return;
     }
 
+    if (dismissed_anomaly_ && state_ == MissionState::PATROL) {
+      if (reading->fused_confidence < investigate_confidence_ && !reading->smoke_detected &&
+        !reading->co2_detected && !reading->temperature_anomaly) {dismissed_anomaly_ = false;}
+      else {return;}
+    }
     detection_count_ = reading->fused_confidence >= investigate_confidence_ ||
       reading->smoke_detected || reading->co2_detected || reading->temperature_anomaly ?
       detection_count_ + 1 : 0;
@@ -322,6 +366,10 @@ private:
       estimate_age_s >= 0.0 && estimate_age_s <= max_estimate_age_s_ &&
       std::isfinite(latest_estimate_.pose.covariance[0]) &&
       std::isfinite(latest_estimate_.pose.covariance[7]) &&
+      latest_estimate_.pose.covariance[0] >= 0.0 &&
+      latest_estimate_.pose.covariance[7] >= 0.0 &&
+      std::isfinite(latest_estimate_.pose.pose.position.x) &&
+      std::isfinite(latest_estimate_.pose.pose.position.y) &&
       latest_estimate_.pose.covariance[0] <=
       max_estimate_stddev_m_ * max_estimate_stddev_m_ &&
       latest_estimate_.pose.covariance[7] <=
@@ -371,6 +419,12 @@ private:
   geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
 
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr return_complete_subscription_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr scout_return_subscription_;
+  rclcpp::Subscription<std_msgs::msg::String>::SharedPtr search_status_subscription_;
+  bool dismissed_anomaly_{false};
+  bool require_scout_return_{false}, aerial_mission_{false}, rover_home_{false}, scout_home_{false};
+  double verification_timeout_s_{15.0};
+  rclcpp::Time state_entered_{0, 0, RCL_ROS_TIME};
   rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;
   rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_publisher_;
   rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr

@@ -20,17 +20,24 @@ from tf2_ros import Buffer, TransformListener
 
 def main():
     parser = argparse.ArgumentParser()
+    parser.add_argument('--platform', choices=('combined', 'rover', 'drone'), default='combined')
     parser.add_argument('--timeout', type=float, default=30)
     parser.add_argument('--no-drone', action='store_true')
     parser.add_argument('--no-nav2', action='store_true')
     parser.add_argument('--no-thermal', action='store_true', help='Explicit reduced sensor debug mode')
     parser.add_argument('--waypoints-file')
     args, ros_args = parser.parse_known_args()
+    if args.platform == 'drone':
+        args.no_nav2 = True
+    if args.platform == 'rover':
+        args.no_drone = True
     rclpy.init(args=ros_args)
     node = Node('demo_preflight', cli_args=[
         '--ros-args', '-r', '/tf:=/husky1/tf', '-r', '/tf_static:=/husky1/tf_static'])
     node.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=True)])
-    checks = {'rover sensors': False, 'rover perception': False, 'mission heartbeat': False}
+    checks = {'mission heartbeat': False}
+    if args.platform != 'drone':
+        checks.update({'rover sensors': False, 'rover perception': False})
     if not args.no_drone:
         checks.update({'drone sensors': False, 'drone perception': False})
     if not args.no_nav2:

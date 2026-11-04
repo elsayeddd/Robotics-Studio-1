@@ -24,8 +24,8 @@ namespace embertrace_core {
 // CONSTRUCTOR
 // ============================================================================
 
-Nav2GoalAdapterNode::Nav2GoalAdapterNode()
-: Node("nav2_goal_adapter_node")
+Nav2GoalAdapterNode::Nav2GoalAdapterNode(const rclcpp::NodeOptions & options)
+: Node("nav2_goal_adapter_node", options)
 {
   using namespace std::chrono_literals;
 

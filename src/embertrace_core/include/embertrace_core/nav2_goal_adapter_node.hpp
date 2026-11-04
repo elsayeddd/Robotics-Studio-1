@@ -23,7 +23,7 @@ namespace embertrace_core {
 
 class Nav2GoalAdapterNode : public rclcpp::Node {
 public:
-  Nav2GoalAdapterNode();
+  explicit Nav2GoalAdapterNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
   ~Nav2GoalAdapterNode() = default;
 
   static void normaliseAngle(double & angle);

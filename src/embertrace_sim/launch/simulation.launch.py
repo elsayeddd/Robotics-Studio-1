@@ -23,6 +23,7 @@ def generate_launch_description():
     model_dir = PathJoinSubstitution([package_share, "models"])
     use_sim_time = LaunchConfiguration("use_sim_time")
     use_nav2 = LaunchConfiguration("use_nav2")
+    use_rover = LaunchConfiguration("use_rover")
     use_rviz = LaunchConfiguration("use_rviz")
 
     robot_description = ParameterValue(
@@ -106,6 +107,7 @@ def generate_launch_description():
         package="robot_state_publisher",
         executable="robot_state_publisher",
         namespace="husky1",
+        condition=IfCondition(use_rover),
         name="robot_state_publisher",
         output="screen",
         parameters=[{"robot_description": robot_description, "use_sim_time": use_sim_time}],
@@ -118,6 +120,7 @@ def generate_launch_description():
             package="ros_ign_gazebo",
             executable="create",
             name="spawn_husky1",
+            condition=IfCondition(use_rover),
             output="screen",
             arguments=[
                 "-topic", "/husky1/robot_description",
@@ -134,6 +137,7 @@ def generate_launch_description():
         package="ros_ign_bridge",
         executable="parameter_bridge",
         namespace="husky1",
+        condition=IfCondition(use_rover),
         name="gazebo_bridge",
         output="screen",
         parameters=[{
@@ -158,6 +162,7 @@ def generate_launch_description():
         executable="ekf_node",
         namespace="husky1",
         name="robot_localization",
+        condition=IfCondition(use_rover),
         output="screen",
         parameters=[
             PathJoinSubstitution([config_dir, "robot_localization_husky1.yaml"]),
@@ -199,6 +204,7 @@ def generate_launch_description():
     return LaunchDescription([
         DeclareLaunchArgument("world_file", default_value="embertrace_forest.sdf"),
         DeclareLaunchArgument("use_drone", default_value="true"),
+        DeclareLaunchArgument("use_rover", default_value="true"),
         DeclareLaunchArgument("gazebo_gui", default_value="true", choices=["true", "false"]),
         DeclareLaunchArgument("rover_x", default_value="-14.0"),
         DeclareLaunchArgument("rover_y", default_value="-14.0"),

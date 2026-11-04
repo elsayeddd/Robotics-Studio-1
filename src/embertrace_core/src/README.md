@@ -1,6 +1,6 @@
 # C++ node development notes
 
-Each source file starts with its completed baseline and `TODO(student)` work. Keep one executable per file until the team is comfortable with ROS composition.
+The source files implement the integrated baseline. Keep one executable per file until the team is comfortable with ROS composition.
 
 ## Recommended ownership
 
@@ -22,9 +22,8 @@ The adapter subscribes to `/embertrace/navigation_goal`, transforms goals into
 `husky1_map`, and sends them to `/husky1/navigate_to_pose` when Nav2 is ready.
 It cancels goals on mission-state changes or when motion is disallowed, rejects
 stale and out-of-bounds goals, and publishes result strings on
-`/embertrace/navigation_status`. The patrol manager currently advances from
-map-frame odometry proximity; action-result sequencing and full rover acceptance
-remain to be validated on the target ROS machine.
+`/embertrace/navigation_status`. The patrol manager consumes action status and route-frame TF proximity, with a
+bounded retry/skip policy and return-to-base completion feedback.
 
 ## Priority 3: search and source estimate
 

@@ -1,9 +1,7 @@
 #!/usr/bin/env python3
-"""Launch the complete environment, check every sensor, motion and E-stop.
-
-Run with ROS sourced and a display (WSLg or xvfb-run). This is a short integration
-check, not the ten-trial source localisation/perception acceptance campaign.
-"""
+"""Check real Gazebo motion, mission controls and return in every supported mode."""
+import argparse
+import json
 import math
 import os
 from pathlib import Path
@@ -12,35 +10,42 @@ import subprocess
 import time
 import rclpy
 from rclpy.node import Node
-from rclpy.qos import qos_profile_sensor_data
+from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy
 from nav_msgs.msg import Odometry
 from geometry_msgs.msg import Twist
+from embertrace_interfaces.msg import MissionState
 from embertrace_interfaces.srv import OperatorCommand
 
 
 def main():
-    output = Path('log/demo-smoke')
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--platform', choices=('combined', 'rover', 'drone'), default='combined')
+    parser.add_argument('--output', default='log/demo-smoke')
+    args = parser.parse_args()
+    robots = ('husky1', 'drone1') if args.platform == 'combined' else (('husky1',) if args.platform == 'rover' else ('drone1',))
+    output = Path(args.output) / args.platform
     output.mkdir(parents=True, exist_ok=True)
+    environment = dict(os.environ, IGN_PARTITION=f'embertrace_smoke_{os.getpid()}')
+    environment['GZ_PARTITION'] = environment['IGN_PARTITION']
     with (output / 'launch.log').open('w') as log:
         process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
-                                    'use_rviz:=false', 'use_dashboard:=false', 'use_drone:=true',
-                                    'use_nav2:=true', 'scenario:=no_fire'],
-                                   stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            'use_rviz:=false', 'use_dashboard:=false', 'gazebo_gui:=false',
+            f'mission_platform:={args.platform}', 'scenario:=no_fire'],
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
         node = None
         try:
-            preflight = subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',
-                                        '--timeout', '90'], timeout=100)
-            if preflight.returncode:
-                raise RuntimeError('Preflight failed: see log/demo-smoke/launch.log')
+            subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',
+                            '--platform', args.platform, '--timeout', '120'], check=True, timeout=140)
             rclpy.init()
             node = Node('demo_smoke')
-            poses = {}
-            commands = {}
+            poses, commands, state = {}, {}, {'name': None}
+            subscriptions = [node.create_subscription(MissionState, '/embertrace/mission_state',
+                lambda msg: state.update(name=msg.state_name),
+                QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))]
             def record(robot, msg):
                 p = msg.pose.pose.position
                 poses[robot] = (p.x, p.y, p.z)
-            subscriptions = []
-            for robot in ('husky1', 'drone1'):
+            for robot in robots:
                 subscriptions.append(node.create_subscription(Odometry, '/' + robot + '/odometry',
                     lambda msg, robot=robot: record(robot, msg), qos_profile_sensor_data))
                 subscriptions.append(node.create_subscription(Twist, '/' + robot + '/cmd_vel',
@@ -50,50 +55,53 @@ def main():
                 end = time.monotonic() + seconds
                 while time.monotonic() < end:
                     rclpy.spin_once(node, timeout_sec=0.05)
-            def command(text):
-                request = OperatorCommand.Request()
-                request.command = text
+            def until(predicate, timeout):
+                end = time.monotonic() + timeout
+                while time.monotonic() < end:
+                    pump(0.1)
+                    if predicate():
+                        return
+                raise AssertionError(f'Timeout in {args.platform}; state={state}, poses={poses}')
+            def command(text, accepted=True):
+                request = OperatorCommand.Request(); request.command = text
                 future = client.call_async(request)
-                rclpy.spin_until_future_complete(node, future, timeout_sec=3)
-                if not future.done() or not future.result().accepted:
-                    raise RuntimeError('Command failed: ' + text)
-            # DDS discovery and the first sensor sample are asynchronous. Wait
-            # for the actual streams instead of assuming a two-second startup.
-            deadline = time.monotonic() + 25
-            while time.monotonic() < deadline and (len(poses) < 2 or not client.service_is_ready()):
-                pump(0.1)
-            assert len(poses) == 2, 'Both odometry streams are required'
+                rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+                assert future.done() and future.result().accepted == accepted, f'Command failed: {text}'
+            def zero():
+                for robot in robots:
+                    received, twist = commands.get(robot, (0, None))
+                    assert twist is not None and time.monotonic() - received < 0.75, f'Missing {robot} heartbeat'
+                    assert sum(abs(v) for v in (twist.linear.x, twist.linear.y, twist.linear.z,
+                                                twist.angular.x, twist.angular.y, twist.angular.z)) < 1e-6, f'{robot} still moving'
+            until(lambda: len(poses) == len(robots) and client.service_is_ready(), 25)
             initial = dict(poses)
             command('START')
-            deadline = time.monotonic() + 45
-            moved = {}
-            while time.monotonic() < deadline:
-                pump(0.2)
-                moved = {r: math.dist(initial[r], poses[r]) for r in initial}
-                if all(d > 0.5 for d in moved.values()):
-                    break
-            assert all(d > 0.5 for d in moved.values()), 'Vehicle did not move: ' + str(moved)
-            command('E_STOP')
-            pump(1)
-            for robot in initial:
-                received, twist = commands.get(robot, (0, None))
-                assert twist is not None and time.monotonic() - received < 0.5, 'Missing command heartbeat'
-                assert abs(twist.linear.x) + abs(twist.linear.y) + abs(twist.linear.z) + abs(twist.angular.z) < 1e-6, 'E-stop did not zero ' + robot
-            print('Gazebo sensor, rover/drone motion and E-stop smoke check passed: ' + str(moved))
+            until(lambda: all(math.dist(initial[r], poses[r]) > 0.8 for r in robots), 70)
+            moved = {r: math.dist(initial[r], poses[r]) for r in robots}
+            command('PAUSE'); pump(1); zero()
+            command('RESUME'); until(lambda: state['name'] == 'PATROL', 5)
+            command('RETURN'); until(lambda: state['name'] == 'IDLE', 75); pump(1); zero()
+            for robot in robots:
+                assert math.dist(initial[robot], poses[robot]) < 1.7, f'{robot} did not return to its base'
+            command('START'); until(lambda: state['name'] == 'PATROL', 5)
+            command('E_STOP'); pump(1); zero()
+            for text in ('START', 'RESUME', 'RETURN'):
+                command(text, accepted=False)
+            command('E_STOP_RELEASE'); until(lambda: state['name'] == 'IDLE', 5); zero()
+            result = {'platform': args.platform, 'movement_m': moved, 'controls': 'passed',
+                      'return': 'passed', 'emergency_stop': 'passed'}
+            (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+            print('Gazebo integration passed: ' + json.dumps(result), flush=True)
         finally:
             if node:
-                node.destroy_node()
-                rclpy.shutdown()
+                node.destroy_node(); rclpy.shutdown()
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
-                    os.killpg(process.pid, signal.SIGKILL)
-            content = (output / 'launch.log').read_text()
-            errors = [line for line in content.splitlines() if '[ERROR]' in line or '[FATAL]' in line]
-            print('\n'.join(errors[:25]))
-            print(content[-8000:])
+                    os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=5)
+            print(f'Launch evidence: {output / "launch.log"}', flush=True)
 
 
 if __name__ == '__main__':

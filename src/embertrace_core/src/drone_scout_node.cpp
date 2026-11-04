@@ -5,6 +5,8 @@
 #include <memory>
 #include <vector>
 #include "embertrace_interfaces/msg/mission_state.hpp"
+#include "embertrace_interfaces/msg/perception_status.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/odometry.hpp"
@@ -24,6 +26,9 @@ public:
   {
     altitude_ = declare_parameter<double>("altitude_m", 8.0);
     speed_ = declare_parameter<double>("max_speed_mps", 1.5);
+    autonomous_mission_ = declare_parameter<bool>("autonomous_mission", false);
+    base_x_ = declare_parameter<double>("base_x", -14.0);
+    base_y_ = declare_parameter<double>("base_y", -12.0);
     xs_ = declare_parameter<std::vector<double>>("sweep_x", {-12.0, 12.0, 12.0, -12.0, -12.0, 12.0});
     ys_ = declare_parameter<std::vector<double>>("sweep_y", {-8.0, -8.0, 0.0, 0.0, 8.0, 8.0});
     if (xs_.empty() || xs_.size() != ys_.size() || altitude_ < 6 || altitude_ > 12 ||
@@ -48,13 +53,29 @@ public:
     lidar.transform.rotation.w = 1.0;
     static_tf_->sendTransform(std::vector<geometry_msgs::msg::TransformStamped>{camera, lidar});
     command_ = create_publisher<geometry_msgs::msg::Twist>("/drone1/cmd_vel", 10);
+    home_ = create_publisher<std_msgs::msg::Bool>("/drone1/return_complete", 10);
+    goal_ = create_subscription<geometry_msgs::msg::PoseStamped>("/embertrace/navigation_goal", 10,
+      [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+        const auto & p = msg->pose.position;
+        const double age = (now() - rclcpp::Time(msg->header.stamp)).seconds();
+        if (autonomous_mission_ && msg->header.frame_id == "husky1_odom" &&
+          std::isfinite(p.x) && std::isfinite(p.y) && std::abs(p.x) <= 18.5 &&
+          std::abs(p.y) <= 18.5 && age >= -0.1 && age <= 3.0)
+        {target_ = *msg; have_target_ = true;}
+      });
+    wind_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
+      "/drone1/perception_status", 10,
+      [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr msg) {
+        wind_safe_ = msg->environment_fresh && msg->wind_condition == msg->WIND_DRONE_SAFE;
+        wind_receipt_ = std::chrono::steady_clock::now();
+      });
     odom_ = create_subscription<nav_msgs::msg::Odometry>("/drone1/odometry", rclcpp::SensorDataQoS(),
       [this](const nav_msgs::msg::Odometry::SharedPtr msg) {
         const auto & p = msg->pose.pose.position;
         const double age = (now() - rclcpp::Time(msg->header.stamp)).seconds();
         if (msg->header.frame_id != "husky1_odom" || age < -0.1 || age > 1.0 ||
           !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z)) {return;}
-        pose_ = *msg; have_pose_ = true;
+        pose_ = *msg; have_pose_ = true; pose_receipt_ = std::chrono::steady_clock::now();
         geometry_msgs::msg::TransformStamped transform;
         transform.header = msg->header;
         transform.child_frame_id = "drone1_base_link";
@@ -66,13 +87,14 @@ public:
       });
     state_ = create_subscription<State>("/embertrace/mission_state",
       rclcpp::QoS(1).transient_local().reliable(), [this](const State::SharedPtr msg) {
+        if (state_value_ != msg->state) {have_target_ = false;}
         state_value_ = msg->state; allowed_ = msg->motion_allowed;
-        state_stamp_ = rclcpp::Time(msg->header.stamp).seconds();
+        state_stamp_ = steady();
         if (!allowed_) {command_->publish(geometry_msgs::msg::Twist());}
         if (state_value_ == State::IDLE) {index_ = 0;}
       });
     health_ = create_subscription<std_msgs::msg::Bool>("/drone1/sensors_ready", 10,
-      [this](const std_msgs::msg::Bool::SharedPtr msg) {ready_ = msg->data; health_stamp_ = now().seconds();});
+      [this](const std_msgs::msg::Bool::SharedPtr msg) {ready_ = msg->data; health_stamp_ = steady();});
     scan_ = create_subscription<sensor_msgs::msg::LaserScan>("/drone1/scan", rclcpp::SensorDataQoS(),
       [this](const sensor_msgs::msg::LaserScan::SharedPtr msg) {
         obstacle_ = false;
@@ -83,6 +105,8 @@ public:
     timer_ = create_wall_timer(50ms, [this]() {tick();});
   }
 private:
+  static double steady()
+  {return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
   void tick()
   {
     const double clock = now().seconds();
@@ -91,14 +115,27 @@ private:
       return stamp >= 0 && clock >= stamp && clock - stamp <= timeout;
     };
     geometry_msgs::msg::Twist command;
-    if (allowed_ && ready_ && fresh(state_stamp_, 1.5) && fresh(health_stamp_, 1.0) &&
-      fresh(pose_stamp, 1.0) && !obstacle_)
+    const bool pose_fresh = fresh(pose_stamp, 1.0) &&
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - pose_receipt_).count() <= 1.0;
+    std_msgs::msg::Bool home;
+    home.data = state_value_ == State::RETURN_TO_BASE && pose_fresh &&
+      std::hypot(base_x_ - pose_.pose.pose.position.x, base_y_ - pose_.pose.pose.position.y) < 0.6 &&
+      std::abs(altitude_ - pose_.pose.pose.position.z) < 0.4;
+    home_->publish(home);
+    if (allowed_ && ready_ && steady() - state_stamp_ <= 1.5 && steady() - health_stamp_ <= 1.0 &&
+      pose_fresh && !obstacle_ && wind_safe_ &&
+      std::chrono::duration<double>(std::chrono::steady_clock::now() - wind_receipt_).count() <= 1.0)
     {
       const auto & p = pose_.pose.pose.position;
       const bool returning = state_value_ == State::RETURN_TO_BASE;
-      const double tx = returning ? -14.0 : xs_[index_];
-      const double ty = returning ? -12.0 : ys_[index_];
-      if (std::hypot(tx - p.x, ty - p.y) < 0.6 && std::abs(altitude_ - p.z) < 0.4 && !returning) {
+      const bool investigating = autonomous_mission_ && state_value_ != State::PATROL && !returning;
+      // I require a fresh planner goal before the standalone aircraft investigates.
+      const bool target_fresh = have_target_ &&
+        fresh(rclcpp::Time(target_.header.stamp).seconds(), 3.0);
+      if (investigating && !target_fresh) {command_->publish(command); return;}
+      const double tx = returning ? base_x_ : (investigating ? target_.pose.position.x : xs_[index_]);
+      const double ty = returning ? base_y_ : (investigating ? target_.pose.position.y : ys_[index_]);
+      if (std::hypot(tx - p.x, ty - p.y) < 0.6 && std::abs(altitude_ - p.z) < 0.4 && !returning && !investigating) {
         index_ = (index_ + 1) % xs_.size();
       }
       // The proxy remains at yaw zero; Twist linear axes match world axes.
@@ -113,6 +150,13 @@ private:
     command_->publish(command);
   }
   std::size_t index_{0};
+  bool autonomous_mission_{false}, have_target_{false}, wind_safe_{false};
+  double base_x_{-14.0}, base_y_{-12.0};
+  geometry_msgs::msg::PoseStamped target_;
+  std::chrono::steady_clock::time_point wind_receipt_{}, pose_receipt_{};
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_;
+  rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr wind_;
+  rclcpp::Publisher<std_msgs::msg::Bool>::SharedPtr home_;
   bool allowed_{false}, ready_{false}, have_pose_{false}, obstacle_{false};
   std::uint8_t state_value_{State::IDLE};
   double altitude_{8}, speed_{1.5}, state_stamp_{-1}, health_stamp_{-1};

@@ -30,13 +30,13 @@ jobs:
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
-          colcon build --event-handlers console_direct+
+          MAKEFLAGS="-j2 -l2" colcon build --parallel-workers 2 --event-handlers console_direct+
       - name: Test
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          colcon test --event-handlers console_direct+
+          ROS_DOMAIN_ID=73 colcon test --event-handlers console_direct+
           colcon test-result --verbose
 
       - name: Gazebo rover and drone smoke check
@@ -46,7 +46,9 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
-          xvfb-run -a python3 scripts/ros_demo_smoke.py
+          for platform in rover drone combined; do
+            xvfb-run -a python3 scripts/ros_demo_smoke.py --platform "$platform"
+          done
       - name: Recorded Gazebo perception campaign
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
         shell: bash

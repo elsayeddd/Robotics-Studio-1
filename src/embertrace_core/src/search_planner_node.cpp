@@ -21,6 +21,7 @@
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "std_msgs/msg/string.hpp"
 #include "tf2/exceptions.h"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 #include "tf2_ros/buffer.h"
@@ -77,6 +78,8 @@ public:
     max_map_occupancy_ = std::clamp<int>(
       declare_parameter<int>("max_map_occupancy", 20), 0, 99);
     map_topic_ = declare_parameter<std::string>("map_topic", "/husky1/map");
+    require_map_ = declare_parameter<bool>("require_map", true);
+    status_publisher_ = create_publisher<std_msgs::msg::String>("/embertrace/search_status", 10);
 
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -94,7 +97,7 @@ public:
       [this](const Reading::SharedPtr reading) {
         const double age = (now() - rclcpp::Time(reading->header.stamp)).seconds();
         if (reading->header.frame_id == "husky1_odom" && age >= 0 && age <= reading_timeout_s_ &&
-          (reading->smoke_detected || reading->temperature_anomaly) &&
+          (reading->smoke_detected || reading->co2_detected || reading->temperature_anomaly) &&
           reading->fused_confidence >= 0.38)
         {scout_pose_ = reading->sample_pose; have_scout_ = true;}
       });
@@ -129,6 +132,7 @@ private:
       estimate_.reset();
     }
     if (!was_searching && search_state(state_)) {
+      timeout_reported_ = false;
       search_start_ = now();
       have_search_start_ = true;
       cast_count_ = 0;
@@ -213,7 +217,7 @@ private:
     estimator_->add({pose.pose.position.x, pose.pose.position.y, reading->smoke_ppm,
       reading->temperature_c, reading->wind_direction_rad});
 
-    if (reading->smoke_detected) {
+    if (reading->smoke_detected || reading->co2_detected) {
       last_signal_time_ = current;
       have_signal_ = true;
       last_signal_pose_ = pose;
@@ -284,10 +288,11 @@ private:
     const auto & position = reading.sample_pose.pose.position;
     double target_x = position.x;
     double target_y = position.y;
-    bool casting = state_ == MissionState::RECOVER || !reading.smoke_detected;
+    const bool gas = reading.smoke_detected || reading.co2_detected;
+    bool casting = state_ == MissionState::RECOVER || !gas;
     const double scout_age = have_scout_ ?
       (current - rclcpp::Time(scout_pose_.header.stamp)).seconds() : -1.0;
-    if (!reading.smoke_detected && !reading.temperature_anomaly && have_scout_ &&
+    if (!gas && !reading.temperature_anomaly && have_scout_ &&
       scout_age >= 0 && scout_age <= 5.0 &&
       scout_pose_.header.frame_id == reading.sample_pose.header.frame_id)
     {
@@ -328,7 +333,7 @@ private:
     // Preserve the scenario boundary constraint before consulting known map cells.
     target_x = std::clamp(target_x, world_min_x_, world_max_x_);
     target_y = std::clamp(target_y, world_min_y_, world_max_y_);
-    if (map_frame_.empty()) {
+    if (require_map_ && map_frame_.empty()) {
       RCLCPP_WARN_THROTTLE(
         get_logger(), *get_clock(), 5000, "No occupancy map; withholding search goals");
       return;
@@ -341,6 +346,17 @@ private:
     requested.header.stamp.sec = 0;
     requested.header.stamp.nanosec = 0;
     set_yaw(requested.pose, std::atan2(target_y - position.y, target_x - position.x));
+
+    if (!require_map_) {
+      // I keep aerial goals in the measured world frame. The flight controller
+      // enforces altitude, geofence and LiDAR clearance rather than a ground map.
+      requested.header.stamp = current;
+      goal_publisher_->publish(requested);
+      last_goal_time_ = current;
+      have_last_goal_ = true;
+      if (casting) {++cast_count_;}
+      return;
+    }
 
     geometry_msgs::msg::PoseStamped goal;
     try {
@@ -377,6 +393,12 @@ private:
       return;
     }
     const auto current = now();
+    if (!timeout_reported_ && (search_timed_out(current) || signal_timed_out(current))) {
+      std_msgs::msg::String status;
+      status.data = search_timed_out(current) ? "TIMED_OUT" : "SIGNAL_LOST";
+      status_publisher_->publish(status);
+      timeout_reported_ = true;
+    }
     if (!have_reading_ ||
       (current - last_reading_time_).seconds() > reading_timeout_s_)
     {
@@ -393,6 +415,8 @@ private:
   }
 
   std::uint8_t state_{MissionState::IDLE};
+  bool require_map_{true}, timeout_reported_{false};
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr status_publisher_;
   int cast_count_{0};
   bool have_reading_{false};
   bool have_scout_{false};
