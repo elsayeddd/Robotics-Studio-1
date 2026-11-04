@@ -89,3 +89,15 @@ Fortress world-position odometry. Robot body/camera frames are `husky1_base_link
 `husky1_camera_link`, `drone1_base_link` and `drone1_camera_link`. The dashboard
 transforms poses into the actual map frame, including its origin yaw. Verify these
 origins with the map/TF acceptance trial; do not assume a SLAM origin is world zero.
+
+## Confirmed incident updates
+
+`FireAlert.alert_id` identifies an incident. Confirmation is published immediately,
+even when `source_resolved` is false. In the full launch, the selected vehicle can
+remain in TRACK to gather spatial evidence for at most `localisation_timeout_s`
+(default 120 seconds). A usable estimate ends that movement and updates the same
+alert ID; it does not count as another fire. The original confirmation sample and
+sensor values remain available in the fallback alert. If localisation expires,
+the confirmed incident remains recorded with an explicitly unresolved location,
+then proceeds through alert hold and return. Wind, battery, sensor and operator
+motion guards retain priority. Consumers counting incidents must deduplicate IDs.

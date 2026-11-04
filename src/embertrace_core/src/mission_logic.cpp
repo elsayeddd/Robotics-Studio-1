@@ -51,7 +51,7 @@ const char* phase_name(MissionPhase p) {
 MissionLogic::MissionLogic(MissionConfig c) : config_(c) {
   for (double v : {c.drone_wind_limit, c.rover_wind_limit, c.wind_dwell_s, c.sensor_timeout_s,
                    c.wind_timeout_s, c.search_timeout_s, c.recovery_timeout_s, c.verify_timeout_s,
-                   c.return_timeout_s, c.alert_hold_s, c.verify_retry_s}) {
+                   c.return_timeout_s, c.alert_hold_s, c.verify_retry_s, c.localisation_timeout_s}) {
     if (!finite_positive(v)) {
       throw std::invalid_argument("Mission timing/limits must be positive");
     }
@@ -118,6 +118,10 @@ void MissionLogic::transition(MissionPhase phase, std::string detail, double now
   state_.detail = std::move(detail);
   phase_since_ = now;
   phase_wall_ = wall;
+  if (phase == MissionPhase::Patrol || phase == MissionPhase::Idle) {
+    state_.confirmed = false;
+    localisation_wall_ = -1;
+  }
   if (phase == MissionPhase::Patrol) {
     verify_retry_wall_ = -1;
     search_wall_ = -1;
@@ -250,6 +254,12 @@ bool MissionLogic::evidence(Platform robot, const MissionEvidence& r, double now
       }
       break;
     case MissionPhase::Track:
+      if (state_.confirmed) {
+        if (r.source_resolved) {
+          transition(MissionPhase::Alert, "Confirmed fire source resolved; holding for review", now, wall);
+        }
+        break;
+      }
       if (!detected || r.confidence < config_.lost_confidence) {
         transition(MissionPhase::Recover, "Signal lost; bounded crosswind recovery", now, wall);
       } else if (wall >= verify_retry_wall_ && r.confidence >= config_.verify_confidence &&
@@ -266,8 +276,14 @@ bool MissionLogic::evidence(Platform robot, const MissionEvidence& r, double now
     case MissionPhase::Verify:
       if (confirmations_ >= config_.confirmation_samples) {
         ++state_.alert_sequence;
+        state_.confirmed = true;
         state_.acknowledged = false;
-        transition(MissionPhase::Alert, "Persistent multi-sensor fire evidence", now, wall);
+        if (config_.localise_before_hold && !r.source_resolved) {
+          localisation_wall_ = wall;
+          transition(MissionPhase::Track, "Fire confirmed; refining source position", now, wall);
+        } else {
+          transition(MissionPhase::Alert, "Persistent multi-sensor fire evidence", now, wall);
+        }
       } else if (!detected || r.confidence < config_.track_confidence) {
         transition(MissionPhase::Track, "Verification evidence weakened", now, wall);
       }
@@ -428,7 +444,10 @@ void MissionLogic::tick(double now, double wall) {
       resume_phase_ = MissionPhase::Return;
       transition(MissionPhase::Paused, "Alert recorded; waiting for safe return", now, wall);
     }
-  } else if (running() && state_.phase != MissionPhase::Patrol &&
+  } else if (state_.confirmed && running() && state_.phase != MissionPhase::Return &&
+             localisation_wall_ >= 0 && wall - localisation_wall_ > config_.localisation_timeout_s) {
+    transition(MissionPhase::Alert, "Fire confirmed; localisation deadline reached with unresolved source", now, wall);
+  } else if (!state_.confirmed && running() && state_.phase != MissionPhase::Patrol &&
              state_.phase != MissionPhase::Return && search_wall_ >= 0 &&
              wall - search_wall_ > config_.search_timeout_s) {
     clear_evidence();

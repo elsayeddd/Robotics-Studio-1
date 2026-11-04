@@ -60,3 +60,10 @@ The smoke/CO2 fields are educational mathematical models, not fluid dynamics.
 See [interface-contract.md](interface-contract.md), [completion-handover.md](completion-handover.md)
 and [perception-vm-startup.md](perception-vm-startup.md) for interfaces, acceptance
 status and reproducible commands.
+
+Source quality is separate from fire confirmation. Full launch enables
+`localise_before_hold`: the first confirmed alert is immediate, then TRACK can
+continue while the selected estimator obtains usable covariance. A source update
+retains the incident ID. The localisation deadline holds a confirmed unresolved
+incident rather than dismissing it as a false alarm. Search receives the confirmed
+incident to start a fresh bounded refinement interval without discarding history.

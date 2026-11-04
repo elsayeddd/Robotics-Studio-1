@@ -127,9 +127,11 @@ def main():
     def command(text):
         request = OperatorCommand.Request()
         request.command = text
+        began = time.monotonic()
         future = client.call_async(request)
         rclpy.spin_until_future_complete(node, future, timeout_sec=3)
         assert future.done() and future.exception() is None, "Command failed: " + text
+        print(f"Command {text}: {future.result().message} ({time.monotonic()-began:.3f}s)", flush=True)
         return future.result().accepted
 
     with tempfile.TemporaryDirectory(prefix="embertrace_dual_") as directory:
@@ -172,6 +174,11 @@ def main():
                         expected_camera_frame=robot + "_camera_link",
                         require_co2="true",
                         require_thermal="true",
+                        # This fixture serialises both platforms' fake image streams.
+                        # Allow host scheduling stalls; expiry is checked separately.
+                        environment_timeout_s=5.0,
+                        visual_timeout_s=5.0,
+                        thermal_timeout_s=5.0,
                     ),
                 )
                 start(
@@ -181,6 +188,7 @@ def main():
                         image_topic="/" + robot + "/camera/image",
                         output_topic=root + "/visual_cue",
                         legacy_topic=root + "/legacy_visual",
+                        image_timeout_s=5.0,
                     ),
                 )
                 start(
@@ -189,12 +197,13 @@ def main():
                     dict(
                         image_topic="/" + robot + "/thermal/image",
                         output_topic=root + "/thermal_cue",
+                        image_timeout_s=5.0,
                     ),
                 )
             start(
                 "mission_manager_node",
                 "mission_dual_test",
-                dict(wind_dwell_s=0.4, drone_enabled="true"),
+                dict(wind_dwell_s=0.4, drone_enabled="true", reading_timeout_s=5.0, wind_timeout_s=5.0),
             )
             assert client.wait_for_service(
                 timeout_sec=15

@@ -13,7 +13,7 @@ bash scripts/validate_all.sh
 
 This compiles the actual pure C++ perception, mission and numerical libraries,
 runs scene/replay Python checks, and generates six-scenario synthetic metrics.
-Expected current result: 79 perception + 54 mission + 45 system checks and eight
+Expected current result: 79 perception + 61 mission + 45 system checks and eight
 Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
 
 ## 2. Clean native build and unit/transport tests
@@ -31,7 +31,10 @@ The suite includes existing plume, search, YAML patrol and Nav2 action tests, th
 pure regressions, scene/replay checks, and ROS perception, mission, search and motion transport tests. The latter test
 real perception/mission nodes with controlled messages, both platform confirmation
 paths, wind selection, stale/IR loss, vision-only rejection and E-stop. ROS tests
-are serialised to avoid shared-topic collisions. They do not launch Gazebo.
+include a 250 ms delayed environmental stream and confirmed-source refinement,
+stable incident IDs, reset isolation, bounded fallback and unsafe-wind holds. They
+are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
+of host scheduling jitter; dedicated expiry tests retain production limits.
 
 ## 3. Native scene/sensor/controller integration
 

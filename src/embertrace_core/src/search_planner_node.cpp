@@ -18,6 +18,7 @@
 #include "embertrace_core/source_estimator.hpp"
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
+#include "embertrace_interfaces/msg/fire_alert.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
 #include "nav_msgs/msg/occupancy_grid.hpp"
@@ -93,6 +94,17 @@ class SearchPlannerNode : public rclcpp::Node {
     map_subscription_ = create_subscription<nav_msgs::msg::OccupancyGrid>(
         map_topic_, rclcpp::QoS(1).transient_local().reliable(),
         std::bind(&SearchPlannerNode::on_map, this, std::placeholders::_1));
+    alert_subscription_ = create_subscription<embertrace_interfaces::msg::FireAlert>(
+        "/embertrace/fire_alert", rclcpp::QoS(1).transient_local(),
+        [this](embertrace_interfaces::msg::FireAlert::SharedPtr message) {
+          const double age = (now() - rclcpp::Time(message->header.stamp)).seconds();
+          if (message->confirmed && !message->source_resolved && message->platform == platform_ &&
+              message->alert_id > last_confirmed_alert_ && age >= 0 && age <= 2 && search_state(state_)) {
+            last_confirmed_alert_ = message->alert_id;
+            search_start_ = now();
+            have_search_start_ = true;
+          }
+        });
     watchdog_ = create_wall_timer(1s, std::bind(&SearchPlannerNode::check_timeout, this));
   }
 
@@ -383,7 +395,7 @@ class SearchPlannerNode : public rclcpp::Node {
   }
 
   std::uint8_t state_{MissionState::IDLE}, platform_{MissionState::PLATFORM_NONE};
-  std::uint64_t epoch_{0};
+  std::uint64_t epoch_{0}, last_confirmed_alert_{0};
   double altitude_decay_m_{8}, ambient_temperature_{22}, baseline_smoke_{1};
   int cast_count_{0};
   bool have_reading_{false};
@@ -426,6 +438,7 @@ class SearchPlannerNode : public rclcpp::Node {
   rclcpp::Publisher<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr estimate_publisher_;
   rclcpp::Subscription<MissionState>::SharedPtr state_subscription_;
   rclcpp::Subscription<Reading>::SharedPtr reading_subscription_;
+  rclcpp::Subscription<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_subscription_;
   rclcpp::Subscription<nav_msgs::msg::OccupancyGrid>::SharedPtr map_subscription_;
   rclcpp::TimerBase::SharedPtr watchdog_;
 };

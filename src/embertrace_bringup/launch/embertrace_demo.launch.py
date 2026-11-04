@@ -279,6 +279,7 @@ def generate_launch_description():
                         "require_thermal_confirmation": LaunchConfiguration(
                             "use_thermal"
                         ),
+                        "localise_before_hold": True,
                         "drone_enabled": LaunchConfiguration("use_drone"),
                         "rover_enabled": LaunchConfiguration("use_rover"),
                     },

@@ -123,7 +123,7 @@ C1 IR acceptance. Do not use that setting to claim complete perception acceptanc
 - **79 perception regression assertions passed**, covering legacy smoke behaviour, independent
   CO2, IR decoding/clusters/byte order/Celsius floats, frame persistence, temporal
   rejections, camera expiry, freeze/recovery and evidence gating.
-- **54 mission policy checks, 45 system logic checks and eight Python tests passed**.
+- **61 mission policy checks, 45 system logic checks and eight Python tests passed**.
   The numerical ten-seed source-fit median error is 0.282843 m; these are not
   autonomous mission trials. See completion-handover.md for the requirement matrix.
 - C++ compilation uses C++17 and `-Wall -Wextra -Wpedantic -Werror`.

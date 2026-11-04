@@ -56,12 +56,12 @@ source-sampling fix, and ported standalone launch/preflight/control checks.
 Fresh merged revision:
 
 - Repository validation and strict standalone compilation passed.
-- Perception: 79 checks; mission policy: 54 checks including standalone
-  availability and verification retry; system logic: 41 checks; Python: eight tests passed.
+- Perception: 79 checks; mission policy: 61 checks including standalone
+  availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **56 tests, zero errors/failures/skips**, including
+- Full native suite passed: **58 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/fresh-native-tests.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/source-refinement-native-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance is
   now includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -96,3 +96,21 @@ policy):
 Numerical ten-seed fits are unit evidence, not ten autonomous missions. Generated
 recordings and compiler/test logs remain under ignored `log/`. These results do
 not establish physical robot performance.
+
+The camera-timing fix retains bounded causal image history. It reproduced a
+250 ms delayed-stream failure in the old binary and passes that DDS case in the
+new binary. The fixture now allows five seconds of host scheduling jitter after
+diagnostics found a 2.4-second fixture delivery stall; dedicated expiry checks
+retain production limits. Three consecutive delayed fixture runs passed.
+Address/undefined-behaviour sanitizers also passed the 45 system-logic checks.
+
+Twelve fresh Gazebo recordings (six scenarios, training/held-out seeds, both
+vehicles) passed and were replayed with the timing fix. Both platforms detected
+fire/dropout; the four negative scenarios had zero confirmed-fire false positives.
+These stationary fixtures do not establish autonomous source accuracy.
+
+The autonomous baseline drone trial 300 completed detection, return and landing
+with a resolved source error of 0.10 m. Rover trial 301 detected and returned but
+its source remained unresolved. The current refinement flow emits the first
+critical alert immediately and continues bounded tracking, retaining the same
+incident ID for a later source update. A fresh rover acceptance run follows.

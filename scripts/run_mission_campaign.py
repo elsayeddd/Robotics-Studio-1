@@ -13,6 +13,7 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from nav_msgs.msg import Odometry
+from geometry_msgs.msg import PoseWithCovarianceStamped
 from embertrace_interfaces.msg import FireAlert, MissionState, TrialTruth
 from embertrace_interfaces.srv import OperatorCommand
 
@@ -46,6 +47,8 @@ def trial(args, output, number):
         false_alerts=0,
         early_detection=False,
         recoveries=0,
+        states=[],
+        latest_estimate=None,
         error=None,
     )
     rclpy.init()
@@ -59,11 +62,13 @@ def trial(args, output, number):
         "start": None,
         "finished": False,
         "last_phase": None,
+        "alert_ids": set(),
     }
     transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
     def state(message):
         previous = messages["last_phase"]
+        if message.state != previous: result["states"].append(message.state_name)
         if previous == MissionState.RECOVER and message.state == MissionState.TRACK:
             result["recoveries"] += 1
         messages["last_phase"] = message.state
@@ -74,18 +79,22 @@ def trial(args, output, number):
     def alert(message):
         if messages["start"] is None or not message.confirmed:
             return
-        result["alerts"] += int(message.confirmed)
-        result["false_alerts"] += int(message.confirmed and args.scenario == "no_fire")
+        new_incident = message.alert_id not in messages["alert_ids"]
+        messages["alert_ids"].add(message.alert_id)
+        result["alerts"] += int(new_incident)
+        result["false_alerts"] += int(new_incident and args.scenario == "no_fire")
         result["early_detection"] |= message.confirmed and messages["onset"] is None
         messages["alert"] = message
         result["source_resolved"] = message.source_resolved
+        point = message.estimated_source.pose.position
+        result["reported_position"] = [point.x, point.y]
         if message.source_resolved:
             point = message.estimated_source.pose.position
             # Source coordinates are used only to score the recorded estimate.
             result["source_error_m"] = math.hypot(
                 point.x - args.source_x, point.y - args.source_y
             )
-        if messages["onset"] is not None:
+        if messages["onset"] is not None and result["detection_latency_s"] is None:
             stamp = message.header.stamp.sec + message.header.stamp.nanosec / 1e9
             result["detection_latency_s"] = stamp - messages["onset"]
 
@@ -106,8 +115,14 @@ def trial(args, output, number):
                 message.header.stamp.sec + message.header.stamp.nanosec / 1e9
             )
 
+    def estimate(message):
+        p = message.pose.pose.position
+        c = message.pose.covariance
+        result["latest_estimate"] = dict(x=p.x, y=p.y, variance_x=c[0], variance_y=c[7])
+
     root = "/embertrace" if robot == "husky1" else "/drone1"
     subscriptions = [
+        node.create_subscription(PoseWithCovarianceStamped, "/embertrace/source_estimate", estimate, 10),
         node.create_subscription(
             MissionState, "/embertrace/mission_state", state, transient
         ),
@@ -148,6 +163,7 @@ def trial(args, output, number):
         deadline = time.monotonic() + args.wall_timeout
         pending = None
         last_attempt = -10
+        last_report = time.monotonic()
         try:
             while time.monotonic() < deadline:
                 if process.poll() is not None:
@@ -155,6 +171,11 @@ def trial(args, output, number):
                 rclpy.spin_once(node, timeout_sec=0.05)
                 now_s = node.get_clock().now().nanoseconds / 1e9
                 mission = messages["state"]
+                if time.monotonic() - last_report >= 15:
+                    print(json.dumps(dict(trial=name, state=mission.state_name if mission else None,
+                          detail=mission.detail if mission else None, path_length_m=result["path_length_m"],
+                          mission_time_s=result["mission_time_s"])), flush=True)
+                    last_report = time.monotonic()
                 if pending is not None and pending.done():
                     response = pending.result()
                     if response.accepted:

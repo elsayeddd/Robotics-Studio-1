@@ -73,6 +73,7 @@ class PerceptionNode : public rclcpp::Node {
               !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
               input->sample_pose.header.stamp != input->header.stamp) {
             ++adapter_rejected_;
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000, "Rejected environmental pose/frame alignment");
             filter_->invalidate_environment();
             publish_status();
             return;
@@ -82,6 +83,14 @@ class PerceptionNode : public rclcpp::Node {
                                input->smoke_ppm, input->temperature_c, input->wind_speed_mps,
                                input->wind_direction_rad, input->co2_ppm, input->co2_valid},
                               now().seconds(), steady());
+          const double acquisition = input->header.stamp.sec + input->header.stamp.nanosec * 1e-9;
+          if (!result) {
+            RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                "Rejected acquisition %.9f after %.9f (age %.3fs)",
+                acquisition, last_accepted_stamp_, now().seconds() - acquisition);
+          } else {
+            last_accepted_stamp_ = acquisition;
+          }
           if (result && result->valid) {
             auto out = *input;
             // Preserve acquisition timestamps; downstream age checks must see latency.
@@ -150,6 +159,7 @@ class PerceptionNode : public rclcpp::Node {
   std::string expected_camera_frame_;
   std::uint64_t adapter_rejected_{0};
   bool co2_valid_{false};
+  double last_accepted_stamp_{-1};
   double latest_wind_{0}, drone_wind_limit_{5}, rover_wind_limit_{12};
   std::unique_ptr<PerceptionFilter> filter_;
   rclcpp::Publisher<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr publisher_;

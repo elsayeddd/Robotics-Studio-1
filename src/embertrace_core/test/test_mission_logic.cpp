@@ -16,9 +16,11 @@ void require(bool value, const char* detail) {
 struct Fixture {
   MissionLogic logic;
   double time{1}, wall{100}, wind_speed{2.5};
-  explicit Fixture(bool drone = true, bool rover = true) : logic(configuration(drone, rover)) {}
-  static MissionConfig configuration(bool drone, bool rover) {
+  explicit Fixture(bool drone = true, bool rover = true, bool localise = false) : logic(configuration(drone, rover, localise)) {}
+  static MissionConfig configuration(bool drone, bool rover, bool localise) {
     MissionConfig c;
+    c.localise_before_hold = localise;
+    c.localisation_timeout_s = 3;
     c.drone_enabled = drone;
     c.rover_enabled = rover;
     c.wind_dwell_s = .4;
@@ -65,6 +67,28 @@ void test() {
   require(f.logic.snapshot().phase == MissionPhase::Return, "Other robot ended selected return");
   f.logic.arrived(Platform::Drone, f.time, f.wall);
   require(f.logic.snapshot().phase == MissionPhase::Idle, "Return arrival did not end mission");
+  Fixture location(true, true, true);
+  location.ready();
+  require(location.command("START"), "Localisation mission could not start");
+  for (int i = 0; i < 15; ++i) location.step(false, true);
+  require(location.logic.snapshot().confirmed && location.logic.snapshot().alert_sequence == 1,
+          "Confirmed fire was hidden while its source was unresolved");
+  require(location.logic.snapshot().phase == MissionPhase::Track && location.logic.snapshot().motion_allowed,
+          "Confirmation stopped spatial sampling before source resolution");
+  location.time += .2; location.wall += .2;
+  location.logic.wind(2.5, location.time, location.time, location.wall);
+  auto resolved = location.reading(true); resolved.source_resolved = true;
+  location.logic.evidence(Platform::Drone, resolved, location.time, location.wall);
+  require(location.logic.snapshot().phase == MissionPhase::Alert && !location.logic.snapshot().motion_allowed,
+          "Resolved source did not end localisation motion");
+  require(location.logic.snapshot().alert_sequence == 1, "Source update counted a second fire");
+  Fixture unresolved(true, true, true);
+  unresolved.ready(); unresolved.command("START");
+  for (int i = 0; i < 15; ++i) unresolved.step(false, true);
+  for (int i = 0; i < 20; ++i) unresolved.step();
+  require(unresolved.logic.snapshot().phase == MissionPhase::Alert && unresolved.logic.snapshot().confirmed,
+          "Localisation timeout discarded an already confirmed fire");
+  require(unresolved.logic.snapshot().alert_sequence == 1, "Unresolved fallback created another incident");
   Fixture rover(false);
   rover.ready();
   require(rover.command("START"), "Rover-only launch could not start");

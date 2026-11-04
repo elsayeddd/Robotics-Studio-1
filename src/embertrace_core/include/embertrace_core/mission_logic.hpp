@@ -22,6 +22,8 @@ enum class MissionPhase : std::uint8_t {
 };
 
 struct MissionConfig {
+  bool localise_before_hold{false};
+  double localisation_timeout_s{120};
   bool rover_enabled{true}, drone_enabled{true}, require_co2{true}, require_thermal{true};
   double drone_wind_limit{5}, rover_wind_limit{12}, wind_hysteresis{.5};
   double wind_alpha{.35}, wind_dwell_s{2}, sensor_timeout_s{2}, wind_timeout_s{2};
@@ -35,13 +37,13 @@ struct MissionConfig {
 /** Local evidence for one vehicle. Source position/trial truth never enters decisions. */
 struct MissionEvidence {
   double stamp{}, confidence{}, visual{};
-  bool smoke{}, heat{}, co2{}, co2_valid{}, thermal_valid{};
+  bool smoke{}, heat{}, co2{}, co2_valid{}, thermal_valid{}, source_resolved{};
 };
 
 struct MissionSnapshot {
   MissionPhase phase{MissionPhase::Idle};
   Platform active{Platform::None}, preferred{Platform::None};
-  bool motion_allowed{}, manual{}, acknowledged{};
+  bool motion_allowed{}, manual{}, acknowledged{}, confirmed{};
   std::uint64_t epoch{}, alert_sequence{}, warning_sequence{};
   std::string detail{"Waiting for fresh wind and sensors"};
 };
@@ -93,7 +95,7 @@ class MissionLogic {
   Platform wind_choice_{Platform::None}, wind_candidate_{Platform::None};
   bool wind_seen_{false};
   double wind_stamp_{-1}, wind_receipt_{-1}, wind_filtered_{0}, candidate_since_{-1};
-  double verify_retry_wall_{-1};
+  double verify_retry_wall_{-1}, localisation_wall_{-1};
   double last_now_{-1}, phase_since_{0}, phase_wall_{0}, search_wall_{-1};
   std::size_t detections_{0}, confirmations_{0};
 };

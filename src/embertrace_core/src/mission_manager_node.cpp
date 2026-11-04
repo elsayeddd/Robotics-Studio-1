@@ -28,6 +28,8 @@ class MissionManagerNode : public rclcpp::Node {
   using State = embertrace_interfaces::msg::MissionState;
   MissionManagerNode() : Node("mission_manager_node") {
     MissionConfig c;
+    c.localise_before_hold = declare_parameter<bool>("localise_before_hold", false);
+    c.localisation_timeout_s = declare_parameter<double>("localisation_timeout_s", 120);
     c.rover_enabled = declare_parameter<bool>("rover_enabled", true);
     c.drone_enabled = declare_parameter<bool>("drone_enabled", true);
     c.require_co2 = declare_parameter<bool>("require_co2", true);
@@ -128,6 +130,9 @@ class MissionManagerNode : public rclcpp::Node {
     estimate_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
         "/embertrace/source_estimate", 10,
         [this](geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) {
+          const double stamp = seconds(msg->header.stamp);
+          const double age = now().seconds() - stamp;
+          if (stamp < estimate_epoch_start_ || age < -.1 || age > max_estimate_age_) return;
           latest_estimate_ = *msg;
           have_estimate_ = true;
         });
@@ -164,7 +169,7 @@ class MissionManagerNode : public rclcpp::Node {
     }
     MissionEvidence evidence{
         seconds(msg.header.stamp), msg.fused_confidence, msg.visual_confidence, msg.smoke_detected,
-        msg.temperature_anomaly,   msg.co2_detected,     msg.co2_valid,         msg.thermal_valid};
+        msg.temperature_anomaly,   msg.co2_detected,     msg.co2_valid,         msg.thermal_valid, usable_estimate(msg)};
     if (!policy_->evidence(platform, evidence, now().seconds(), wall())) {
       return;
     }
@@ -179,7 +184,9 @@ class MissionManagerNode : public rclcpp::Node {
     const auto s = policy_->snapshot();
     if (s.epoch != last_epoch_) {
       have_estimate_ = false;
+      estimate_epoch_start_ = now().seconds();
       last_epoch_ = s.epoch;
+      if (!s.confirmed) active_alert_id_ = 0;
     }
     State msg;
     msg.header.stamp = now();
@@ -209,32 +216,42 @@ class MissionManagerNode : public rclcpp::Node {
     }
     if (s.warning_sequence > last_warning_ && s.active != Platform::None) {
       last_warning_ = s.warning_sequence;
-      publish_alert(s, false);
+      publish_alert(s, false, ++event_sequence_);
     }
     if (s.alert_sequence > last_alert_ && s.active != Platform::None) {
       last_alert_ = s.alert_sequence;
-      publish_alert(s, true);
+      confirmed_reading_ = latest_[s.active == Platform::Rover ? 0 : 1];
+      active_alert_id_ = ++event_sequence_;
+      publish_alert(s, true, active_alert_id_);
+    } else if (s.phase == MissionPhase::Alert && last_phase_ != MissionPhase::Alert &&
+               active_alert_id_ != 0 && s.confirmed) {
+      // The same incident gains a resolved source (or a bounded fallback); it is
+      // an update, not a second fire detection.
+      publish_alert(s, true, active_alert_id_);
     }
+    last_phase_ = s.phase;
   }
-  void publish_alert(const MissionSnapshot& state, bool confirmed) {
-    const auto& r = latest_[state.active == Platform::Rover ? 0 : 1];
+  bool usable_estimate(const Reading& r) const {
+    const double age = now().seconds() - seconds(latest_estimate_.header.stamp);
+    const auto& c = latest_estimate_.pose.covariance;
+    const auto& p = latest_estimate_.pose.pose.position;
+    return have_estimate_ && seconds(latest_estimate_.header.stamp) >= estimate_epoch_start_ && age >= 0 && age <= max_estimate_age_ &&
+           latest_estimate_.header.frame_id == r.sample_pose.header.frame_id &&
+           std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(c[0]) && std::isfinite(c[7]) &&
+           c[0] >= 0 && c[7] >= 0 && std::max(c[0], c[7]) <= max_estimate_stddev_ * max_estimate_stddev_;
+  }
+  void publish_alert(const MissionSnapshot& state, bool confirmed, std::uint64_t id) {
+    const auto& r = confirmed ? confirmed_reading_ : latest_[state.active == Platform::Rover ? 0 : 1];
     embertrace_interfaces::msg::FireAlert msg;
     msg.header.stamp = now();
     msg.header.frame_id = r.sample_pose.header.frame_id;
-    msg.alert_id = ++event_sequence_;
+    msg.alert_id = id;
     msg.platform = static_cast<std::uint8_t>(state.active);
     msg.severity = confirmed ? msg.CRITICAL : msg.WARNING;
     msg.confirmed = confirmed;
     msg.confidence = r.fused_confidence;
     msg.estimated_source = r.sample_pose;
-    const double age = now().seconds() - seconds(latest_estimate_.header.stamp);
-    const auto& c = latest_estimate_.pose.covariance;
-    const auto& p = latest_estimate_.pose.pose.position;
-    msg.source_resolved = have_estimate_ && age >= 0 && age <= max_estimate_age_ &&
-                          latest_estimate_.header.frame_id == r.sample_pose.header.frame_id &&
-                          std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(c[0]) &&
-                          std::isfinite(c[7]) && c[0] >= 0 && c[7] >= 0 &&
-                          std::max(c[0], c[7]) <= max_estimate_stddev_ * max_estimate_stddev_;
+    msg.source_resolved = usable_estimate(r);
     if (msg.source_resolved) {
       msg.estimated_source.header = latest_estimate_.header;
       msg.estimated_source.pose = latest_estimate_.pose.pose;
@@ -259,8 +276,12 @@ class MissionManagerNode : public rclcpp::Node {
   }
   std::unique_ptr<MissionLogic> policy_;
   std::array<Reading, 2> latest_;
+  Reading confirmed_reading_;
   geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
   bool have_estimate_{false};
+  MissionPhase last_phase_{MissionPhase::Idle};
+  std::uint64_t active_alert_id_{0};
+  double estimate_epoch_start_{0};
   double max_estimate_age_{5}, max_estimate_stddev_{4};
   std::uint64_t last_epoch_{0}, last_alert_{0}, last_warning_{0}, event_sequence_{0};
   std::string last_event_;
