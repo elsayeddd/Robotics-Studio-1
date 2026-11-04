@@ -62,8 +62,8 @@ Fresh merged revision:
 - Full native suite passed: **58 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
   downwind search, Nav2 actions and waypoint recovery (`log/source-refinement-native-acceptance.log`).
-- Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance is
-  now includes passing standalone rover/drone and automatic-mode motion, pause/
+- Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
+  includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
   `log/fresh-automatic-mode`). The automatic check confirmed the unselected
   rover stayed still. The initial failed runs are retained.
@@ -114,3 +114,10 @@ with a resolved source error of 0.10 m. Rover trial 301 detected and returned bu
 its source remained unresolved. The current refinement flow emits the first
 critical alert immediately and continues bounded tracking, retaining the same
 incident ID for a later source update. A fresh rover acceptance run follows.
+
+The refined rover trial 301 now completes detection, source refinement and
+automatic return: source error 0.1414 m, 203.6 simulated seconds and 77.73 m
+travelled (`log/rover-source-refinement`). Its incident count remains one.
+Manual command selection/release passed through both real ROS controllers
+(`log/manual-motion-acceptance.log`). Healthy/burning/burnt changes also passed in
+the dense world (`log/dense-scene-acceptance`).

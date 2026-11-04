@@ -90,3 +90,12 @@ Manually inspect collisions and map/TF, which the metrics script cannot certify.
 Include image occlusion, tree transitions, wind threshold noise, missing/frozen
 streams, battery return, goal cancellation, manual release/focus loss, alert ACK,
 RESET and E-stop. Repeat in the dense world after the small world passes.
+
+`run_mission_campaign.py` records controller and harness revisions separately.
+It deduplicates incident IDs, records the first confirmation timestamp and keeps
+source-resolution latency separate. `early_detection` means confirmation before
+entry into the evaluation radius; remote IR may legitimately do that. Detection
+latency is zero if already confirmed on entry and otherwise starts at that local
+exposure. Missing exposure/estimates remain explicit. Use `ros_patrol_trials.py`
+for the stricter rover two-loop check: no skipped stops, no false critical alerts
+and automatic measured return, without an operator RETURN request.

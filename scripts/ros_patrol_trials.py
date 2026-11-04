@@ -89,7 +89,6 @@ def main():
                     if elapsed > args.max_duration or process.poll() is not None: raise RuntimeError('Patrol mission deadline or launch exit')
                 assert result['closed_loops'] >= args.loops, 'Patrol loops did not complete'
             # The mission policy automatically returns after its configured two loops.
-            if current['state'] not in ('RETURN_TO_BASE', 'IDLE'): command('RETURN')
             deadline = time.monotonic() + 120
             while time.monotonic() < deadline and current['state'] != 'IDLE': rclpy.spin_once(node, timeout_sec=.1)
             assert current['state'] == 'IDLE' and current['pose'] is not None, 'Patrol did not park in IDLE'

@@ -23,6 +23,7 @@ def main():
     rclpy.init(); node = Node('motion_integration_test')
     goal = node.create_publisher(PoseStamped, '/drone1/navigation_goal', 10)
     command = node.create_publisher(Twist, '/husky1/autonomy_cmd_vel', 10)
+    manual = node.create_publisher(Twist, '/embertrace/manual_cmd_vel', 10)
     mission = node.create_publisher(MissionState, '/embertrace/mission_state',
         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
     clock = node.create_publisher(Clock, '/clock', 10)
@@ -36,7 +37,7 @@ def main():
         for robot in ('husky1', 'drone1')]
     processes, handles = [], []
     simulated = 100.
-    def pump(seconds, platform=MissionState.PLATFORM_DRONE, allowed=True, streams=True, frozen=False, mode=MissionState.PATROL, target=False):
+    def pump(seconds, platform=MissionState.PLATFORM_DRONE, allowed=True, streams=True, frozen=False, mode=MissionState.PATROL, target=False, manual_mode=False, manual_command=False):
         nonlocal simulated
         deadline = time.monotonic() + seconds; next_sample = 0
         while time.monotonic() < deadline:
@@ -49,7 +50,7 @@ def main():
                     state = MissionState(); state.header.stamp = value.clock
                     state.state = mode if allowed else state.EMERGENCY_STOP
                     state.active_platform = platform; state.mission_epoch = 1
-                    state.motion_allowed = allowed; mission.publish(state)
+                    state.motion_allowed = allowed and not manual_mode; state.manual_control = manual_mode; mission.publish(state)
                     laser = LaserScan(); laser.header.stamp = value.clock
                     laser.range_min = .1; laser.range_max = 20.; laser.ranges = [10.]
                     scan.publish(laser)
@@ -63,6 +64,8 @@ def main():
                         request.pose.position.x = -10.; request.pose.position.y = -12.
                         request.pose.position.z = 8.; goal.publish(request)
                     velocity = Twist(); velocity.linear.x = .4; command.publish(velocity)
+                    if manual_command:
+                        velocity.linear.x = .3; manual.publish(velocity)
                 next_sample = time.monotonic() + .05
             rclpy.spin_once(node, timeout_sec=.01)
     def speed(robot):
@@ -88,12 +91,22 @@ def main():
         assert speed('drone1') > .1 and abs(velocities['drone1'][1].linear.y) < 1e-6, 'Aerial goal was not followed'
         pump(3.5, mode=MissionState.TRACK)
         assert speed('drone1') < 1e-6, 'Stale aerial goal remained active'
+        pump(.4, platform=MissionState.PLATFORM_ROVER, manual_mode=True)
+        assert all(speed(r) < 1e-6 for r in velocities), 'Autonomy bypassed manual input selection'
+        pump(.4, platform=MissionState.PLATFORM_ROVER, manual_mode=True, manual_command=True)
+        assert speed('husky1') > .1 and speed('drone1') < 1e-6, 'Selected rover manual input failed'
+        pump(.9, platform=MissionState.PLATFORM_ROVER, manual_mode=True)
+        assert all(speed(r) < 1e-6 for r in velocities), 'Released rover manual input remained active'
+        pump(.4, manual_mode=True, manual_command=True)
+        assert speed('drone1') > .1 and speed('husky1') < 1e-6, 'Selected drone manual input failed'
+        pump(.9, manual_mode=True)
+        assert all(speed(r) < 1e-6 for r in velocities), 'Released drone manual input remained active'
         pump(.4, allowed=False)
         assert all(speed(r) < 1e-6 for r in velocities), 'Motion-disallowed state failed'
         pump(.4)
         pump(2., streams=False, frozen=True)
         assert all(speed(r) < 1e-6 for r in velocities), 'Frozen ROS time defeated receipt watchdogs'
-        print('Motion DDS integration passed: vehicle selection, aerial investigation goals/expiry, state inhibition and frozen-clock heartbeat expiry', flush=True)
+        print('Motion DDS integration passed: vehicle selection, aerial investigation goals/expiry, manual selection/release, state inhibition and frozen-clock heartbeat expiry', flush=True)
     finally:
         for process in processes:
             if process.poll() is None: os.killpg(process.pid, signal.SIGINT)

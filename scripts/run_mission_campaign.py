@@ -35,12 +35,16 @@ def trial(args, output, number):
     result = dict(
         trial=name,
         source_revision=args.source_revision,
+        harness_revision=args.harness_revision,
         seed=seed,
         platform=robot,
         success=False,
         mission_time_s=None,
         path_length_m=0.0,
         detection_latency_s=None,
+        source_resolution_latency_s=None,
+        first_confirmation_stamp_s=None,
+        local_exposure_stamp_s=None,
         source_error_m=None,
         source_resolved=False,
         alerts=0,
@@ -63,6 +67,7 @@ def trial(args, output, number):
         "finished": False,
         "last_phase": None,
         "alert_ids": set(),
+        "first_confirmation": None,
     }
     transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
 
@@ -83,7 +88,13 @@ def trial(args, output, number):
         messages["alert_ids"].add(message.alert_id)
         result["alerts"] += int(new_incident)
         result["false_alerts"] += int(new_incident and args.scenario == "no_fire")
-        result["early_detection"] |= message.confirmed and messages["onset"] is None
+        confirmation_stamp = message.header.stamp.sec + message.header.stamp.nanosec / 1e9
+        if messages["first_confirmation"] is None:
+            messages["first_confirmation"] = confirmation_stamp
+            result["first_confirmation_stamp_s"] = confirmation_stamp
+        result["early_detection"] = messages["onset"] is None or messages["first_confirmation"] < messages["onset"]
+        if message.source_resolved:
+            result["source_resolution_latency_s"] = confirmation_stamp - messages["first_confirmation"]
         messages["alert"] = message
         result["source_resolved"] = message.source_resolved
         point = message.estimated_source.pose.position
@@ -94,9 +105,8 @@ def trial(args, output, number):
             result["source_error_m"] = math.hypot(
                 point.x - args.source_x, point.y - args.source_y
             )
-        if messages["onset"] is not None and result["detection_latency_s"] is None:
-            stamp = message.header.stamp.sec + message.header.stamp.nanosec / 1e9
-            result["detection_latency_s"] = stamp - messages["onset"]
+        if messages["onset"] is not None:
+            result["detection_latency_s"] = max(0, messages["first_confirmation"] - messages["onset"])
 
     def pose(message):
         p = message.pose.pose.position
@@ -114,6 +124,10 @@ def trial(args, output, number):
             messages["onset"] = (
                 message.header.stamp.sec + message.header.stamp.nanosec / 1e9
             )
+            result["local_exposure_stamp_s"] = messages["onset"]
+            if messages["first_confirmation"] is not None:
+                result["early_detection"] = messages["first_confirmation"] < messages["onset"]
+                result["detection_latency_s"] = max(0, messages["first_confirmation"] - messages["onset"])
 
     def estimate(message):
         p = message.pose.pose.position
@@ -254,6 +268,7 @@ def main():
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     args.source_revision = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", "src"], text=True).strip()
+    args.harness_revision = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", "scripts/run_mission_campaign.py"], text=True).strip()
     results = [trial(args, output, i) for i in range(args.trials)]
     errors = sorted(
         r["source_error_m"] for r in results if r["source_error_m"] is not None

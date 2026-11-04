@@ -17,6 +17,7 @@ from embertrace_interfaces.srv import SetFireState
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--world-file', default='embertrace_forest.sdf')
     parser.add_argument('--output', default='log/scene-integration')
     args = parser.parse_args()
     output = Path(args.output)
@@ -45,12 +46,13 @@ def main():
                 return
         raise AssertionError('Scene/sensor readiness deadline exceeded')
 
-    result = {}
+    result = {"world_file": args.world_file}
     with (output / 'launch.log').open('w') as log:
         process = subprocess.Popen([
             'ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
             'mission_platform:=drone', 'use_nav2:=false', 'use_rviz:=false',
             'use_dashboard:=false', 'gazebo_gui:=false', 'scenario:=no_fire',
+            f'world_file:={args.world_file}',
             'drone_x:=12.0', 'drone_y:=5.0', 'drone_z:=8.0'],
             stdout=log, stderr=subprocess.STDOUT, env=environment, start_new_session=True)
         try:
