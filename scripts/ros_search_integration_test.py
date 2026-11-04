@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 """Check the live search node approaches a fitted fire from safe downwind space."""
+import argparse
 import math
 import os
 from pathlib import Path
@@ -16,6 +17,9 @@ from std_msgs.msg import String
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--strict-source-gate', action='store_true')
+    args = parser.parse_args()
     output = Path('log/search-integration'); output.mkdir(parents=True, exist_ok=True)
     rclpy.init(); node = Node('search_integration_test')
     environment = node.create_publisher(EnvironmentalReading, '/embertrace/active_environment', qos_profile_sensor_data)
@@ -57,6 +61,7 @@ def main():
     executable = Path(get_package_prefix('embertrace_core')) / 'lib/embertrace_core/search_planner_node'
     with (output / 'search.log').open('w') as log:
         process = subprocess.Popen([str(executable), '--ros-args', '-p', 'require_map:=false',
+            '-p', 'max_estimate_stddev_m:=' + ('0.01' if args.strict_source_gate else '4.0'),
             '-p', 'goal_interval_s:=0.2', '-p', 'estimate_interval_s:=0.2',
             '-p', 'signal_loss_timeout_s:=1.0', '-p', 'search_timeout_s:=3.0'],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
@@ -76,16 +81,22 @@ def main():
             estimate = received['estimate'].pose.pose.position
             goal = received['goals'][-1].pose.position
             assert math.hypot(estimate.x - 12, estimate.y - 7) < .3, 'Controlled local samples did not fit the source'
-            downwind = (goal.x - estimate.x) * math.cos(wind) + (goal.y - estimate.y) * math.sin(wind)
-            assert downwind > 1., f'Inspection goal is not downwind: {downwind}'
-            assert abs(math.hypot(goal.x - estimate.x, goal.y - estimate.y) - 1.2) < .2, 'Source stand-off lost'
-            assert reading(goal.x, goal.y).smoke_ppm > 30, 'Goal remained in the weak upwind halo'
+            if args.strict_source_gate:
+                covariance = received['estimate'].pose.covariance
+                assert max(covariance[0], covariance[7]) > .01**2
+                expected = (12.2 + 2 * math.cos(wind + math.pi), 6.8 + 2 * math.sin(wind + math.pi))
+                assert math.hypot(goal.x-expected[0], goal.y-expected[1]) < .2, 'Coarse fit stopped spatial probing'
+            else:
+                downwind = (goal.x - estimate.x) * math.cos(wind) + (goal.y - estimate.y) * math.sin(wind)
+                assert downwind > 1., f'Inspection goal is not downwind: {downwind}'
+                assert abs(math.hypot(goal.x - estimate.x, goal.y - estimate.y) - 1.2) < .2, 'Source stand-off lost'
+                assert reading(goal.x, goal.y).smoke_ppm > 30, 'Goal remained in the weak upwind halo'
             state(MissionState.PAUSED); received['goals'].clear(); spin(.5, (12.2, 6.8))
             assert not received['goals'], 'Paused search continued issuing goals'
             state(MissionState.PATROL); spin(.1, (10., 5.)); spin(1.3)
             received['status'].clear(); state(MissionState.INVESTIGATE); spin(1.1, (12.2, 6.8))
             assert 'SIGNAL_LOST' not in received['status'], 'Previous investigation signal age aborted the new search'
-            print('Search DDS integration passed: fitted source, downwind stand-off, pause and fresh investigation timer', flush=True)
+            print('Search DDS integration passed: fitted source, quality-gated probing/stand-off, pause and fresh investigation timer', flush=True)
         finally:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)

@@ -59,9 +59,9 @@ Fresh merged revision:
 - Perception: 79 checks; mission policy: 61 checks including standalone
   availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **61 tests, zero errors/failures/skips**, including
+- Full native suite passed: **62 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/final-native-61-acceptance.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/final-native-62-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
   includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -160,3 +160,17 @@ check also passes the actual mission simulator/manager pipeline: live wind and
 battery settings, depletion/threshold return, unsafe/missing wind and invalid
 parameter rejection.
 The expanded full native suite passes all 61 checks with zero failures or skips.
+
+Drone 600 in the fourth cohort completed alert/return/landing but retained an
+unresolved source: its widest fitted variance was 9.156 m², just above the new
+9 m² manager gate. The planner still had a fixed 16 m² approach gate, which let it
+hold at a coarse stand-off instead of gathering another spatial sample. Both
+nodes now use the configured 3 m standard-deviation limit in the full launch.
+The planner keeps probing until its fit meets that limit. A DDS regression fails
+against the old binary and passes after the fix; the cohort remains retained.
+
+GitHub run `41861337601` built successfully and passed all twelve recorded Gazebo
+runs, including the new acquisition producer. Its delayed-stream native test
+attempted START before sensor warmup completed. Both platform fixtures now wait
+for readiness within ten seconds instead of assuming a fixed two-second delay.
+Production expiry and confirmation limits are unchanged.

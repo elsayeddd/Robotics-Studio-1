@@ -11,6 +11,7 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 
@@ -64,6 +65,10 @@ class SearchPlannerNode : public rclcpp::Node {
     estimator_ = std::make_unique<SourceEstimator>(config);
 
     source_standoff_m_ = std::max(0.0, declare_parameter<double>("source_standoff_m", 1.2));
+    max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
+    if (!std::isfinite(max_estimate_stddev_m_) || max_estimate_stddev_m_ <= 0) {
+      throw std::invalid_argument("Source uncertainty limit must be finite and positive");
+    }
     surge_step_m_ = std::max(0.2, declare_parameter<double>("surge_step_m", 2.0));
     cast_step_m_ = std::max(0.2, declare_parameter<double>("cast_step_m", 2.5));
     goal_interval_s_ = std::max(0.2, declare_parameter<double>("goal_interval_s", 2.0));
@@ -298,7 +303,8 @@ class SearchPlannerNode : public rclcpp::Node {
                  std::cos(reading.wind_direction_rad + kPi);
       target_y = anchor.y + side * sweep * std::sin(crosswind) +
                  std::sin(reading.wind_direction_rad + kPi);
-    } else if (estimate_ && std::max(estimate_->variance_x, estimate_->variance_y) < 16.0) {
+    } else if (estimate_ && std::max(estimate_->variance_x, estimate_->variance_y) <=
+                                max_estimate_stddev_m_ * max_estimate_stddev_m_) {
       const double dx = estimate_->x + source_standoff_m_ * std::cos(reading.wind_direction_rad) - position.x;
       const double dy = estimate_->y + source_standoff_m_ * std::sin(reading.wind_direction_rad) - position.y;
       const double distance = std::hypot(dx, dy);
@@ -404,6 +410,7 @@ class SearchPlannerNode : public rclcpp::Node {
   bool have_last_goal_{false};
   bool have_last_estimate_{false};
   double source_standoff_m_{1.2};
+  double max_estimate_stddev_m_{4.0};
   double surge_step_m_{2.0};
   double cast_step_m_{2.5};
   double goal_interval_s_{2.0};

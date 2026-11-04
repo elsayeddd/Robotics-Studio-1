@@ -153,6 +153,9 @@ if(BUILD_TESTING)
   add_test(NAME ros_mission_inputs_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_mission_inputs_test.py)
   set_tests_properties(ros_mission_inputs_integration PROPERTIES TIMEOUT 40 RUN_SERIAL TRUE)
+  add_test(NAME ros_search_quality_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_search_integration_test.py --strict-source-gate)
+  set_tests_properties(ros_search_quality_integration PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
   foreach(integration motion search)
     add_test(NAME ros_${integration}_integration
       COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_${integration}_integration_test.py)

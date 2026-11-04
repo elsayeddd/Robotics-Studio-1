@@ -57,8 +57,9 @@ goals; mission-state timeout policy belongs to the mission manager.
 
 The full launch uses only a recent estimate with at most 3 m standard deviation
 per axis for the resolved alert location (the isolated node default is 4 m).
-If no estimate exists, the alert evidence says the source is unresolved and the
-reported pose is the latest sample location. The uncertainty remains available
+The planner uses the same configured uncertainty gate and continues probing while
+the fit is too broad. An unresolved confirmed alert retains the original
+confirmation sample location and sensor evidence. The uncertainty remains available
 on `/embertrace/source_estimate`.
 
 Build and run the focused unit tests from the repository root:

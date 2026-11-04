@@ -119,6 +119,8 @@ search_planner_node:
     map_topic: /husky1/map
     robot_clearance_m: 0.8
     source_standoff_m: 1.2
+    # Match the manager: keep probing until the fit can resolve an alert.
+    max_estimate_stddev_m: 3.0
     max_map_occupancy: 20
     goal_snap_radius_m: 2.0
     reading_timeout_s: 3.0

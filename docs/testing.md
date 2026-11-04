@@ -119,6 +119,10 @@ software rendering. Required sensor/wind freshness limits still apply throughout
 Resolved source alerts require at most 3 m standard deviation per horizontal axis.
 These are bounded mission settings; localisation accuracy is scored separately
 against hidden truth by the campaign recorder.
+The planner and manager use the same uncertainty limit. The native quality-gate
+regression requires additional spatial probing when the fit is too broad, rather
+than holding indefinitely at a coarse estimate. Platform fixtures wait for actual
+sensor readiness within a bounded deadline before attempting their mission cases.
 
 The November 5 dashboard interaction check also exercised the actual window on
 an isolated X11 display with controlled ROS telemetry. It verified map markers,
