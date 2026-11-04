@@ -62,12 +62,21 @@ public:
     // frame_id_ = declare_parameter<std::string>("frame_id", "husky1_map");
     
     // trying to fix target_frame does not exist error
-    this->declare_parameter<std::string>("map_frame", "husky1_map");
-    this->declare_parameter<std::string>("odom_frame", "husky1_odom");
-    this->declare_parameter<std::string>("odometry_topic", "/husky1/odometry");
-    std::string map_frame_ = this->get_parameter("map_frame").as_string();
-    std::string odom_frame_ = this->get_parameter("odom_frame").as_string();
-    std::string odometry_topic = this->get_parameter("odometry_topic").as_string();
+    // this->declare_parameter<std::string>("map_frame", "husky1_map");
+    // this->declare_parameter<std::string>("odom_frame", "husky1_odom");
+    // this->declare_parameter<std::string>("odometry_topic", "/husky1/odometry");
+    // std::string map_frame_ = this->get_parameter("map_frame").as_string();
+    // std::string odom_frame_ = this->get_parameter("odom_frame").as_string();
+    // std::string odometry_topic = this->get_parameter("odometry_topic").as_string();
+    const auto map_frame_param = this->declare_parameter<std::string>("map_frame", "husky1_map");
+    const auto odom_frame_param = this->declare_parameter<std::string>("odom_frame", "husky1_odom");
+    const auto odometry_topic = this->declare_parameter<std::string>("odometry_topic", "/husky1/odometry");
+
+    // Assign the map_frame to the member that's actually used
+    frame_id_ = map_frame_param;
+
+    RCLCPP_INFO(get_logger(), "Configured: map_frame=%s, odom_frame=%s, odom_topic=%s",
+                frame_id_.c_str(), odom_frame_param.c_str(), odometry_topic.c_str());
   
     tf_buffer_ = std::make_unique<tf2_ros::Buffer>(get_clock());
     tf_listener_ = std::make_shared<tf2_ros::TransformListener>(*tf_buffer_);
@@ -179,7 +188,7 @@ private:
     }
   }
 
-  std::string frame_id_{"husky1_map"};
+  std::string frame_id_;
   std::size_t loops_logged_{0};
   std::unique_ptr<WaypointPatrol> patrol_;
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
