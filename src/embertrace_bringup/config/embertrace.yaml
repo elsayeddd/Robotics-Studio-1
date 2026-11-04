@@ -80,7 +80,9 @@ mission_manager_node:
     search_timeout_s: 120.0
     recovery_timeout_s: 20.0
     verify_timeout_s: 15.0
-    return_timeout_s: 120.0
+    # A full forest diagonal plus turns needs this wall-time budget when
+    # software rendering runs the simulator below real time.
+    return_timeout_s: 300.0
     alert_hold_s: 10.0
     low_battery_fraction: 0.2
     require_thermal_confirmation: true
@@ -95,7 +97,7 @@ mission_manager_node:
     required_confirmation_samples: 3
     reading_timeout_s: 2.0
     max_estimate_age_s: 5.0
-    max_estimate_stddev_m: 4.0
+    max_estimate_stddev_m: 3.0
     verify_retry_s: 5.0
 
 search_planner_node:

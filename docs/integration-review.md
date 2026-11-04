@@ -59,9 +59,9 @@ Fresh merged revision:
 - Perception: 79 checks; mission policy: 61 checks including standalone
   availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **60 tests, zero errors/failures/skips**, including
+- Full native suite passed: **61 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/final-native-acceptance.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/final-native-61-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
   includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -136,7 +136,27 @@ briefly stopped advancing its clock. The simulator now publishes each timestamp
 once, while retaining normal replay rejection and frozen-stream expiry downstream.
 The new regression fails against the old producer and passes with the correction,
 including clock advance and simulation restart. I retained both interrupted cohorts.
-The final native run passes all 60 checks. I also corrected two fixture scheduling
+That native run passed all 60 checks. I also corrected two fixture scheduling
 assumptions: initial START waits for actual readiness, and source-refinement sensor
 streams continue while an operator service response is pending. The ten-mission
 campaign and complete two-loop patrol checks will use this tested revision.
+
+I inspected the actual dashboard with controlled ROS telemetry on an isolated
+X11 display (`log/dashboard-interaction`). The map rendered both vehicles and the
+source in the correct positions, and both panels displayed current values.
+Actual clicks verified every operator command, ACK, Return/Reset confirmation
+and cancellation, all three tree states and the wind setting. Manual rover/drone
+axes were correct, with zero motion on release, lost connection or lost focus.
+The window exited successfully. This checks UI wiring and presentation; the
+separate native and Gazebo tests check the controllers' real responses.
+
+The third cohort's drone 400 completed with 0.361 m source error. Rover 401
+resolved a source but hit the 120-wall-second return cap 2.3 m from home; source
+error was 2.126 m. I stopped the cohort and retained its JSON/logs. The forest
+configuration now permits 300 wall seconds for a full diagonal return under
+software rendering, and uses a 3 m source uncertainty gate rather than 4 m.
+Neither change bypasses sensor/wind freshness or a failed source fit. A new DDS
+check also passes the actual mission simulator/manager pipeline: live wind and
+battery settings, depletion/threshold return, unsafe/missing wind and invalid
+parameter rejection.
+The expanded full native suite passes all 61 checks with zero failures or skips.

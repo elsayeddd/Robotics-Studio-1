@@ -33,7 +33,9 @@ real perception/mission nodes with controlled messages, both platform confirmati
 paths, wind selection, stale/IR loss, vision-only rejection and E-stop. ROS tests
 include a 250 ms delayed environmental stream and confirmed-source refinement,
 stable incident IDs, reset isolation, bounded fallback and unsafe-wind holds. They
-are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
+also run the real wind/battery simulator with the manager: live parameter changes,
+depletion/low-battery return, invalid-setting rejection and loss-of-input holds.
+They are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
 of host scheduling jitter; dedicated expiry tests retain production limits.
 
 ## 3. Native scene/sensor/controller integration
@@ -111,3 +113,18 @@ the epoch. It requires exactly one raw/truth acquisition for each timestamp;
 consumer replay rejection and monotonic expiry remain tested separately. The
 rover patrol check records physical visits in route order, including the final
 base closure, as well as loop counters and automatic return.
+
+The forest launch allows 300 wall seconds for return, including turns and slower
+software rendering. Required sensor/wind freshness limits still apply throughout.
+Resolved source alerts require at most 3 m standard deviation per horizontal axis.
+These are bounded mission settings; localisation accuracy is scored separately
+against hidden truth by the campaign recorder.
+
+The November 5 dashboard interaction check also exercised the actual window on
+an isolated X11 display with controlled ROS telemetry. It verified map markers,
+both sensor panels, ACK, every operator command, Return/Reset confirmation and
+cancellation, all three tree buttons and the wind parameter control. Manual
+rover/drone axes returned to zero on button release, connection loss and focus
+loss. Screenshots and the action/assertion log remain in
+`log/dashboard-interaction`; the production controller's acceptance is covered
+separately by the DDS and Gazebo tests above.

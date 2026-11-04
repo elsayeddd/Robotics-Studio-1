@@ -27,7 +27,7 @@ For each `*_node.cpp`, read in this order:
 2. Publishers and subscribers;
 3. Callback functions;
 4. Timer callback, if present;
-5. `TODO(student)` comments;
+5. Validation, watchdog and recovery conditions;
 6. `main()` at the bottom.
 
 Read the integration review before changing shared launch, message or mission interfaces. The main branch now includes the navigation, patrol and perception implementations; use the final acceptance roadmap to identify remaining evidence.

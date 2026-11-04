@@ -11,7 +11,7 @@ by measured acceptance results, not by the existence of source files.
 | Navigation execution | Namespaced action client, TF conversion, bounds, cancellation | Mock action-server regressions and actual rover motion |
 | Ground patrol | YAML route, proximity/action feedback, retries and return | Two complete measured loops, pause/resume and return |
 | Aerial mission | Independent sweep, local investigation, source fit and return | Standalone flight, investigation, alert, return and stop |
-| Coordinated mission | Scout hints; primary rover confirmation | Both vehicles move and both arrive before RETURN completes |
+| Automatic deployment | Stable wind selects one available vehicle and its local evidence | Selected vehicle moves and returns; the unselected vehicle remains held |
 | Search/source localisation | Bounded local history, fitted covariance, free-space ground goals | Ten seeded autonomous trials; median resolved-source error below 2 m |
 | Perception | Timestamp-aware smoke/heat/CO2 fusion and native IR/RGB evidence | Recorded confusion matrix, availability and latency for at least three scenarios |
 | Mission lifecycle | Search timeout, verification timeout, dropout pause, latched stop | ROS transport state-transition tests and live mission controls |
@@ -26,5 +26,6 @@ complete on the strength of these mathematical-field simulation trials.
 ## Future extensions
 
 Terrain slopes, real camera classifiers, physical sensor drivers, flight-autopilot
-integration, multiple fire sources, battery modelling and dynamic wind remain
-extensions to the demonstrated simulation scope.
+integration, multiple fire sources, physical battery modelling and measured wind
+remain extensions. Simulated battery depletion and live wind parameter changes
+are already integrated.
