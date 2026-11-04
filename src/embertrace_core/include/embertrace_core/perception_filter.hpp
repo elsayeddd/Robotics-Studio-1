@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cstddef>
+#include <deque>
 #include <limits>
 #include <optional>
 
@@ -66,14 +67,17 @@ class PerceptionFilter {
   }
 
  private:
+  struct Cue { double stamp, receipt, value; bool hotspot; };
+  const Cue* aligned(const std::deque<Cue>& history, double sample, double now, double timeout) const;
+  std::deque<Cue> visual_history_, thermal_history_;
   bool check_clock(double now_s);
   void latch(double value, double enter, double exit, bool& latched, std::size_t& count);
   bool fresh(double now, double stamp, double timeout) const;
   PerceptionConfig config_;
   bool initialised_{false}, smoke_latched_{false}, heat_latched_{false}, co2_latched_{false};
-  bool have_stamp_{false}, have_visual_{false}, have_thermal_{false}, thermal_hotspot_{false};
+  bool have_stamp_{false}, have_visual_{false}, have_thermal_{false};
   double smoke_{}, temperature_{}, co2_{}, last_stamp_{-1.0}, last_clock_{-1.0};
-  double visual_stamp_{-1.0}, visual_{0.0}, thermal_stamp_{-1.0}, thermal_peak_{0.0};
+  double visual_stamp_{-1.0}, thermal_stamp_{-1.0};
   double steady_{-1.0}, receipt_{-1.0}, visual_receipt_{-1.0}, thermal_receipt_{-1.0};
   bool sample_co2_valid_{false};
   std::size_t rejected_{0}, consecutive_{0}, smoke_count_{0}, heat_count_{0}, co2_count_{0};

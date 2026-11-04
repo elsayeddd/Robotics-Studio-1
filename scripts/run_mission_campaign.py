@@ -28,11 +28,12 @@ def stop(process):
 
 
 def trial(args, output, number):
-    robot = "drone1" if number % 2 == 0 else "husky1"
+    robot = ("drone1" if number % 2 == 0 else "husky1") if args.platform == "alternating" else ("drone1" if args.platform == "drone" else "husky1")
     seed = args.seed_start + number
     name = f"{robot}_{seed}"
     result = dict(
         trial=name,
+        source_revision=args.source_revision,
         seed=seed,
         platform=robot,
         success=False,
@@ -67,7 +68,7 @@ def trial(args, output, number):
             result["recoveries"] += 1
         messages["last_phase"] = message.state
         messages["state"] = message
-        if messages["start"] is not None and message.state == MissionState.IDLE:
+        if messages["start"] is not None and previous == MissionState.RETURN_TO_BASE and message.state == MissionState.IDLE:
             messages["finished"] = True
 
     def alert(message):
@@ -126,7 +127,7 @@ def trial(args, output, number):
             "launch",
             "embertrace_bringup",
             "embertrace_demo.launch.py",
-            "use_drone:=true",
+            "mission_platform:=" + ("drone" if robot == "drone1" else "rover"),
             "use_thermal:=true",
             "use_rviz:=false",
             "use_dashboard:=false",
@@ -178,6 +179,8 @@ def trial(args, output, number):
                     last_attempt = time.monotonic()
                 if messages["start"] is not None:
                     result["mission_time_s"] = now_s - messages["start"]
+                    if mission.state in (MissionState.PAUSED, MissionState.EMERGENCY_STOP):
+                        raise RuntimeError("Autonomous mission stopped: " + mission.detail)
                     if messages["finished"]:
                         result["success"] = result["false_alerts"] == 0 and (
                             result["alerts"] > 0
@@ -203,6 +206,7 @@ def trial(args, output, number):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="log/autonomous-campaign")
+    parser.add_argument("--platform", choices=["alternating", "drone", "rover"], default="alternating")
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--seed-start", type=int, default=300)
     parser.add_argument("--sim-timeout", type=float, default=300)
@@ -228,6 +232,7 @@ def main():
         parser.error("Trials and deadlines must be positive")
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
+    args.source_revision = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", "src"], text=True).strip()
     results = [trial(args, output, i) for i in range(args.trials)]
     errors = sorted(
         r["source_error_m"] for r in results if r["source_error_m"] is not None
@@ -242,10 +247,13 @@ def main():
         median_source_error_m=statistics.median(errors) if errors else None,
         results=results,
     )
+    summary["passed"] = summary["successful"] == args.trials and (args.scenario == "no_fire" or (len(errors) == args.trials and summary["median_source_error_m"] < 2))
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
-        f"Recorded {len(results)} autonomous trials; {summary['successful']} succeeded. Failures are retained."
+        f"Recorded {len(results)} autonomous trials; {summary['successful']} completed. Failures are retained."
     )
+
+    raise SystemExit(0 if summary["passed"] else 1)
 
 
 if __name__ == "__main__":

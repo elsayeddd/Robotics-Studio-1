@@ -137,6 +137,9 @@ if(BUILD_TESTING)
   add_test(NAME ros_dual_platform_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_dual_platform_test.py)
   set_tests_properties(ros_dual_platform_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+  add_test(NAME ros_delayed_perception_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_dual_platform_test.py --raw-delay 0.25)
+  set_tests_properties(ros_delayed_perception_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
   set_tests_properties(ros_perception_integration PROPERTIES RUN_SERIAL TRUE)
   foreach(integration motion search)
     add_test(NAME ros_${integration}_integration

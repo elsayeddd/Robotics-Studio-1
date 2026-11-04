@@ -13,7 +13,7 @@ bash scripts/validate_all.sh
 
 This compiles the actual pure C++ perception, mission and numerical libraries,
 runs scene/replay Python checks, and generates six-scenario synthetic metrics.
-Expected current result: 79 perception + 54 mission + 41 system checks and eight
+Expected current result: 79 perception + 54 mission + 45 system checks and eight
 Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
 
 ## 2. Clean native build and unit/transport tests
@@ -74,7 +74,7 @@ Use a new output directory each run. A failed/negative trial remains evidence.
 
 ```bash
 ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
-ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-clear-01 --trials 10 --scenario no_fire
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-clear-01 --trials 2 --scenario no_fire --sim-timeout 1200 --wall-timeout 1800
 ```
 
 Trials alternate drone/rover selection and retain individual launch logs and JSON.

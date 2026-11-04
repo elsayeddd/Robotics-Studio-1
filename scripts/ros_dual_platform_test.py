@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Exercise both real ROS perception pipelines and wind-based mission selection."""
 
+import argparse
 import os
 from pathlib import Path
 import signal
@@ -12,14 +13,19 @@ from rclpy.node import Node
 from rclpy.qos import qos_profile_sensor_data, QoSProfile, DurabilityPolicy
 from geometry_msgs.msg import Vector3Stamped
 from sensor_msgs.msg import Image
-from embertrace_interfaces.msg import EnvironmentalReading, MissionState, FireAlert
+from embertrace_interfaces.msg import EnvironmentalReading, MissionState, FireAlert, PerceptionStatus
 from embertrace_interfaces.srv import OperatorCommand
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--raw-delay', type=float, default=0)
+    args = parser.parse_args()
+    if not 0 <= args.raw_delay <= 1: parser.error('Raw delay must be between zero and one second')
+    pending_raw = []
     rclpy.init()
     node = Node("dual_platform_test")
-    state = {"mission": None, "alerts": []}
+    state = {"mission": None, "alerts": [], "readings": {}, "health": {}}
     transient = QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)
     subscriptions = [
         node.create_subscription(
@@ -35,6 +41,11 @@ def main():
             transient,
         ),
     ]
+    for root in ("/embertrace", "/drone1"):
+        subscriptions.append(node.create_subscription(EnvironmentalReading, root + "/environment",
+            lambda m, root=root: state["readings"].update({root: (m.header.stamp, m.thermal_valid, m.co2_valid, m.fused_confidence)}), qos_profile_sensor_data))
+        subscriptions.append(node.create_subscription(PerceptionStatus, root + "/perception_status",
+            lambda m, root=root: state["health"].update({root: (m.environment_fresh, m.thermal_fresh, m.co2_valid, m.rejected_samples)}), 10))
     wind = node.create_publisher(
         Vector3Stamped, "/embertrace/wind", qos_profile_sensor_data
     )
@@ -78,7 +89,7 @@ def main():
                     reading.co2_ppm = 1500.0 if fires[index] else 420.0
                     reading.co2_valid = True
                     reading.wind_speed_mps = float(speed)
-                    raw[index].publish(reading)
+                    pending_raw.append((time.monotonic() + args.raw_delay, index, reading))
                     frame = ("husky1" if index == 0 else "drone1") + "_camera_link"
                     image = Image()
                     image.header.stamp = stamp
@@ -97,7 +108,21 @@ def main():
                     thermal.data = value.to_bytes(2, "little") * 1024
                     ir[index].publish(thermal)
                 next_sample = time.monotonic() + 0.2
+            while pending_raw and pending_raw[0][0] <= time.monotonic():
+                _, index, reading = pending_raw.pop(0)
+                raw[index].publish(reading)
             rclpy.spin_once(node, timeout_sec=0.02)
+
+    def confirmed(platform, speed, fires):
+        deadline = time.monotonic() + 12
+        previous_id = max((a.alert_id for a in state["alerts"]), default=0)
+        while time.monotonic() < deadline:
+            pump(.2, speed=speed, fires=fires)
+            if (state["mission"] is not None and state["mission"].state == MissionState.ALERT
+                    and any(a.confirmed and a.platform == platform and a.alert_id > previous_id
+                            for a in state["alerts"])):
+                return
+        raise AssertionError(f"No confirmed alert for {platform}; mission={state['mission']}; alerts={state['alerts']}; readings={state['readings']}; health={state['health']}")
 
     def command(text):
         request = OperatorCommand.Request()
@@ -182,19 +207,14 @@ def main():
             assert not state[
                 "alerts"
             ], "Unselected rover evidence confirmed a drone fire"
-            pump(5, fires=(False, True))
-            assert (
-                state["alerts"]
-                and state["alerts"][-1].platform == MissionState.PLATFORM_DRONE
-            )
+            confirmed(MissionState.PLATFORM_DRONE, 2.5, (False, True))
             assert command("E_STOP") and not command("START")
             assert command("RESET")
             pump(2, speed=7)
             assert command("START")
             pump(1, speed=7)
             assert state["mission"].active_platform == MissionState.PLATFORM_ROVER
-            pump(5, speed=7, fires=(True, False))
-            assert state["alerts"][-1].platform == MissionState.PLATFORM_ROVER
+            confirmed(MissionState.PLATFORM_ROVER, 7, (True, False))
             assert command("RESET")
             pump(2, speed=20)
             assert not command("START"), "Unsafe wind permitted deployment"

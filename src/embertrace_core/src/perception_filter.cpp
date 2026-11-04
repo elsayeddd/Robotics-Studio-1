@@ -54,6 +54,8 @@ void PerceptionFilter::invalidate_environment() {
   last_result_ = {};
 }
 void PerceptionFilter::reset() {
+  visual_history_.clear();
+  thermal_history_.clear();
   invalidate_environment();
   have_stamp_ = have_visual_ = have_thermal_ = false;
   last_stamp_ = visual_stamp_ = thermal_stamp_ = last_clock_ = -1;
@@ -90,11 +92,13 @@ void PerceptionFilter::tick(double now, double wall) {
                        (steady_ >= 0 && visual_receipt_ >= 0 &&
                         steady_ - visual_receipt_ > config_.visual_timeout_s))) {
     have_visual_ = false;
+    visual_history_.clear();
   }
   if (have_thermal_ && (!fresh(now, thermal_stamp_, config_.thermal_timeout_s) ||
                         (steady_ >= 0 && thermal_receipt_ >= 0 &&
                          steady_ - thermal_receipt_ > config_.thermal_timeout_s))) {
     have_thermal_ = false;
+    thermal_history_.clear();
   }
 }
 bool PerceptionFilter::fresh(double now, double stamp, double timeout) const {
@@ -117,11 +121,13 @@ bool PerceptionFilter::set_visual(double stamp, double confidence, bool valid, d
   if (!valid || !fresh(now, stamp, config_.visual_timeout_s) || !std::isfinite(confidence) ||
       confidence < 0 || confidence > 1 || stamp <= visual_stamp_) {
     have_visual_ = false;
+    visual_history_.clear();
     return false;
   }
   visual_stamp_ = stamp;
   visual_receipt_ = steady_;
-  visual_ = confidence;
+  visual_history_.push_back({stamp, steady_, confidence, false});
+  if (visual_history_.size() > 32) visual_history_.pop_front();
   have_visual_ = true;
   return true;
 }
@@ -131,14 +137,25 @@ bool PerceptionFilter::set_thermal(double stamp, double peak, bool hotspot, bool
   if (!valid || !fresh(now, stamp, config_.thermal_timeout_s) || !std::isfinite(peak) ||
       peak < -80 || peak > 1000 || stamp <= thermal_stamp_) {
     have_thermal_ = false;
+    thermal_history_.clear();
     return false;
   }
   thermal_stamp_ = stamp;
   thermal_receipt_ = steady_;
-  thermal_peak_ = peak;
-  thermal_hotspot_ = hotspot;
+  thermal_history_.push_back({stamp, steady_, peak, hotspot});
+  if (thermal_history_.size() > 32) thermal_history_.pop_front();
   have_thermal_ = true;
   return true;
+}
+const PerceptionFilter::Cue* PerceptionFilter::aligned(
+    const std::deque<Cue>& history, double sample, double now, double timeout) const {
+  // Independent ROS subscriptions can deliver the next image before an older gas
+  // sample. Keep bounded causal history instead of making that sample unavailable.
+  for (auto it = history.rbegin(); it != history.rend(); ++it) {
+    if (it->stamp <= sample + config_.future_tolerance_s && fresh(now, it->stamp, timeout) &&
+        (steady_ < 0 || it->receipt < 0 || steady_ - it->receipt <= timeout)) return &*it;
+  }
+  return nullptr;
 }
 void PerceptionFilter::latch(double value, double enter, double exit, bool& latched,
                              std::size_t& n) {
@@ -213,12 +230,14 @@ std::optional<PerceptionResult> PerceptionFilter::update(const PerceptionSample&
   r.co2 = s.co2_valid ? co2_ : 0;
   r.smoke_detected = r.valid && smoke_latched_;
   r.co2_detected = r.valid && co2_latched_;
-  r.thermal_valid = thermal_fresh(now) && thermal_stamp_ <= s.stamp_s + config_.future_tolerance_s;
-  r.thermal_hotspot = r.thermal_valid && thermal_hotspot_;
-  r.thermal_peak_c = r.thermal_valid ? thermal_peak_ : 0;
+  const auto* ir = aligned(thermal_history_, s.stamp_s, now, config_.thermal_timeout_s);
+  const auto* visual = aligned(visual_history_, s.stamp_s, now, config_.visual_timeout_s);
+  r.thermal_valid = ir != nullptr;
+  r.thermal_hotspot = ir && ir->hotspot;
+  r.thermal_peak_c = ir ? ir->value : 0;
   r.temperature_anomaly = r.valid && (heat_latched_ || r.thermal_hotspot);
-  r.visual_valid = visual_fresh(now) && visual_stamp_ <= s.stamp_s + config_.future_tolerance_s;
-  r.visual = r.visual_valid ? visual_ : 0;
+  r.visual_valid = visual != nullptr;
+  r.visual = visual ? visual->value : 0;
   const bool gas = r.smoke_detected || r.co2_detected;
   if (gas || r.temperature_anomaly) {
     // Smoke and CO2 are correlated combustion evidence; taking max avoids counting them twice.
@@ -227,7 +246,7 @@ std::optional<PerceptionResult> PerceptionFilter::update(const PerceptionSample&
                  s.co2_valid ? scale(co2_, config_.baseline_co2, config_.co2_scale) : 0);
     const double heat_score = std::max(
         scale(temperature_, config_.heat_enter, config_.heat_scale),
-        r.thermal_hotspot ? scale(thermal_peak_, config_.heat_enter, config_.heat_scale) : 0);
+        r.thermal_hotspot ? scale(r.thermal_peak_c, config_.heat_enter, config_.heat_scale) : 0);
     const double environmental = .65 * gas_score + .35 * heat_score;
     r.confidence = environmental + config_.visual_weight * r.visual * (1 - environmental);
   }
@@ -239,13 +258,12 @@ std::optional<PerceptionResult> PerceptionFilter::update(const PerceptionSample&
   return r;
 }
 bool PerceptionFilter::confirmation_candidate(double now) const {
-  const bool ir = thermal_fresh(now) && thermal_stamp_ <= last_stamp_ + config_.future_tolerance_s;
-  const bool vision =
-      visual_fresh(now) && visual_stamp_ <= last_stamp_ + config_.future_tolerance_s;
+  const auto* ir = aligned(thermal_history_, last_stamp_, now, config_.thermal_timeout_s);
+  const auto* vision = aligned(visual_history_, last_stamp_, now, config_.visual_timeout_s);
   if (!environment_fresh(now) || (config_.require_thermal && !ir)) {
     return false;
   }
-  const bool heat = heat_latched_ || (ir && thermal_hotspot_);
+  const bool heat = heat_latched_ || (ir && ir->hotspot);
   const bool gas = smoke_latched_ || co2_latched_;
   if (!heat && !gas) {
     return false;
@@ -255,9 +273,9 @@ bool PerceptionFilter::confirmation_candidate(double now) const {
                sample_co2_valid_ ? scale(co2_, config_.baseline_co2, config_.co2_scale) : 0);
   const double heat_score = std::max(
       scale(temperature_, config_.heat_enter, config_.heat_scale),
-      ir && thermal_hotspot_ ? scale(thermal_peak_, config_.heat_enter, config_.heat_scale) : 0);
+      ir && ir->hotspot ? scale(ir->value, config_.heat_enter, config_.heat_scale) : 0);
   const double environment = .65 * gas_score + .35 * heat_score;
-  const double visual = vision ? visual_ : 0;
+  const double visual = vision ? vision->value : 0;
   const double confidence = environment + config_.visual_weight * visual * (1 - environment);
   return confirmation_allowed(true, gas, heat, visual, confidence, config_.visual_threshold,
                               config_.confirmation_threshold);

@@ -1,4 +1,4 @@
-# Perception implementation and acceptance — updated 2 November 2026
+# Perception implementation and acceptance — updated 5 November 2026
 
 ## Scope review
 
@@ -11,14 +11,21 @@ No sensor scope reduction is recorded. Therefore this update implements C1 R2
 (IR-camera hotspots), R3 (CO2) and the perception output for R12 (wind thresholds),
 as well as roadmap Priority 4. Terrain mapping remains a separate stretch feature.
 
-The work is based on the uploaded main ZIP, archive commit
-`921cdf8168ca6598165e532beaa6de3f1032c797`, not an independently fetched live branch.
+The November 5 integration uses freshly fetched navigation (`c6faa28`) and
+perception (`2d385d5`) branches. Current native and Gazebo evidence is recorded in
+[integration-review.md](integration-review.md); the earlier archive was `921cdf8`.
+
+The filter retains at most 32 valid cues per camera channel. For each environmental
+acquisition it selects the newest cue within the acquisition/freshness bounds,
+so a newer image arriving first cannot erase valid earlier evidence. Invalid
+frames, expiry and clock resets clear history; future images cannot corroborate
+older samples.
 
 ## Implemented behaviour
 
 1. Native Fortress `thermal` cameras on rover and drone publish 160x120 `L16`
    radiometric images at 5 Hz. Existing fire geometry has a temperature of 573.15 K;
-   its shape/size is unchanged. The decoy retains its appearance but is 295.15 K.
+   supported sphere volumes replace cones that Fortress could not render. The decoy retains its appearance but is 295.15 K.
    The hot-surface scenario uses existing rock geometry at 353.15 K, without gas.
 2. `thermal_verifier_node` decodes `mono16`/`16UC1` using 0.01 K/unit, or explicitly
    Celsius `32FC1`, including either byte order and padded rows. A hotspot needs
@@ -116,7 +123,7 @@ C1 IR acceptance. Do not use that setting to claim complete perception acceptanc
 - **79 perception regression assertions passed**, covering legacy smoke behaviour, independent
   CO2, IR decoding/clusters/byte order/Celsius floats, frame persistence, temporal
   rejections, camera expiry, freeze/recovery and evidence gating.
-- **45 mission policy checks, 41 system logic checks and eight Python tests passed**.
+- **54 mission policy checks, 45 system logic checks and eight Python tests passed**.
   The numerical ten-seed source-fit median error is 0.282843 m; these are not
   autonomous mission trials. See completion-handover.md for the requirement matrix.
 - C++ compilation uses C++17 and `-Wall -Wextra -Wpedantic -Werror`.
@@ -126,8 +133,9 @@ C1 IR acceptance. Do not use that setting to claim complete perception acceptanc
   Exact production filter used; fixtures include synthetic IR/CO2 cues, not Gazebo
   radiometric rendering. Full results are reproducible with the script below.
 - Python syntax, package/world XML and unique-key YAML validation passed.
-- ROS/ament build, native thermal plugin/bridge, Qt UI and live Gazebo tests have
-  **not** been run here: this environment has neither ROS Humble nor Gazebo.
+- ROS/ament build, native thermal plugin/bridge, Qt lifecycle, all deployment
+  modes and twelve recorded Gazebo runs have now passed. See the integration
+  review for the active timing regression and the final native rerun.
 
 | Synthetic scenario | Confirmed TP | FP | FN (valid frames) | Unavailable | Events detected | Median latency |
 |---|---:|---:|---:|---:|---:|---:|

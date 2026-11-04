@@ -45,8 +45,26 @@ void run() {
           "A negative IR observation retained cached confirmation");
   filter.set_thermal(2, 100, true, true, 2);
   auto old_sample = filter.update({1.6, 50, 22, 2.5, 0, 1500, true}, 2);
-  require(old_sample && !old_sample->thermal_valid && !old_sample->confirmed_candidate,
+  require(old_sample && old_sample->thermal_valid && !old_sample->thermal_hotspot && !old_sample->confirmed_candidate,
           "Future IR evidence leaked into an older gas acquisition");
+  PerceptionConfig aligned_config = cfg;
+  aligned_config.warmup_samples = aligned_config.detection_samples = 1;
+  PerceptionFilter causal(aligned_config);
+  causal.set_thermal(3, 100, true, true, 3);
+  causal.set_visual(3, .8, true, 3);
+  causal.set_thermal(3.4, 22, false, true, 3.4);
+  causal.set_visual(3.4, 0, true, 3.4);
+  auto delayed = causal.update({3.2, 50, 22, 2.5, 0, 1500, true}, 3.4);
+  require(delayed && delayed->thermal_valid && delayed->thermal_hotspot && delayed->visual == .8,
+          "Newer image discarded the valid causal evidence for delayed gas");
+  require(delayed->confirmed_candidate, "Causal IR/gas corroboration was lost");
+  auto current = causal.update({3.4, 50, 22, 2.5, 0, 1500, true}, 3.4);
+  require(current && current->thermal_valid && !current->thermal_hotspot && !current->confirmed_candidate,
+          "Historical positive image overrode the current negative image");
+  causal.tick(5);
+  auto expired = causal.update({5, 50, 22, 2.5, 0, 1500, true}, 5);
+  require(expired && !expired->thermal_valid && !expired->confirmed_candidate,
+          "Image history bypassed acquisition expiry");
   KnownFreeGrid grid;
   grid.width = grid.height = 20;
   grid.resolution = .5;
