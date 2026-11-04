@@ -18,7 +18,7 @@ colcon test-result --verbose
 ```
 
 The suite covers the plume model, source estimation, patrol geometry, timestamp-aware
-perception and image classification. The ROS transport test launches camera,
+perception and image classification. The action tests run a real mock NavigateToPose server and assert transformed goals, rejection, expiry, success and cancellation. A separate mission transport test covers patrol, pause/resume, search timeout, recovery, alert, coordinated return, dropout and the E-stop latch. The perception transport test launches camera,
 perception and mission processes and checks multisensor confirmation, vision-only
 suppression, stale vision, dropout pause and the E-stop latch.
 
@@ -36,12 +36,12 @@ ros2 topic echo /embertrace/environment
 With ROS and the workspace sourced, run the full startup/motion check:
 
 ```bash
-python3 scripts/ros_demo_smoke.py
+python3 scripts/ros_demo_smoke.py --platform combined
 ```
 
 It waits for fresh vehicle sensors, map/TF and active Nav2 lifecycle nodes, starts
 the mission, requires actual odometry movement from both vehicles, and checks
-zero command output after E-stop. The launch log is retained in `log/demo-smoke/`.
+pause/resume, measured return and zero command output after E-stop. Repeat it with `--platform rover` and `--platform drone` for standalone acceptance. Launch logs and result JSON files are retained in `log/demo-smoke/<platform>/`.
 
 Run the recorded perception campaign separately:
 
@@ -69,3 +69,5 @@ Longer operational trials should record each random seed and parameters. Measure
 ## Fair evaluation
 
 The autonomy nodes must not access source coordinates. Ground truth may be used only after a trial to calculate error. At least one person should prepare blind source locations for final testing.
+
+Exact executed outcomes and remaining limitations are recorded in [integration review](integration-review.md).

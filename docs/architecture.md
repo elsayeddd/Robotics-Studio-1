@@ -15,7 +15,8 @@ flowchart LR
     MM -->|mission state| SEARCH["Search planner"]
     PER --> SEARCH
     SEARCH -->|navigation goal| NAV["Nav2 goal adapter"]
-    NAV -->|cmd_vel through Nav2| BR
+    NAV -->|Nav2 velocity| GUARD["Mission/sensor/wind command guard"]
+    GUARD -->|guarded cmd_vel| BR
     PER --> MAP["Heatmap node"]
     MM --> UI["Operator dashboard"]
     PER --> UI
@@ -88,3 +89,24 @@ rover environmental dropout. A recorder consumes separate evaluation labels,
 and a standalone executable evaluates the same filter used by the live nodes.
 The new drone is a kinematic demonstrator, not a rotor-dynamics or hardware
 flight-control system. See demo-guide.md and perception-validation.md.
+
+## Deployment and mission lifecycle
+
+The same launch creates three supported deployments. A standalone rover runs the
+rover sensor pipeline, guarded Nav2 execution and waypoint patrol. A standalone
+aircraft runs only its own sensor pipeline and aerial patrol/investigation
+controller. A coordinated deployment runs both, with the rover owning local fire
+confirmation. The mission state machine, estimator, operator service and dashboard
+are reused with explicit primary-sensor remappings.
+
+Ground search goals must occupy known free map cells with rover clearance. Aerial
+search goals use the shared simulation odometry frame and are constrained by the
+flight controller's altitude, geofence, LiDAR and heartbeat checks. The aircraft
+is a velocity-controlled simulation model, without rotor dynamics or a hardware
+autopilot. Wind classification is consumed by both motion controllers.
+
+Search timeout returns the mission to patrol; a persistent dismissed anomaly
+cannot immediately retrigger the same investigation. Coordinated return completes
+only after both measured home arrivals. Navigation action results are fed back to
+the patrol sequencer, which also has bounded retries and pose-based arrival checks.
+See [integration evidence](integration-review.md) for validation results.

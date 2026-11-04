@@ -51,7 +51,8 @@ Start with fixed frame `husky1_odom`. `husky1_map` is not available until SLAM r
 
 ```bash
 ros2 topic echo /husky1/tf --once
-ros2 run tf2_ros tf2_echo husky1_odom husky1_base_link
+ros2 run tf2_ros tf2_echo husky1_odom husky1_base_link \
+  --ros-args -r /tf:=/husky1/tf -r /tf_static:=/husky1/tf_static
 ```
 
 ## No smoke values
@@ -65,5 +66,7 @@ ros2 topic echo /embertrace/raw_environment
 
 ## Nav2 does not move the rover
 
-That integration is intentionally outstanding in the initial repository. Complete the scaffold in `embertrace_core/scaffolds/nav2_goal_adapter_node.cpp` and follow the acceptance criteria in the development roadmap.
+Run preflight with `--platform rover` or `--platform combined`. Check that Nav2 lifecycle nodes are active, `/husky1/navigate_to_pose` exists, and `/husky1/map` plus the namespaced TF tree are available. Inspect `/embertrace/navigation_status` for stale, rejected or out-of-bounds goals. The rover velocity guard also requires fresh sensor, mission, command and safe-wind heartbeats. Send START only after preflight passes.
+
+For the standalone aircraft use `mission_platform:=drone` and preflight `--platform drone`. It uses its aerial controller and does not require a ground Nav2 action server.
 

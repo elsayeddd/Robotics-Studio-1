@@ -36,3 +36,17 @@ sudo apt-get install -y clang-format cppcheck gdb
 
 These are helpful but not needed to run the simulation.
 
+
+## Headless acceptance and VM memory
+
+Install `xvfb` and `libgl1-mesa-dri` to run sensor rendering without a desktop:
+
+```bash
+sudo apt-get install -y xvfb libgl1-mesa-dri
+LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=2 xvfb-run -a python3 scripts/ros_demo_smoke.py --platform rover
+```
+
+`python3-yaml` is required by repository validation and the trial tools. The build
+helper limits both Colcon package workers and Make jobs. Set `MAKEFLAGS` explicitly
+if changing this limit; Colcon otherwise adds CPU-count compiler parallelism even
+when `CMAKE_BUILD_PARALLEL_LEVEL` is set.

@@ -15,7 +15,7 @@ Treat this document as the integration agreement. Discuss changes before renamin
 | `/embertrace/visual_fire_cue` | `std_msgs/msg/Float32` | Camera verifier | Perception | Visual confidence from 0 to 1 |
 | `/embertrace/environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Perception | Mission, search, UI, heatmap | Filtered/fused evidence |
 | `/embertrace/mission_state` | `embertrace_interfaces/msg/MissionState` | Mission manager | Search, UI, adapter | Authoritative state |
-| `/embertrace/navigation_goal` | `geometry_msgs/msg/PoseStamped` | Search planner | Future Nav2 adapter, RViz | Next short map-frame investigation goal in known free space |
+| `/embertrace/navigation_goal` | `geometry_msgs/msg/PoseStamped` | Search planner | Nav2 adapter or standalone aerial controller, RViz | Next short map-frame investigation goal in known free space |
 | `/embertrace/source_estimate` | `geometry_msgs/msg/PoseWithCovarianceStamped` | Search planner | Mission manager, RViz | Source position and x/y covariance from local sensor history; sample frame |
 | `/embertrace/fire_alert` | `embertrace_interfaces/msg/FireAlert` | Mission manager | UI, logging | Confirmed or suspected alert |
 | `/embertrace/sample_markers` | `visualization_msgs/msg/MarkerArray` | Heatmap | RViz | Colour-coded sample history |
@@ -35,6 +35,7 @@ Accepted command strings:
 | `RESUME` | Resume the state stored before pause |
 | `RETURN` | Request return to base |
 | `RESET` | Clear alert/emergency state and return to idle |
+| `E_STOP_RELEASE` | Release a latched stop to idle; a separate START is required |
 | `E_STOP` | Latch emergency stop immediately |
 
 Unknown commands must be rejected with `accepted=false` and an explanatory message.
@@ -100,3 +101,31 @@ truth to the rover. The source estimator continues using rover samples only.
 - Full launch requires CO2-valid raw data and fresh IR before confirmation. Legacy
   recordings and explicit reduced debug mode remain separate from C1 acceptance.
 - Message changes require rebuilding every dependent package and re-sourcing all shells.
+
+## Mission execution and completion
+
+| Topic | Type | Publisher | Consumer |
+| --- | --- | --- | --- |
+| `/embertrace/navigation_status` | `std_msgs/msg/String` | Nav2 adapter | Patrol manager, operator tools |
+| `/embertrace/search_status` | `std_msgs/msg/String` | Search planner | Mission manager |
+| `/embertrace/return_complete` | `std_msgs/msg/Empty` | Patrol manager | Mission manager |
+| `/drone1/return_complete` | `std_msgs/msg/Bool` | Aerial controller | Mission manager |
+
+Navigation status includes SENT, ACCEPTED, SUCCEEDED, ABORTED, CANCELED,
+CANCEL_REQUESTED, REJECTED, STALE and OUT_OF_BOUNDS. An old action generation cannot
+complete a newer goal. Search status TIMED_OUT or SIGNAL_LOST ends an active
+investigation and returns control to patrol. The anomaly must clear before it can
+trigger another investigation. VERIFY has its own timeout back to TRACK.
+
+`mission_platform` selects `rover`, `drone` or `combined`. The authoritative mission
+manager and operator service retain their project-wide names in every mode.
+Standalone aerial mode remaps primary environment and perception-status inputs to
+`/drone1/`, disables the rover, ground patrol and Nav2, and emits investigation goals
+in the shared simulated odometry frame. The aerial controller bounds those goals
+and keeps its configured flight altitude. Combined mode uses aircraft observations
+only as rover search hints. Source fits always use the primary vehicle's own samples.
+
+Coordinated RETURN waits for the rover's completion request and the aircraft's fresh
+measured home-position flag. Standalone RETURN waits only for its primary vehicle.
+Late return feedback cannot release an emergency stop or change another mission state.
+Both RESET and E_STOP_RELEASE land in IDLE and never automatically restart motion.

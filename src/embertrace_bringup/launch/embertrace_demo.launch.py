@@ -74,7 +74,7 @@ def _stack(context):
     nodes += [
         core('mission_manager_node', extra={
             'require_thermal_confirmation': thermal, 'require_scout_return': rover and drone,
-            'aerial_mission': not rover,
+            'aerial_mission': not rover, 'localise_before_hold': nav2 or not rover,
         }, remaps=primary),
         core('search_planner_node', extra={'require_map': rover}, remaps=tf + primary),
         core('heatmap_node', remaps=primary),

@@ -37,7 +37,7 @@ Recommended final trials:
 2. **Clear plume:** stable wind and moderate noise; robot should transition from patrol to track and localise the source.
 3. **Signal loss:** higher noise or changed wind; robot should enter recovery and regain the plume.
 4. **False visual cue:** orange object without smoke/heat; perception should not confirm a fire from vision alone.
-5. **Emergency stop:** operator stops the mission during tracking; motion goal must be cancelled after the Nav2 adapter is implemented.
+5. **Emergency stop:** operator stops the mission during tracking; the action is cancelled and both motion controllers publish zero commands.
 
 ## Changing the hidden source
 
@@ -58,7 +58,7 @@ The supplied archive included a 25 m forest plane, visual walls, online Fuel tre
 
 - keeps and renames the useful Husky sensor/bridge structure;
 - keeps the forest texture and required Husky meshes;
-- removes the drone from the minimum system;
+- uses a self-contained aerial sensor model for standalone and coordinated missions;
 - removes online model dependencies from the main world;
 - expands the world and adds project-specific infrastructure and hazards;
 - replaces demonstration Python autonomy with separate C++ nodes;

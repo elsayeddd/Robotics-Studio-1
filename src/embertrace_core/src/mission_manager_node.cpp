@@ -51,6 +51,7 @@ public:
     lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
     visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
     require_thermal_ = declare_parameter<bool>("require_thermal_confirmation", false);
+    localise_before_hold_ = declare_parameter<bool>("localise_before_hold", false);
     reading_timeout_s_ = declare_parameter<double>("reading_timeout_s", 2.0);
     if (!std::isfinite(reading_timeout_s_) || reading_timeout_s_ <= 0) {
       throw std::invalid_argument("reading_timeout_s must be finite and positive");
@@ -123,6 +124,11 @@ public:
           state_ == MissionState::RECOVER) &&
           (msg->data == "TIMED_OUT" || msg->data == "SIGNAL_LOST"))
         {
+          if (fire_confirmed_) {
+            transition_to(MissionState::ALERT, "Fire confirmed; source unresolved at search deadline");
+            publish_alert();
+            return;
+          }
           detection_count_ = confirmation_count_ = 0;
           dismissed_anomaly_ = true;
           scout_retry_after_ = now() + rclcpp::Duration::from_seconds(scout_retry_s_);
@@ -233,6 +239,11 @@ private:
       return;
     }
 
+    if (fire_confirmed_ && usable_estimate()) {
+      transition_to(MissionState::ALERT, "Confirmed fire source localised; holding position");
+      publish_alert();
+      return;
+    }
     if (dismissed_anomaly_ && state_ == MissionState::PATROL) {
       if (reading->fused_confidence < investigate_confidence_ && !reading->smoke_detected &&
         !reading->co2_detected && !reading->temperature_anomaly) {dismissed_anomaly_ = false;}
@@ -262,7 +273,7 @@ private:
         if (reading->fused_confidence < lost_confidence_) {
           transition_to(MissionState::RECOVER, "Plume signal lost; begin crosswind cast");
         } else if (reading->fused_confidence >= verify_confidence_ && reading->temperature_anomaly &&
-          current >= verification_retry_after_) {
+          current >= verification_retry_after_ && !fire_confirmed_) {
           transition_to(MissionState::VERIFY, "High smoke and thermal evidence near source");
         }
         break;
@@ -273,8 +284,17 @@ private:
         break;
       case MissionState::VERIFY:
         if (confirmation_count_ >= required_confirmation_samples_) {
-          transition_to(MissionState::ALERT, "Multi-sensor fire criteria satisfied");
-          publish_alert();
+          fire_confirmed_ = true;
+          confirmed_confidence_ = reading->fused_confidence;
+          if (localise_before_hold_ && !usable_estimate()) {
+            // I report detection immediately, then keep collecting spatial evidence
+            // until the source fit is usable instead of parking on an unresolved alert.
+            publish_alert();
+            transition_to(MissionState::TRACK, "Fire confirmed; continuing source localisation");
+          } else {
+            transition_to(MissionState::ALERT, "Multi-sensor fire criteria satisfied");
+            publish_alert();
+          }
         } else if (reading->fused_confidence < track_confidence_) {
           transition_to(MissionState::TRACK, "Verification evidence weakened");
         }
@@ -303,6 +323,7 @@ private:
       verification_retry_after_ = now();
       scout_retry_after_ = now();
       dismissed_anomaly_ = false;
+      fire_confirmed_ = false; confirmed_confidence_ = 0;
       transition_to(MissionState::PATROL, "Patrol started by operator");
     } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
       if (state_ != MissionState::PAUSED) {pre_pause_state_ = state_;}
@@ -321,6 +342,7 @@ private:
       verification_retry_after_ = now();
       scout_retry_after_ = now();
       dismissed_anomaly_ = false;
+      fire_confirmed_ = false; confirmed_confidence_ = 0;
       transition_to(MissionState::IDLE, "System reset; waiting for START");
     } else {
       response->accepted = false;
@@ -365,20 +387,11 @@ private:
     state_publisher_->publish(message);
   }
 
-  void publish_alert()
+  bool usable_estimate() const
   {
-    if (!have_reading_) {
-      return;
-    }
-    embertrace_interfaces::msg::FireAlert alert;
-    alert.header.stamp = now();
-    alert.header.frame_id = latest_reading_.sample_pose.header.frame_id;
-    alert.severity = embertrace_interfaces::msg::FireAlert::CRITICAL;
-    // Only a recent localisation fit may be reported as the source. The robot
-    // pose is a fallback location when the source is still unresolved.
     const double estimate_age_s = have_estimate_ ?
       (now() - rclcpp::Time(latest_estimate_.header.stamp)).seconds() : 0.0;
-    const bool fresh_estimate = have_estimate_ &&
+    return have_reading_ && have_estimate_ &&
       latest_estimate_.header.frame_id == latest_reading_.sample_pose.header.frame_id &&
       estimate_age_s >= 0.0 && estimate_age_s <= max_estimate_age_s_ &&
       std::isfinite(latest_estimate_.pose.covariance[0]) &&
@@ -391,13 +404,27 @@ private:
       max_estimate_stddev_m_ * max_estimate_stddev_m_ &&
       latest_estimate_.pose.covariance[7] <=
       max_estimate_stddev_m_ * max_estimate_stddev_m_;
+  }
+
+  void publish_alert()
+  {
+    if (!have_reading_) {
+      return;
+    }
+    embertrace_interfaces::msg::FireAlert alert;
+    alert.header.stamp = now();
+    alert.header.frame_id = latest_reading_.sample_pose.header.frame_id;
+    alert.severity = embertrace_interfaces::msg::FireAlert::CRITICAL;
+    // Only a recent localisation fit may be reported as the source. The robot
+    // pose is a fallback location when the source is still unresolved.
+    const bool fresh_estimate = usable_estimate();
     if (fresh_estimate) {
       alert.estimated_source.header = latest_estimate_.header;
       alert.estimated_source.pose = latest_estimate_.pose.pose;
     } else {
       alert.estimated_source = latest_reading_.sample_pose;
     }
-    alert.confidence = latest_reading_.fused_confidence;
+    alert.confidence = std::max(latest_reading_.fused_confidence, confirmed_confidence_);
     alert.confirmed = true;
     alert.evidence = "Persistent local gas/heat evidence with corroboration";
     if (latest_reading_.co2_valid) {alert.evidence += "; CO2=" + std::to_string(latest_reading_.co2_ppm) + " ppm";}
@@ -438,7 +465,8 @@ private:
   rclcpp::Subscription<std_msgs::msg::Empty>::SharedPtr return_complete_subscription_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr scout_return_subscription_;
   rclcpp::Subscription<std_msgs::msg::String>::SharedPtr search_status_subscription_;
-  bool dismissed_anomaly_{false};
+  bool dismissed_anomaly_{false}, fire_confirmed_{false}, localise_before_hold_{false};
+  float confirmed_confidence_{0.0F};
   bool require_scout_return_{false}, aerial_mission_{false}, rover_home_{false}, scout_home_{false};
   double verification_timeout_s_{15.0};
   double verification_retry_s_{5.0};

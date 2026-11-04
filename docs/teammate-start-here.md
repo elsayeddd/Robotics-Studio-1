@@ -30,7 +30,7 @@ For each `*_node.cpp`, read in this order:
 5. `TODO(student)` comments;
 6. `main()` at the bottom.
 
-Every node begins with a block comment describing what is complete, what is deliberately simple, and what the assigned developer should build next.
+Read the integration review before changing shared launch, message or mission interfaces. The main branch now includes the navigation, patrol and perception implementations; use the final acceptance roadmap to identify remaining evidence.
 
 ## Difficulty guide
 
@@ -49,3 +49,11 @@ Every node begins with a block comment describing what is complete, what is deli
 
 The mathematical plume is part of the simulation, not an autonomy shortcut. Only the environment simulator may read `source_x` and `source_y`. Any algorithm that reads them directly invalidates the source-search demonstration.
 
+
+## Current entry points
+
+Build with `./scripts/build.sh`, then source ROS and `install/setup.bash`. Use
+`./scripts/run_demo.sh mission_platform:=rover` or `mission_platform:=drone` for
+standalone missions, and `combined` for the coordinated demo. Preflight accepts
+the matching `--platform` argument. Use a separate DDS domain for transport tests,
+and stop interactive simulations before running the Gazebo campaign.

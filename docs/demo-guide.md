@@ -3,13 +3,12 @@
 ## Get and build this implementation in WSL
 
 Use Ubuntu 22.04 / ROS 2 Humble / Gazebo Fortress, with WSLg available for Gazebo,
-RViz and the Qt dashboard. The code is on `feature/perception-validation` until
-its pull request is merged.
+RViz and the Qt dashboard. The integrated code is on `main`.
 
 ```bash
 cd ~/projects/Robotics-Studio-1
 git fetch origin
-git switch feature/perception-validation
+git switch main
 git pull --ff-only
 source /opt/ros/humble/setup.bash
 ./scripts/install_dependencies.sh
@@ -18,6 +17,23 @@ source install/setup.bash
 colcon test --event-handlers console_direct+
 colcon test-result --verbose
 ```
+
+## Select a mission platform
+
+Use `mission_platform:=rover`, `mission_platform:=drone` or
+`mission_platform:=combined` with `run_demo.sh`. Run preflight with the matching
+`--platform rover`, `--platform drone` or `--platform combined` option. A standalone
+aircraft has its own perception, source fit and investigation controller and does
+not require a Husky or a ground occupancy map. All modes use the same operator
+service and dashboard. For example:
+
+```bash
+./scripts/run_demo.sh mission_platform:=drone scenario:=no_fire
+ros2 run embertrace_core demo_preflight.py --platform drone --timeout 120
+```
+
+The current simulator names its shared world odometry frame `husky1_odom`, including
+in aerial-only mode. This is a coordinate frame name; it does not require a rover.
 
 ## First demo: both vehicles, no fire
 
@@ -47,7 +63,7 @@ ros2 service call /embertrace/operator_command \
 Proceed when every preflight row says PASS. The rover follows the original patrol
 route while the drone follows its bounded aerial sweep. Watch the vehicle poses
 and the navigation status; verify the rover actually reaches successive waypoints.
-Two complete patrol loops remain a target-machine acceptance step.
+Use the integration review for completed acceptance evidence.
 Preflight also asks Nav2 to compute the first moving patrol leg without driving.
 This waits for SLAM's initial map coverage instead of starting with an off-map goal.
 
@@ -111,8 +127,8 @@ ros2 service call /embertrace/operator_command embertrace_interfaces/srv/Operato
 ```
 
 RETURN sends the rover to the existing base waypoint and the drone to its base
-hover position. E_STOP latches: START/RESUME/RETURN cannot bypass it; RESET is
-required. The rover command guard publishes zero when mission permission, sensor
+hover position. E_STOP latches: START/RESUME/RETURN cannot bypass it; RESET or the dashboard release control is
+required; both land in IDLE and require a fresh START. The rover command guard publishes zero when mission permission, sensor
 readiness or a command heartbeat is missing. The aerial controller applies the
 same mission and sensor checks, a geofence and a LiDAR proximity hold.
 

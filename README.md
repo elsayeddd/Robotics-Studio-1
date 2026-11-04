@@ -6,7 +6,7 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 
 ## Project status
 
-The navigation, patrol and source estimation modules are integrated with timestamp-aware perception, sensor health and an aerial scout on `feature/perception-validation`. See [Demo guide](docs/demo-guide.md) and [Perception validation](docs/perception-validation.md) for commands, measured synthetic results and outstanding recorded-trial acceptance.
+The navigation, patrol and source estimation modules are integrated with timestamp-aware perception, sensor health and an aerial scout on `main`. See [Demo guide](docs/demo-guide.md) and [Perception validation](docs/perception-validation.md) for commands, measured synthetic results and outstanding recorded-trial acceptance.
 
 | Capability | Status | Notes |
 | --- | --- | --- |
@@ -27,6 +27,25 @@ The navigation, patrol and source estimation modules are integrated with timesta
 | Automated end-to-end tests | Partial | Plume, search and patrol unit tests are included; full Gazebo/Nav2 rover trials remain |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
+
+## Mission modes
+
+Use the same integrated launch with a different primary platform:
+
+```bash
+./scripts/run_demo.sh mission_platform:=rover
+./scripts/run_demo.sh mission_platform:=drone
+./scripts/run_demo.sh mission_platform:=combined
+```
+
+Standalone drone mode starts only the aircraft and its sensor pipeline. It patrols,
+investigates local evidence, estimates the source, reports alerts and returns to its
+launch position. Combined mode uses the aircraft as a scout; rover-local evidence
+owns fire confirmation. `platform_select.launch.py platform:=auto` selects an
+entire standalone mission from `wind_speed_mps`, and live sensor wind status gates
+both vehicles during operation.
+
+See [integration review and test evidence](docs/integration-review.md).
 
 ## Supported platform
 
@@ -153,9 +172,9 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 
 The simulation structure, Husky model, sensor bridge conventions, forest texture and meshes were adapted from the supplied `41068_ignition_bringup_v1.zip`. See [Original package audit](docs/original-package-audit.md) and [NOTICE](NOTICE.md) before publishing the repository publicly.
 
-## October 20 perception update
+## Infrared and CO2 sensing
 
 Native IR cameras, explicit CO2, freshness/persistence and evaluation changes are documented in
 [perception validation](docs/perception-validation.md).
 Follow [VM/GitHub and simulation startup](docs/perception-vm-startup.md) for a fresh machine.
-ROS/Gazebo target-machine acceptance remains required.
+See the integration review for the validation actually completed.

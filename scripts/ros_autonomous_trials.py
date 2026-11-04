@@ -90,6 +90,7 @@ def trial(args, seed, output, truth):
             started = node.get_clock().now().nanoseconds * 1e-9
             wall = time.monotonic()
             last_report = 0
+            final_state_seen = None
             print('Search subscriptions: ' + str(node.get_subscriber_names_and_types_by_node('search_planner_node', '/')), flush=True)
             while time.monotonic() - wall < args.wall_timeout:
                 rclpy.spin_once(node, timeout_sec=.1)
@@ -98,8 +99,14 @@ def trial(args, seed, output, truth):
                     print(json.dumps({'seed': seed, 'elapsed': round(elapsed, 2), 'pose': state['pose'],
                         'state': result['states'][-1] if result['states'] else None, **telemetry}), flush=True)
                     last_report = time.monotonic()
-                if state['alert'] is not None or elapsed > args.max_duration:
+                if state['alert'] is not None and 'unresolved' not in state['alert'].evidence:
                     break
+                if result['states'] and result['states'][-1] == 'ALERT':
+                    if final_state_seen is None: final_state_seen = time.monotonic()
+                    if time.monotonic() - final_state_seen > 1: break
+                else:
+                    final_state_seen = None
+                if elapsed > args.max_duration: break
                 if process.poll() is not None:
                     raise RuntimeError('Launch exited during mission')
             result['mission_time_s'] = node.get_clock().now().nanoseconds * 1e-9 - started

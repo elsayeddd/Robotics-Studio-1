@@ -1,0 +1,113 @@
+#!/usr/bin/env python3
+"""Require closed rover patrol loops, no skipped stops, and a measured return home."""
+import argparse
+import json
+import math
+import os
+from pathlib import Path
+import re
+import signal
+import subprocess
+import time
+import yaml
+import rclpy
+from rclpy.node import Node
+from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
+from ament_index_python.packages import get_package_share_directory
+from embertrace_interfaces.msg import MissionState, FireAlert
+from embertrace_interfaces.srv import OperatorCommand
+from nav_msgs.msg import Odometry
+from std_msgs.msg import String
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--loops', type=int, default=2)
+    parser.add_argument('--max-duration', type=float, default=1200)
+    parser.add_argument('--wall-timeout', type=float, default=1800)
+    parser.add_argument('--output', default='log/patrol-final')
+    args = parser.parse_args()
+    if args.loops < 1: parser.error('At least one loop is required')
+    output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
+    if (output / 'result.json').exists(): raise FileExistsError('Use a fresh output directory')
+    route = yaml.safe_load((Path(get_package_share_directory('embertrace_bringup')) / 'config/patrol_waypoints.yaml').read_text())['waypoints']
+    base = (route[0]['x'], route[0]['y']); moving = route[1]['name']
+    result = {'source_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'src'], text=True).strip(),
+              'closed_loops': 0, 'skipped_waypoints': 0, 'navigation_failures': 0, 'path_length_m': 0., 'false_alerts': 0, 'passed': False}
+    rclpy.init(); node = Node('patrol_acceptance')
+    node.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=True)])
+    current = {'state': None, 'pose': None}
+    def odometry(msg):
+        p = msg.pose.pose.position; pose = (p.x, p.y)
+        if current['pose'] is not None:
+            distance = math.dist(pose, current['pose'])
+            if distance < 2: result['path_length_m'] += distance
+        current['pose'] = pose
+    def navigation(msg):
+        if msg.data in ('ABORTED', 'REJECTED', 'OUT_OF_BOUNDS'): result['navigation_failures'] += 1
+    subscriptions = [
+        node.create_subscription(MissionState, '/embertrace/mission_state', lambda m: current.update(state=m.state_name),
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
+        node.create_subscription(Odometry, '/husky1/odometry', odometry, qos_profile_sensor_data),
+        node.create_subscription(FireAlert, '/embertrace/fire_alert', lambda m: result.update(false_alerts=result['false_alerts'] + int(m.confirmed)),
+            QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
+        node.create_subscription(String, '/embertrace/navigation_status', navigation, 10),
+    ]
+    client = node.create_client(OperatorCommand, '/embertrace/operator_command')
+    def command(text):
+        request = OperatorCommand.Request(); request.command = text
+        future = client.call_async(request); rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+        assert future.done() and future.result().accepted, f'{text} rejected'
+    environment = dict(os.environ, IGN_PARTITION=f'embertrace_patrol_{os.getpid()}')
+    environment['GZ_PARTITION'] = environment['IGN_PARTITION']
+    with (output / 'launch.log').open('w') as log:
+        process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
+            'mission_platform:=rover', 'scenario:=no_fire', 'gazebo_gui:=false', 'use_dashboard:=false', 'use_rviz:=false'],
+            stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
+        try:
+            subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py', '--platform', 'rover', '--timeout', '120'],
+                stdout=log, stderr=subprocess.STDOUT, check=True, timeout=140)
+            assert client.wait_for_service(timeout_sec=15)
+            command('START'); started = node.get_clock().now().nanoseconds * 1e-9
+            wall = time.monotonic(); last_report = 0; pending = ''; wrapped = 0
+            with (output / 'launch.log').open() as reader:
+                while time.monotonic() - wall < args.wall_timeout:
+                    rclpy.spin_once(node, timeout_sec=.1)
+                    pending += reader.read(); lines = pending.split('\n'); pending = lines.pop()
+                    for line in lines:
+                        match = re.search(r'Patrol loop (\d+) complete', line)
+                        if match: wrapped = int(match.group(1))
+                        if 'Gave up on an unreachable waypoint' in line: result['skipped_waypoints'] += 1
+                        if f'Patrol goal: {moving} ' in line and wrapped:
+                            result['closed_loops'] = wrapped
+                    elapsed = node.get_clock().now().nanoseconds * 1e-9 - started
+                    if time.monotonic() - last_report > 15:
+                        print(json.dumps({'elapsed': elapsed, **current, **result}), flush=True); last_report = time.monotonic()
+                    if current['state'] in ('PAUSED', 'EMERGENCY_STOP') or result['false_alerts']:
+                        raise RuntimeError(f'Unexpected mission state during no-fire patrol: {current}')
+                    if result['closed_loops'] >= args.loops: break
+                    if elapsed > args.max_duration or process.poll() is not None: raise RuntimeError('Patrol mission deadline or launch exit')
+                assert result['closed_loops'] >= args.loops, 'Patrol loops did not complete'
+            command('RETURN'); deadline = time.monotonic() + 90
+            while time.monotonic() < deadline and current['state'] != 'IDLE': rclpy.spin_once(node, timeout_sec=.1)
+            assert current['state'] == 'IDLE' and current['pose'] is not None, 'Patrol did not park in IDLE'
+            result['return_error_m'] = math.dist(current['pose'], base)
+            assert result['return_error_m'] < 1.7 and result['skipped_waypoints'] == 0 and result['false_alerts'] == 0
+            result['mission_time_s'] = node.get_clock().now().nanoseconds * 1e-9 - started
+            result['passed'] = True
+        except Exception as exc:
+            result['failure'] = str(exc)
+        finally:
+            if process.poll() is None:
+                os.killpg(process.pid, signal.SIGINT)
+                try: process.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=5)
+            node.destroy_node(); rclpy.shutdown()
+    (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
+    print(json.dumps(result, indent=2), flush=True)
+    raise SystemExit(0 if result['passed'] else 1)
+
+
+if __name__ == '__main__':
+    main()
