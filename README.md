@@ -1,97 +1,161 @@
-# C++ node development notes
+# EmberTrace
 
-Source headers and inline comments explain the runtime responsibilities and failure behaviour.
-The November 2 integration is described in docs/completion-handover.md. Keep one
-executable per node; pure policy/numerical libraries also run without ROS.
+EmberTrace is a ROS 2 forest-fire investigation demonstrator. A simulated Husky rover patrols a forest, measures a noisy smoke plume, decides when to leave patrol and investigate, estimates where the source lies, and reports the result to a ranger-facing interface.
 
-## Recommended ownership
+The repository is designed for a mixed-experience university team. Existing ROS packages handle simulation, localisation and navigation; the project-specific behaviour is divided into small, documented C++ nodes that can be developed and tested independently.
 
-| File | Purpose | Suggested owner |
+## Project status
+
+The navigation, patrol and source estimation modules are integrated with timestamp-aware perception, sensor health and an aerial scout on `feature/perception-validation`. See [Demo guide](docs/demo-guide.md) and [Perception validation](docs/perception-validation.md) for commands, measured synthetic results and outstanding recorded-trial acceptance.
+
+| Capability | Status | Notes |
 | --- | --- | --- |
-| `plume_model.cpp` | Ground-truth mathematical environment | Simulation member |
-| `environment_simulator_node.cpp` | Robot-position sampling and raw readings | Simulation member |
-| `camera_verifier_node.cpp` | Visual fire evidence | Perception member |
-| `perception_node.cpp` | Filtering and evidence fusion | Perception member |
-| `mission_manager_node.cpp` | Authoritative decision state machine | Autonomy member |
-| `search_planner_node.cpp` | Source estimation and map-safe search goals | Autonomy member |
-| `heatmap_node.cpp` | RViz operator visualisation | UI/testing member |
-| `patrol_manager_node.cpp` | Waypoint patrol and return goals | Autonomy member |
-| `nav2_goal_adapter_node.cpp` | Nav2 action bridge and result status | Navigation member |
+| Forest world and Husky sensor model | Implemented | Self-contained local trees, rocks, logs, base station, fire source and textured terrain |
+| ROS–Gazebo bridge | Implemented | Odometry, IMU, LiDAR, RGB-D camera, commands and simulation clock |
+| Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
+| Environmental perception | Implemented; recorded trials pending | Timestamp-aware filtering/hysteresis, stale/dropout recovery, validity and guarded confirmation |
+| Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
+| Search and source estimation | Implemented baseline | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; unit tests included |
+| Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
+| Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
+| Nav2 goal execution | Implemented baseline; rover validation pending | Namespaced `NavigateToPose` client transforms and bounds-checks goals, cancels on mission changes and publishes result status |
+| Camera fire verification | Implemented simulation heuristic | Connected colour patches, valid stamped cues and consecutive frames; real-image validation pending |
+| Aerial scout | Implemented demo proxy | Velocity-controlled drone, RGB-D/LiDAR/IMU, local environment samples and rover investigation cues |
+| Sensor health and motion guard | Implemented | All sensor streams monitored; missing readiness/mission/command heartbeat inhibits motion |
+| Perception evaluation | Implemented | Six scenarios, CSV recorder/evaluator, threshold sweep, synthetic confusion matrices and latency |
+| Patrol route manager | Implemented baseline; rover validation pending | YAML route loading, sequential goals, pause/resume and return to base; odometry is transformed into the route frame for arrival checks |
+| Automated end-to-end tests | Partial | Plume, search and patrol unit tests are included; full Gazebo/Nav2 rover trials remain |
 
-## Nav2 adapter baseline
+See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
-The adapter subscribes to `/embertrace/navigation_goal`, transforms goals into
-`husky1_map`, and sends them to `/husky1/navigate_to_pose` when Nav2 is ready.
-It cancels goals on mission-state changes or when motion is disallowed, rejects
-stale and out-of-bounds goals, and publishes result strings on
-`/embertrace/navigation_status`. The patrol manager currently advances from
-map-frame odometry proximity; action-result sequencing and full rover acceptance
-remain to be validated on the target ROS machine.
+## Supported platform
 
-## Priority 3: search and source estimate
+The supplied teaching package used the `ros_ign_*` API and Ignition Fortress. EmberTrace therefore targets:
 
-The search planner keeps at most 160 spatially separated environmental samples. It
-fits candidate source positions on a 0.5 m grid, then refines the best candidate
-at 0.1 m resolution. For each candidate it removes the unknown source strength
-from the logarithmic thermal decay and wind-aligned Gaussian plume equations,
-then scores the remaining spatial residuals. It publishes the best candidate
-on `/embertrace/source_estimate` as
-`geometry_msgs/msg/PoseWithCovarianceStamped` in the sample frame. The x/y
-covariance is a relative likelihood spread with a 0.5 m standard deviation
-floor; it does not include a measured SLAM error. The estimator never reads
-`source_x` or `source_y`. The field-shape values in
-`embertrace.yaml` are tunable model assumptions, not source coordinates.
+- Ubuntu 22.04 LTS, including Ubuntu 22.04 under WSL2;
+- ROS 2 Humble;
+- Ignition/Gazebo Fortress;
+- C++17;
+- `colcon` and `ament_cmake`.
 
-When smoke is present, a sufficiently constrained estimate guides short
-investigation goals. Before enough evidence exists, the rover probes upwind.
-On signal loss it casts on alternating sides of the last detection with a
-bounded increasing sweep. Goal publication stops after 20 s without smoke or
-120 s of searching. A reading older than 3 s is ignored. During `VERIFY`,
-the estimate continues updating, but the planner issues no motion goal. For the rover, no goal
-is published until `/husky1/map` and the odom-to-map transform are available.
-Aerial goals use the configured bounded flight layer and the local LiDAR stop instead.
-The map check rejects unknown/occupied cells and requires 0.8 m robot
-clearance. It validates the endpoint; Nav2 remains responsible for route
-planning and live obstacle avoidance. Search timeouts only withhold planner
-goals; mission-state timeout policy belongs to the mission manager.
+Humble's `ros_ign` packages are compatibility shims for `ros_gz`, so the supplied launch conventions remain usable. Do not install a different Gazebo major release alongside Fortress unless the team deliberately migrates the project.
 
-The mission manager uses only a recent estimate with less than 4 m standard deviation per axis for the alert location.
-If no estimate exists, the alert evidence says the source is unresolved and the
-reported pose is the latest sample location. The uncertainty remains available
-on `/embertrace/source_estimate`.
+## Quick start
 
-Build and run the focused unit tests from the repository root:
+### 1. Install ROS 2
+
+Follow the official [ROS 2 Humble Ubuntu installation](https://docs.ros.org/en/humble/Installation/Ubuntu-Install-Debs.html). Select the desktop installation.
+
+### 2. Install project dependencies
+
+From the repository root:
+
+```bash
+./scripts/install_dependencies.sh
+```
+
+The script checks for Ubuntu 22.04 and ROS 2 Humble, installs the declared packages, and runs `rosdep`. It intentionally stops with guidance instead of attempting to install ROS itself.
+
+### 3. Build
 
 ```bash
 source /opt/ros/humble/setup.bash
-colcon build --packages-up-to embertrace_core
-colcon test --packages-select embertrace_core --ctest-args -R test_search_estimation
-colcon test-result --verbose
+./scripts/build.sh
+source install/setup.bash
 ```
 
-`test_search_estimation` checks bounded history, invalid readings, stationary
-samples, unknown/occupied/rotated maps, source localisation over ten seeded
-standard-field trials with the baseline perception filter, a fixed survey route
-with moved sources and changed plume parameters, and translation of the same
-evidence to another location. The seeded test
-checks median error below 2.0 m, but it supplies a controlled track through
-the plume. The roadmap's full rover-trial acceptance still needs integrated
-runs with the Nav2 adapter and patrol manager.
-
-For a runtime check after building, launch with `use_nav2:=true` so SLAM
-publishes `/husky1/map`, select the rover with `wind_speed_mps:=7.0`, then send START:
+### 4. Run the integrated demo
 
 ```bash
-ros2 launch embertrace_bringup embertrace_demo.launch.py use_nav2:=true wind_speed_mps:=7.0
-ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
-ros2 topic echo /embertrace/source_estimate
-ros2 topic echo /embertrace/navigation_goal
+./scripts/run_demo.sh
 ```
 
-Expect source estimates after at least five separated samples, covariance in
-square metres, and search goals stamped in `husky1_map`. With
-`use_nav2:=false` there is no SLAM map, so estimates may still appear while
-navigation goals are withheld. Move out of the plume and check that goals
-cease after `signal_loss_timeout_s`; pause or switch to `VERIFY` to check
-that motion goals stop immediately. With `use_nav2:=true`, inspect
-`/embertrace/navigation_status` and verify that cancellation stops motion.
+Equivalent launch command:
+
+```bash
+ros2 launch embertrace_bringup embertrace_demo.launch.py \
+  use_nav2:=true use_drone:=true use_rviz:=true use_dashboard:=true scenario:=fire
+```
+
+Run the read-only readiness check in a second sourced terminal before START:
+
+```bash
+ros2 run embertrace_core demo_preflight.py --timeout 60
+```
+
+Begin with `scenario:=no_fire` to inspect patrol and drone motion; then restart
+with `scenario:=fire`. See [Demo guide](docs/demo-guide.md) for false alarms,
+dropout, recording and isolated sensor/teleoperation modes.
+
+### 5. Send an operator command without the dashboard
+
+```bash
+ros2 service call /embertrace/operator_command \
+  embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
+```
+
+Valid commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET` and `E_STOP`.
+
+## What should appear
+
+- Gazebo opens the `embertrace_forest` world with a Husky rover at the ranger base and an aerial scout hovering above its base.
+- RViz shows the robot, LiDAR, smoke samples and source estimate. The map and investigation goals appear when SLAM is running.
+- The EmberTrace dashboard displays mission state, smoke, temperature, confidence and alert information.
+- After `START`, the state is `PATROL`. Moving the robot into the plume causes `INVESTIGATE` and then `TRACK`; sufficiently strong combined evidence causes `VERIFY` and `ALERT`.
+
+For a launch with `use_nav2:=false`, START the mission, then use teleoperation to move through the plume:
+
+```bash
+ros2 run teleop_twist_keyboard teleop_twist_keyboard \
+  --ros-args --remap cmd_vel:=/husky1/autonomy_cmd_vel
+```
+
+## Repository layout
+
+```text
+embertrace_ros2/
+├── docs/                       Architecture, interfaces, simulation and team guidance
+├── scripts/                    Dependency, build, run and validation helpers
+└── src/
+    ├── embertrace_interfaces/  Custom messages and operator service
+    ├── embertrace_sim/         Gazebo world, Husky, bridges, Nav2/SLAM config and RViz
+    ├── embertrace_core/        C++ sensing, perception, decisions, search and visualisation
+    ├── embertrace_ui/          C++/Qt operator dashboard
+    └── embertrace_bringup/     One launch file and project-level parameters
+```
+
+The detailed data flow and node responsibilities are in [System architecture](docs/architecture.md). Topic and service names are defined in [Interface contract](docs/interface-contract.md).
+
+For the exact installation set and common runtime problems, see [Dependencies](docs/dependencies.md) and [Troubleshooting](docs/troubleshooting.md).
+
+## Recommended teammate workflow
+
+1. Read [Start here for teammates](docs/teammate-start-here.md).
+2. Claim one task from [Development roadmap](docs/development-roadmap.md).
+3. Create a branch such as `feature/nav2-goal-adapter`.
+4. Build only the package you are changing during iteration:
+
+   ```bash
+   colcon build --symlink-install --packages-select embertrace_core
+   ```
+
+5. Run `./scripts/validate_repo.py` and package tests before opening a pull request.
+
+## Important limitations
+
+- Smoke is a mathematical field, not computational fluid dynamics. This keeps the system deterministic and achievable in 12 weeks.
+- The environment simulator knows the hidden fire coordinates, but publishes only local sensor readings. Decision nodes must never subscribe to ground truth.
+- Scenario switches remove the visible fire model for no_fire, dust and hot_surface trials. The visual_decoy scenario deliberately retains it without a fire field.
+- The colour-based camera verifier is a simulation heuristic, and the drone is an ideal velocity-controlled proxy without rotor dynamics or a physical flight controller.
+- The synthetic perception report does not establish recorded Gazebo or hardware performance. Complete at least three recorded perception scenarios and ten source-localisation rover trials on the target machine.
+
+## Origin of supplied material
+
+The simulation structure, Husky model, sensor bridge conventions, forest texture and meshes were adapted from the supplied `41068_ignition_bringup_v1.zip`. See [Original package audit](docs/original-package-audit.md) and [NOTICE](NOTICE.md) before publishing the repository publicly.
+
+## October 20 perception update
+
+Native IR cameras, explicit CO2, freshness/persistence and evaluation changes are documented in
+[perception validation](docs/perception-validation.md).
+Follow [VM/GitHub and simulation startup](docs/perception-vm-startup.md) for a fresh machine.
+ROS/Gazebo target-machine acceptance remains required.
