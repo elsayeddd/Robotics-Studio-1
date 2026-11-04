@@ -190,7 +190,19 @@ all replay parameters to the live YAML before comparing runs. The CLI supports
 alpha, smoke/heat/CO2 entry, exit and scale settings, visual weight and persistence;
 other settings use documented defaults.
 
-## Target-machine acceptance still required
+## Target-machine acceptance
+
+The Humble/Fortress build, 63 native tests, both-platform recorded perception,
+shared wind/battery/scene controls and ten strict autonomous fire missions have
+now passed on the target setup. The ten missions include five per vehicle, all
+source resolutions and measured returns, with 0.338 m median source error overall.
+Actual-window control/freshness checks and live rover/drone map views also pass.
+See the [saved integration results](validation/2026-11-05/README.md) for revisions,
+metrics, retained failures and the larger-forest checks still in progress.
+
+The original acceptance sequence below remains useful for reproduction. Exhaustive
+small/distant-target and occlusion characterisation has not been completed; the
+native scene and recorded fixtures cover specific views and temperatures.
 
 1. Clean Humble build of all packages and `colcon test-result --verbose` with no failures.
 2. Transport integration test for actual ROS nodes, including required IR loss,

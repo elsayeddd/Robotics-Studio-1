@@ -255,3 +255,11 @@ and received no state or odometry despite the independent preflight succeeding.
 The recorder now creates its DDS subscriptions before starting the world, matching
 the strict campaign's startup order, and requires its own heartbeat before START.
 This change needs a fresh smoke/CI run; the failed run is retained.
+
+The dense drone negative mission now passes at `061bfd8`: all twelve physical
+sweep visits over two loops, no confirmed alerts or safety pauses, automatic
+return and landing, with 0.195 m final 3D displacement. I watched this run through
+the separate GPU viewer. The dense rover test uses the new automatic WSL launch
+split at `5fa2f3c`; it is still running. The source/noise-seed results and held-out
+perception metrics are now saved under `docs/validation/2026-11-05` so the core
+acceptance data is available from Git, alongside the ignored detailed logs.

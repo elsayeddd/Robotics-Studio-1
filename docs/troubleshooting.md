@@ -45,6 +45,21 @@ ros2 launch embertrace_bringup embertrace_demo.launch.py use_dashboard:=false
 
 The operator service and RViz remain available.
 
+## Gazebo is slow or Ogre2 crashes under WSLg
+
+Use the normal launch with `gui_render_engine:=ogre` (the WSLg default). It runs
+the native Ogre2 sensor renderer on software GL under Xvfb and opens a separate
+GPU Ogre desktop viewer. This setup was tested with the RTX 2060/D3D12 renderer
+and the larger forest. It keeps native thermal images available without forcing
+the desktop viewer onto software rendering.
+
+The `GL3PlusTextureGpu::copyTo` exception matches the upstream
+[Ogre2/WSL rendering report](https://github.com/gazebosim/gz-rendering/issues/662).
+Switching only the viewer engine does not fix that exception in a GPU sensor
+server. On a machine with compatible Ogre2 drivers, `gui_render_engine:=ogre2`
+uses the normal combined process. For headless tests, use
+`LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` and `gazebo_gui:=false`.
+
 ## RViz reports transform errors
 
 Start with fixed frame `husky1_odom`. `husky1_map` is not available until SLAM runs. Confirm:

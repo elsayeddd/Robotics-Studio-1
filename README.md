@@ -15,10 +15,10 @@ matrix and [integration review](docs/integration-review.md) for current acceptan
 | --- | --- | --- |
 | IR/CO2/smoke/temperature/RGB perception | Independent per-platform filters, image persistence, timestamp alignment and stale watchdogs | Pure/native regressions and six scenarios over twelve Gazebo runs passed |
 | Wind dispatch and mission policy | Stable safe wind selects drone or rover; selected-local confirmation, E-stop, timeouts and ACK | 61 pure policy checks and native transport tests passed |
-| Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | All launch modes pass movement/control/return checks; fire-source campaign pending |
+| Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | Ten autonomous fire missions passed, including source resolution and measured return; dense-forest drone two-loop patrol passed |
 | Scene state and shared inputs | Healthy/burning/burnt tree rendering/emissions; configurable wind/battery | Eight fixtures and native healthy/burning/burnt service + sensor check passed |
 | Map/dashboard/manual control | SLAM or local odometry positions, both platforms, source/sample marker, health, controls and event log | Native Qt/map/TF and actual-window interaction checks passed, including release/focus/connection loss |
-| Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | 60 synthetic trials reproduced; target-machine campaigns pending |
+| Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | Twelve recorded worlds passed both-platform checks; ten autonomous missions passed with 0.338 m median source error |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
@@ -68,7 +68,7 @@ Equivalent launch command:
 
 ```bash
 ros2 launch embertrace_bringup embertrace_demo.launch.py \
-  use_nav2:=true use_drone:=true use_rviz:=true use_dashboard:=true scenario:=fire
+  use_rviz:=true use_dashboard:=true scenario:=fire
 ```
 
 For independent missions, add `mission_platform:=rover` or
@@ -76,6 +76,11 @@ For independent missions, add `mission_platform:=rover` or
 vehicles and activates one according to safe wind conditions. Standalone rover
 mode can operate at low wind; drone-only mode holds above 5 m/s instead of selecting
 an absent rover. Pass the same `--platform` to preflight.
+
+Add `world_file:=embertrace_forest_dense.sdf` for the larger 70 × 70 m forest
+(60 trees, compared with 20 in the original 40 × 40 m scene). On WSLg, the default
+launch separates software sensor rendering from the GPU viewer for smoother
+motion; see [rendering troubleshooting](docs/troubleshooting.md#gazebo-is-slow-or-ogre2-crashes-under-wslg).
 
 Run the read-only readiness check in a second sourced terminal before START:
 

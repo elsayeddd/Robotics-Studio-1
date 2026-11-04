@@ -1,4 +1,4 @@
-# Completion handover — 2 November 2026
+# Completion handover — 5 November 2026
 
 This update completes the perception code paths and connects them to the mission,
 both simulated platforms, the operator interface and reproducible evaluation tools.
@@ -17,23 +17,23 @@ CO2 or dual-platform operation. RGB machine learning is not a mandatory replacem
 for the documented supporting colour detector. Mapping enhancement and terrain
 mapping remain extensions to the original MVP.
 
-| Requirement | Implementation in this snapshot | Acceptance still to collect |
+| Requirement | Implementation in this snapshot | Current acceptance evidence |
 | --- | --- | --- |
-| R1 waypoint navigation | YAML rover patrol through Nav2; bounded aerial sweep; two-loop completion | Both selected platforms finish routes; paused patrol resumes at nearest waypoint |
-| R2 IR hotspot detection | Native radiometric cameras on both models; endian/stride-aware decoding, connected hot regions, consecutive frames | Fortress image conversion, known temperatures, visibility, occlusion and distant/small targets |
-| R3 elevated CO2 | Explicit independently simulated concentration, validity, EMA, hysteresis, persistence and gas fusion | Ambient/fire/dust, boundary values, spikes and dropout in recorded Gazebo runs |
+| R1 waypoint navigation | YAML rover patrol through Nav2; bounded aerial sweep; two-loop completion | Native action/waypoint tests and both-platform motion/return checks pass; dense drone completes all 12 visits over two loops; full rover negative patrol under validation |
+| R2 IR hotspot detection | Native radiometric cameras on both models; endian/stride-aware decoding, connected hot regions, consecutive frames | Native image tests, both-platform recorded fire/dropout and both-world known scene temperatures pass; exhaustive distant-target/occlusion characterisation remains future work |
+| R3 elevated CO2 | Explicit independently simulated concentration, validity, EMA, hysteresis, persistence and gas fusion | Pure boundaries/spikes/dropout plus twelve recorded Gazebo worlds pass both-platform checks |
 | R4 terrain mapping (stretch) | Existing SLAM occupancy map, map-safe rover goals and dashboard map are integrated | This does not implement a new 3D terrain model |
-| R5 healthy/burning/burnt trees | Tree service changes visual geometry/material/thermal state and gas emissions together; unavailable scene changes withhold raw samples | Confirm remove/create, all three appearances and coupled readings in both supplied worlds |
-| R6 investigate anomaly | Selected vehicle progresses patrol → investigate → track/recover → verify; bounded history and timeouts | Autonomous plume tracking, loss/recovery and obstacle handling |
-| R7 location and sensor alert | Suspected-anomaly warning on investigation, followed by a separately gated confirmed alert; platform/id/time, gas/heat/IR/wind, resolved source or explicitly labelled detection-sample fallback | Live source accuracy and alert latency; fallback must not be counted as a resolved source |
-| R8 robot/source UI | Qt occupancy map, both robot positions/telemetry, source/sample marker, batteries and stale/disconnected states | Map alignment, frame transforms, stale displays and window responsiveness |
-| R9 operator commands | START/PAUSE/RESUME/RETURN/RESET/E_STOP plus ACK; responses and event log | Click/service behaviour and cancellations with Nav2 active |
-| R10 manual control (stretch) | Hold/release dashboard buttons; shared command input; selected-platform gate, timeouts and bounds | Release, focus loss, UI exit and E-stop while moving |
-| R11 automatic return | Return after two patrol loops, alert hold or low battery; measured launch position; arrival ends mission | Rover return and drone landing; battery threshold and return timeout |
-| R12 wind measurement | Configurable simulated stamped wind; filtered policy with dwell/hysteresis and stale-data checks | Real ROS parameter changes and frozen/missing wind |
-| R13 wind deployment | ≤5 m/s drone, >5 to ≤12 m/s rover, >12 m/s neither; immediate stop on unsafe change | Boundary/noise/dropout trials; RESUME reselects only after stable safe inputs |
-| Roadmap P4 evaluation | Same production filter used by recorder/replay, confusion matrices, availability, missed events, latency and training-only threshold sweep | At least three recorded scenarios; keep negatives and failures |
-| C3 recorded integration | Map/TF checks, dual-platform transport test, ten-seed autonomous campaign with retained logs/results | Vasili/Adam collect ten actual autonomous trials and report failures and median source error |
+| R5 healthy/burning/burnt trees | Tree service changes visual geometry/material/thermal state and gas emissions together; unavailable scene changes withhold raw samples | Native service, IR and coupled gas changes pass in both supplied worlds |
+| R6 investigate anomaly | Selected vehicle progresses patrol → investigate → track/recover → verify; bounded history and timeouts | Ten autonomous missions complete with local evidence, including bounded rover recovery |
+| R7 location and sensor alert | Suspected-anomaly warning on investigation, followed by a separately gated confirmed alert; platform/id/time, gas/heat/IR/wind, resolved source or explicitly labelled detection-sample fallback | Ten resolved sources: median 0.316 m drone, 0.412 m rover, 0.338 m overall; fallback excluded; latency and early detections retained |
+| R8 robot/source UI | Qt SLAM or odometry map, both robot positions/telemetry, source/sample marker, batteries and stale/disconnected states | Native Qt/map transforms and actual-window interaction pass; live rover and standalone drone screenshots retained |
+| R9 operator commands | START/PAUSE/RESUME/RETURN/RESET/E_STOP plus ACK; responses and event log | Actual button clicks, confirmation cancellation, service transport and persistent CSV regression pass |
+| R10 manual control (stretch) | Hold/release dashboard buttons; shared command input; selected-platform gate, timeouts and bounds | Actual-window release/focus/connection-loss checks and native guards pass for both vehicles |
+| R11 automatic return | Return after two patrol loops, alert hold or low battery; measured launch position; arrival ends mission | All ten fire missions return; all five drones land; dense drone two-loop return and live battery-input tests pass |
+| R12 wind measurement | Configurable simulated stamped wind; filtered policy with dwell/hysteresis and stale-data checks | Native simulator parameter changes, frozen/missing inputs and policy regressions pass |
+| R13 wind deployment | ≤5 m/s drone, >5 to ≤12 m/s rover, >12 m/s neither; immediate stop on unsafe change | Pure boundaries/noise plus native selection, unsafe/lost-input holds and live wind changes pass |
+| Roadmap P4 evaluation | Same production filter used by recorder/replay, confusion matrices, availability, missed events, latency and training-only threshold sweep | Six scenarios across twelve recorded worlds; both vehicle baselines checked, four negatives have zero confirmed false positives |
+| C3 recorded integration | Map/TF checks, dual-platform transport test, ten-seed autonomous campaign with retained logs/results | Ten real autonomous Gazebo missions pass at `0c932ba`; five per vehicle, no operator return/resume; earlier failed cohorts retained |
 
 Wind limits are project demonstration assumptions, not certified aircraft/rover
 limits. The drone remains the supplied ideal velocity-controlled proxy: takeoff,

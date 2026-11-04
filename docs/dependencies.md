@@ -39,7 +39,9 @@ These are helpful but not needed to run the simulation.
 
 ## Headless acceptance and VM memory
 
-Install `xvfb` and `libgl1-mesa-dri` to run sensor rendering without a desktop:
+Install `xvfb` and `libgl1-mesa-dri` to run sensor rendering without a desktop.
+Visible WSLg launches also use Xvfb for the sensor server; `xvfb` is declared in
+the simulator package so rosdep installs it:
 
 ```bash
 sudo apt-get install -y xvfb libgl1-mesa-dri
