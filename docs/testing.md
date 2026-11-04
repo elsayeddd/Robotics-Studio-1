@@ -55,6 +55,18 @@ pause/resume, measured return and E-stop. Automatic mode also checks that the
 unselected vehicle remains held. The launch log stays in log/demo-smoke. Use
 `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` if a virtual display is needed.
 
+For visible tests, add `--gui` to the mission or rover patrol recorder and
+`--world-file embertrace_forest_dense.sdf` to select the larger 70 × 70 m forest.
+The default remains the original 40 × 40 m forest. The dense scene preserves the
+original patrol and source area, with additional trees and landmarks outside it.
+
+On WSLg, visible launches use a software Ogre2 sensor server under Xvfb and a
+separate GPU Ogre viewer on the desktop. This avoids the Ogre2/D3D12 texture-copy
+failure seen on this machine while keeping IR resolution, sensor rates, physics
+and vehicle limits unchanged. `gui_render_engine:=ogre2` selects the normal
+combined renderer for machines with compatible drivers. Headless tests keep their
+existing rendering environment. Close the launch with Ctrl-C when finished.
+
 CI passes `--max-sensor-holds 2` for the operator smoke check. If rendering stalls
 IR acquisition, it must first observe zero commands and less than 0.2 m stopped
 drift, pass fresh continuous preflight, then issue an explicit RESUME. Each such

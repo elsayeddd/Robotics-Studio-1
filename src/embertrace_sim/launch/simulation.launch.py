@@ -3,12 +3,15 @@
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, GroupAction, IncludeLaunchDescription
 from launch.actions import (
+    ExecuteProcess,
+    EmitEvent,
     SetEnvironmentVariable,
     TimerAction,
     OpaqueFunction,
     RegisterEventHandler,
 )
-from launch.event_handlers import OnShutdown
+from launch.event_handlers import OnProcessExit, OnShutdown
+from launch.events import Shutdown
 from ament_index_python.packages import get_package_share_directory
 import tempfile
 from pathlib import Path
@@ -119,6 +122,30 @@ def generate_launch_description():
             Path(runtime_world).unlink(missing_ok=True)
             return []
 
+        cleanup_handler = RegisterEventHandler(
+            OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)])
+        )
+        if gui and Path('/mnt/wslg').exists() and gui_engine == 'ogre':
+            # I keep the IR renderer on software GL on WSL; the desktop viewer
+            # can still use D3D12 without hitting Ogre2's texture-copy failure.
+            sensor_server = ExecuteProcess(
+                    cmd=['xvfb-run', '-a', '-s', '-screen 0 1280x720x24',
+                         'env', 'LIBGL_ALWAYS_SOFTWARE=1', 'ign', 'gazebo',
+                         runtime_world, '-r', '-s', '-v', '3'],
+                    name='gazebo_sensor_server', output='screen')
+            viewer = ExecuteProcess(
+                    cmd=['env', '-u', 'LIBGL_ALWAYS_SOFTWARE', 'ign', 'gazebo',
+                         '-g', '--render-engine-gui', gui_engine],
+                    name='gazebo_viewer', output='screen')
+            return [
+                sensor_server,
+                viewer,
+                RegisterEventHandler(OnProcessExit(target_action=sensor_server,
+                    on_exit=[EmitEvent(event=Shutdown(reason='Gazebo sensor server exited'))])),
+                RegisterEventHandler(OnProcessExit(target_action=viewer,
+                    on_exit=[EmitEvent(event=Shutdown(reason='Gazebo viewer closed'))])),
+                cleanup_handler,
+            ]
         return [
             IncludeLaunchDescription(
                 PythonLaunchDescriptionSource(
@@ -134,9 +161,7 @@ def generate_launch_description():
                     "ign_args": [runtime_world, " -r --render-engine-gui " + gui_engine if gui else " -r -s -v 3"]
                 }.items(),
             ),
-            RegisterEventHandler(
-                OnShutdown(on_shutdown=[OpaqueFunction(function=cleanup)])
-            ),
+            cleanup_handler,
         ]
 
     gazebo = OpaqueFunction(function=launch_world)

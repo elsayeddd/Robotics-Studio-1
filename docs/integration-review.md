@@ -233,3 +233,25 @@ and retry; readiness also requires fresh replies. Path-query futures are bounded
 as well. CI now trusts its explicit container checkout so Git can record revision
 metadata despite the mounted directory's different owner. These changes do not
 alter controller or sensor thresholds.
+
+
+Visible validation uses the original forest for the completed ten-mission cohort.
+The larger 70 × 70 m forest previously passed scene/IR/gas changes; full missions
+and two-loop patrols are now being run there as well. The sparse rover negative
+patrol stopped on expired IR after 18 of 21 measured visits during viewer changes;
+it remains a failed trial in `log/final-rover-patrol`.
+
+I separated the WSL viewer from the sensor renderer after reproducing Ogre2's
+D3D12 texture-copy exception. The GPU Ogre viewer is smoother (confirmed on the
+desktop), while the software Ogre2 server retains the existing thermal camera.
+The dense drone patrol measured about 0.86–0.99 real-time factor with this split.
+An attempted GPU sensor-server trial failed before START and is retained in
+`log/dense-drone-patrol-gpu-v1`. Sensor resolution/rates and motion limits are
+unchanged. Visible WSL launches now use this split automatically.
+
+CI at `97b38bb` passed all 63 native tests, the rover operator smoke check and all
+12 recorded perception worlds. The drone smoke recorder joined after preflight
+and received no state or odometry despite the independent preflight succeeding.
+The recorder now creates its DDS subscriptions before starting the world, matching
+the strict campaign's startup order, and requires its own heartbeat before START.
+This change needs a fresh smoke/CI run; the failed run is retained.

@@ -33,17 +33,11 @@ def main():
     output.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, IGN_PARTITION=f'embertrace_smoke_{os.getpid()}')
     environment['GZ_PARTITION'] = environment['IGN_PARTITION']
+    rclpy.init()
+    node = Node('demo_smoke')
     with (output / 'launch.log').open('w') as log:
-        process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
-            'use_rviz:=false', 'use_dashboard:=false', 'gazebo_gui:=false',
-            f'mission_platform:={args.platform}', 'scenario:=no_fire'],
-            stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
-        node = None
+        process = None
         try:
-            subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',
-                            '--platform', args.platform, '--timeout', '120'], check=True, timeout=140)
-            rclpy.init()
-            node = Node('demo_smoke')
             poses, commands, state = {}, {}, {'name': None, 'detail': None}
             images, cues, sensor_holds = deque(maxlen=12), deque(maxlen=20), []
             def mission(message):
@@ -127,7 +121,17 @@ def main():
                     ir_wall_gap_s=snapshot['wall_s']-last_image[0]['wall_s'] if last_image else None,
                     last_ir_cue_valid=last_cue[0]['valid'] if last_cue else None))
                 print('Verified sensor stop and operator RESUME: '+json.dumps(sensor_holds[-1]), flush=True)
-            until(lambda: len(poses) == len(robots) and client.service_is_ready(), 25)
+            # Establish the recorder before the servers, as in the mission
+            # campaign, so startup readiness also covers this DDS participant.
+            process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
+                'use_rviz:=false', 'use_dashboard:=false', 'gazebo_gui:=false',
+                f'mission_platform:={args.platform}', 'scenario:=no_fire'],
+                stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
+            subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',
+                            '--platform', args.platform, '--timeout', '120'],
+                           env=environment, check=True, timeout=140)
+            until(lambda: len(poses) == len(robots) and state['name'] is not None
+                  and client.service_is_ready(), 25)
             initial = dict(poses)
             command('START', wait_ready=True)
             until(lambda: math.dist(initial[active_robot], poses[active_robot]) > 0.8, 70, recover_holds=True)
@@ -150,7 +154,7 @@ def main():
             (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
             print('Gazebo integration passed: ' + json.dumps(result), flush=True)
         finally:
-            if process.poll() is None:
+            if process is not None and process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)
                 try:
                     process.wait(timeout=10)
