@@ -26,6 +26,8 @@ def main():
     parser.add_argument('--max-duration', type=float, default=1200)
     parser.add_argument('--wall-timeout', type=float, default=1800)
     parser.add_argument('--output', default='log/patrol-final')
+    parser.add_argument('--world-file', choices=['embertrace_forest.sdf', 'embertrace_forest_dense.sdf'], default='embertrace_forest.sdf')
+    parser.add_argument('--gui', action='store_true')
     args = parser.parse_args()
     if args.loops < 1: parser.error('At least one loop is required')
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
@@ -36,6 +38,7 @@ def main():
     visit_tolerance = 1.7
     result = {'source_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'src'], text=True).strip(),
               'harness_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'scripts/ros_patrol_trials.py'], text=True).strip(),
+              'world_file': args.world_file, 'gazebo_gui': args.gui,
               'visited_waypoints': [], 'visit_tolerance_m': visit_tolerance,
               'closed_loops': 0, 'skipped_waypoints': 0, 'navigation_failures': 0, 'path_length_m': 0., 'false_alerts': 0, 'passed': False}
     rclpy.init(); node = Node('patrol_acceptance')
@@ -72,7 +75,8 @@ def main():
     environment['GZ_PARTITION'] = environment['IGN_PARTITION']
     with (output / 'launch.log').open('w') as log:
         process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
-            'mission_platform:=rover', 'scenario:=no_fire', 'gazebo_gui:=false', 'use_dashboard:=false', 'use_rviz:=false'],
+            'mission_platform:=rover', 'scenario:=no_fire', 'gazebo_gui:='+str(args.gui).lower(),
+            'world_file:='+args.world_file, 'use_dashboard:=false', 'use_rviz:=false'],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
         try:
             subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py', '--platform', 'rover', '--timeout', '120'],

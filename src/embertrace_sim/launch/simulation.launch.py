@@ -44,6 +44,7 @@ def generate_launch_description():
     def launch_world(context):
         scenario = LaunchConfiguration("scenario").perform(context)
         gui = LaunchConfiguration("gazebo_gui").perform(context).lower() == "true"
+        gui_engine = LaunchConfiguration("gui_render_engine").perform(context)
         if scenario not in (
             "fire",
             "no_fire",
@@ -130,7 +131,7 @@ def generate_launch_description():
                     )
                 ),
                 launch_arguments={
-                    "ign_args": [runtime_world, " -r" if gui else " -r -s -v 3"]
+                    "ign_args": [runtime_world, " -r --render-engine-gui " + gui_engine if gui else " -r -s -v 3"]
                 }.items(),
             ),
             RegisterEventHandler(
@@ -321,6 +322,8 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "gazebo_gui", default_value="true", choices=["true", "false"]
             ),
+            DeclareLaunchArgument("gui_render_engine", default_value="ogre" if Path('/mnt/wslg').exists() else "ogre2",
+                                  choices=["ogre", "ogre2"]),
             DeclareLaunchArgument("rover_x", default_value="-14.0"),
             DeclareLaunchArgument("rover_y", default_value="-14.0"),
             DeclareLaunchArgument("drone_x", default_value="-14.0"),

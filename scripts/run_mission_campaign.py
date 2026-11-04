@@ -52,6 +52,8 @@ def trial(args, output, number):
         source_revision=args.source_revision,
         harness_revision=args.harness_revision,
         seed=seed,
+        world_file=args.world_file,
+        gazebo_gui=args.gui,
         ros_domain_id=domain,
         platform=robot,
         success=False,
@@ -202,7 +204,8 @@ def trial(args, output, number):
             "use_thermal:=true",
             "use_rviz:=false",
             "use_dashboard:=false",
-            "gazebo_gui:=false",
+            "gazebo_gui:=" + str(args.gui).lower(),
+            "world_file:=" + args.world_file,
             f"scenario:={args.scenario}",
             f"random_seed:={seed}",
             f"drone_random_seed:={seed+1000}",
@@ -313,6 +316,8 @@ def trial(args, output, number):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="log/autonomous-campaign")
+    parser.add_argument("--world-file", choices=['embertrace_forest.sdf', 'embertrace_forest_dense.sdf'], default='embertrace_forest.sdf')
+    parser.add_argument("--gui", action='store_true', help='Show the live simulator while testing')
     parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "20")))
     parser.add_argument("--platform", choices=["alternating", "drone", "rover"], default="alternating")
     parser.add_argument("--trials", type=int, default=10)
@@ -352,6 +357,7 @@ def main():
 
     summary = dict(
         scenario=args.scenario,
+        world_file=args.world_file,
         trials=len(results),
         completed=sum(r['mission_completed'] for r in results),
         successful=sum(r["success"] for r in results),

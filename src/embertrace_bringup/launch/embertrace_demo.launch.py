@@ -51,6 +51,7 @@ def generate_launch_description():
             "drone_z": LaunchConfiguration("drone_z"),
             "scenario": LaunchConfiguration("scenario"),
             "gazebo_gui": LaunchConfiguration("gazebo_gui"),
+            "gui_render_engine": LaunchConfiguration("gui_render_engine"),
             **{
                 key: LaunchConfiguration(key)
                 for key in ("rover_x", "rover_y", "drone_x", "drone_y")
@@ -365,6 +366,8 @@ def generate_launch_description():
             DeclareLaunchArgument(
                 "gazebo_gui", default_value="true", choices=["true", "false"]
             ),
+            DeclareLaunchArgument("gui_render_engine", default_value="ogre" if Path('/mnt/wslg').exists() else "ogre2",
+                                  choices=["ogre", "ogre2"]),
             DeclareLaunchArgument("random_seed", default_value="42"),
             DeclareLaunchArgument("drone_random_seed", default_value="43"),
             DeclareLaunchArgument("dropout_start_s", default_value="25.0"),

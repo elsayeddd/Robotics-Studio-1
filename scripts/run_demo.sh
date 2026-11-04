@@ -14,5 +14,6 @@ source /opt/ros/humble/setup.bash
 source "$REPO_ROOT/install/setup.bash"
 set -u
 
-exec ros2 launch embertrace_bringup embertrace_demo.launch.py \
-  use_nav2:=true use_drone:=true use_rviz:=true use_dashboard:=true "$@"
+# The launch derives enabled vehicles from mission_platform. In particular,
+# forcing use_drone here would break the standalone rover preset.
+exec ros2 launch embertrace_bringup embertrace_demo.launch.py "$@"
