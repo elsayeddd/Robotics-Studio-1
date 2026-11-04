@@ -39,7 +39,7 @@ Patrol progresses through investigate, track/recover, verify and alert. Verifica
 holds motion while gathering separate confirmation samples. An alert automatically
 leads to return after a hold. Completed coverage or low battery also returns. Arrival
 ends the mission; failed or timed-out navigation pauses for review. E_STOP remains
-latched across clock rewind and only RESET clears it.
+latched across clock rewind; RESET (also named E_STOP_RELEASE) clears it.
 
 ## Evidence and motion boundaries
 

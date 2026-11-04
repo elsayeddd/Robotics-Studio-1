@@ -1,6 +1,6 @@
 # ROS interface contract
 
-This is the integration contract for the November 2 snapshot. Rebuild all packages
+This is the integration contract for the November 5 snapshot. Rebuild all packages
 after applying message changes. Use message frames and acquisition timestamps;
 do not substitute publication time or an image hotspot for a source coordinate.
 
@@ -71,6 +71,7 @@ Invalid or unsafe commands return accepted=false with a reason.
 | RESUME | Re-check wind/sensors; restore same-platform phase or start newly selected platform patrol |
 | RETURN | Return selected platform to measured launch pose if conditions permit |
 | RESET | Stop, increment epoch and clear emergency/mission state to IDLE |
+| E_STOP_RELEASE | Alias for RESET, used by the dashboard's explicit release action |
 | E_STOP | Latch stop; START/RESUME/manual cannot clear it |
 | ACK | Acknowledge a recorded alert without changing its sensor evidence |
 | MANUAL_ON | Hold autonomy and enable bounded, selected-platform operator commands |

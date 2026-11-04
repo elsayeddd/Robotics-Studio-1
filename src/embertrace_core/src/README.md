@@ -1,7 +1,7 @@
 # C++ node development notes
 
 Source headers and inline comments explain the runtime responsibilities and failure behaviour.
-The November 2 integration is described in docs/completion-handover.md. Keep one
+The current integration is described in docs/completion-handover.md. Keep one
 executable per node; pure policy/numerical libraries also run without ROS.
 
 ## Recommended ownership
@@ -24,9 +24,12 @@ The adapter subscribes to `/embertrace/navigation_goal`, transforms goals into
 `husky1_map`, and sends them to `/husky1/navigate_to_pose` when Nav2 is ready.
 It cancels goals on mission-state changes or when motion is disallowed, rejects
 stale and out-of-bounds goals, and publishes result strings on
-`/embertrace/navigation_status`. The patrol manager currently advances from
-map-frame odometry proximity; action-result sequencing and full rover acceptance
-remain to be validated on the target ROS machine.
+`/embertrace/navigation_status`. The patrol manager uses action results together
+with measured TF proximity in the configured route frame, retries bounded failures
+and announces return completion. Native mock-action and waypoint regressions pass;
+five standard-forest rover fire missions have resolved their sources and returned.
+Full two-loop negative patrol results are tracked in
+`docs/validation/2026-11-05/README.md`.
 
 ## Priority 3: search and source estimate
 
@@ -77,8 +80,9 @@ standard-field trials with the baseline perception filter, a fixed survey route
 with moved sources and changed plume parameters, and translation of the same
 evidence to another location. The seeded test
 checks median error below 2.0 m, but it supplies a controlled track through
-the plume. The roadmap's full rover-trial acceptance still needs integrated
-runs with the Nav2 adapter and patrol manager.
+the plume. Separate strict Gazebo missions now exercise the Nav2 adapter and
+patrol manager; see `docs/validation/2026-11-05/README.md` for actual mission
+coverage and measured errors.
 
 For a runtime check after building, launch with `use_nav2:=true` so SLAM
 publishes `/husky1/map`, select the rover with `wind_speed_mps:=7.0`, then send START:
