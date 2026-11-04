@@ -11,6 +11,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <stdexcept>
 #include <utility>
 
 #include "embertrace_core/known_free_grid.hpp"
@@ -73,6 +74,9 @@ public:
     search_timeout_s_ = std::max(1.0, declare_parameter<double>("search_timeout_s", 120.0));
     reading_timeout_s_ = std::max(0.5, declare_parameter<double>("reading_timeout_s", 3.0));
     robot_clearance_m_ = std::max(0.0, declare_parameter<double>("robot_clearance_m", 0.8));
+    source_standoff_m_ = declare_parameter<double>("source_standoff_m", 1.2);
+    if (!std::isfinite(source_standoff_m_) || source_standoff_m_ < robot_clearance_m_)
+    {throw std::invalid_argument("Source stand-off must be finite and at least the robot clearance");}
     goal_snap_radius_m_ = std::max(
       0.0, declare_parameter<double>("goal_snap_radius_m", 2.0));
     max_map_occupancy_ = std::clamp<int>(
@@ -133,6 +137,7 @@ private:
     }
     if (!was_searching && search_state(state_)) {
       timeout_reported_ = false;
+      have_signal_ = false;
       search_start_ = now();
       have_search_start_ = true;
       cast_count_ = 0;
@@ -288,6 +293,7 @@ private:
     const auto & position = reading.sample_pose.pose.position;
     double target_x = position.x;
     double target_y = position.y;
+    std::optional<double> inspection_yaw;
     const bool gas = reading.smoke_detected || reading.co2_detected;
     // IR/local heat can initiate investigation before the gas plume is reached.
     bool casting = state_ == MissionState::RECOVER || !(gas || reading.temperature_anomaly);
@@ -317,8 +323,13 @@ private:
     } else if (estimate_ &&
       std::max(estimate_->variance_x, estimate_->variance_y) < 16.0)
     {
-      const double dx = estimate_->x - position.x;
-      const double dy = estimate_->y - position.y;
+      // I inspect from the downwind side: the estimated centre may be occupied,
+      // and even a small upwind fit error can put the sensor outside the plume.
+      const double inspection_x = estimate_->x + source_standoff_m_ * std::cos(reading.wind_direction_rad);
+      const double inspection_y = estimate_->y + source_standoff_m_ * std::sin(reading.wind_direction_rad);
+      const double dx = inspection_x - position.x;
+      const double dy = inspection_y - position.y;
+      inspection_yaw = std::atan2(estimate_->y - inspection_y, estimate_->x - inspection_x);
       const double distance = std::hypot(dx, dy);
       if (distance > 0.01) {
         const double fraction = std::min(1.0, surge_step_m_ / distance);
@@ -346,7 +357,8 @@ private:
     // the most recent SLAM transform by a few milliseconds.
     requested.header.stamp.sec = 0;
     requested.header.stamp.nanosec = 0;
-    set_yaw(requested.pose, std::atan2(target_y - position.y, target_x - position.x));
+    set_yaw(requested.pose, inspection_yaw.value_or(
+      std::atan2(target_y - position.y, target_x - position.x)));
 
     if (!require_map_) {
       // I keep aerial goals in the measured world frame. The flight controller
@@ -390,7 +402,7 @@ private:
 
   void check_timeout()
   {
-    if (!search_state(state_)) {
+    if (!search_state(state_) || state_ == MissionState::VERIFY) {
       return;
     }
     const auto current = now();
@@ -435,6 +447,7 @@ private:
   double search_timeout_s_{120.0};
   double reading_timeout_s_{3.0};
   double robot_clearance_m_{0.8};
+  double source_standoff_m_{1.2};
   double goal_snap_radius_m_{2.0};
   double world_min_x_{-18.5};
   double world_max_x_{18.5};

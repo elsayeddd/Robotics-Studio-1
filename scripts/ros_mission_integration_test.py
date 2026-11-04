@@ -23,6 +23,7 @@ def main():
         lambda msg: states.append(msg.state_name), QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
     environment = node.create_publisher(EnvironmentalReading, '/embertrace/environment', qos_profile_sensor_data)
     search = node.create_publisher(String, '/embertrace/search_status', 10)
+    scout = node.create_publisher(EnvironmentalReading, '/drone1/environment', qos_profile_sensor_data)
     rover_home = node.create_publisher(Empty, '/embertrace/return_complete', 10)
     drone_home = node.create_publisher(Bool, '/drone1/return_complete', 10)
     client = node.create_client(OperatorCommand, '/embertrace/operator_command')
@@ -61,6 +62,9 @@ def main():
             pump(.5, .3, True); state('INVESTIGATE')
             search.publish(String(data='TIMED_OUT')); pump(.2, .3, True); state('PATROL')
             pump(.5, .4, True); state('PATROL')  # Do not repeatedly investigate the same dismissed anomaly.
+            cue = EnvironmentalReading(); cue.header.stamp = node.get_clock().now().to_msg()
+            cue.header.frame_id = 'husky1_odom'; cue.smoke_detected = True; cue.fused_confidence = .9
+            scout.publish(cue); pump(.2, .4, True); state('PATROL')
             pump(.2); pump(.5, .5, True); state('TRACK')
             pump(.2, .05); state('RECOVER')
             pump(.2, .5, True); state('TRACK')

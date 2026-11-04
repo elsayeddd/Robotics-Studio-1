@@ -61,8 +61,10 @@ public:
     aerial_mission_ = declare_parameter<bool>("aerial_mission", false);
     verification_timeout_s_ = declare_parameter<double>("verification_timeout_s", 15.0);
     verification_retry_s_ = declare_parameter<double>("verification_retry_s", 5.0);
+    scout_retry_s_ = declare_parameter<double>("scout_retry_s", 30.0);
     if (!std::isfinite(verification_timeout_s_) || verification_timeout_s_ <= 0 ||
-      !std::isfinite(verification_retry_s_) || verification_retry_s_ <= 0)
+      !std::isfinite(verification_retry_s_) || verification_retry_s_ <= 0 ||
+      !std::isfinite(scout_retry_s_) || scout_retry_s_ < 0)
     {throw std::invalid_argument("Verification timing must be finite and positive");}
     required_detection_samples_ = std::max<int>(
       1L, declare_parameter<int>("required_detection_samples", 3));
@@ -94,7 +96,8 @@ public:
       "/drone1/environment", rclcpp::SensorDataQoS(),
       [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr sample) {
         const double age = (now() - rclcpp::Time(sample->header.stamp)).seconds();
-        if (state_ == MissionState::PATROL && age >= 0 && age <= reading_timeout_s_ &&
+        if (state_ == MissionState::PATROL && now() >= scout_retry_after_ &&
+          age >= 0 && age <= reading_timeout_s_ &&
           sample->header.frame_id == "husky1_odom" &&
           (sample->smoke_detected || sample->co2_detected || sample->temperature_anomaly) &&
           sample->fused_confidence >= track_confidence_)
@@ -122,6 +125,7 @@ public:
         {
           detection_count_ = confirmation_count_ = 0;
           dismissed_anomaly_ = true;
+          scout_retry_after_ = now() + rclcpp::Duration::from_seconds(scout_retry_s_);
           transition_to(MissionState::PATROL, "Investigation ended; resuming patrol");
         }
       });
@@ -297,6 +301,8 @@ private:
       confirmation_count_ = 0;
       have_estimate_ = false;
       verification_retry_after_ = now();
+      scout_retry_after_ = now();
+      dismissed_anomaly_ = false;
       transition_to(MissionState::PATROL, "Patrol started by operator");
     } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
       if (state_ != MissionState::PAUSED) {pre_pause_state_ = state_;}
@@ -313,6 +319,8 @@ private:
       confirmation_count_ = 0;
       have_estimate_ = false;
       verification_retry_after_ = now();
+      scout_retry_after_ = now();
+      dismissed_anomaly_ = false;
       transition_to(MissionState::IDLE, "System reset; waiting for START");
     } else {
       response->accepted = false;
@@ -434,6 +442,8 @@ private:
   bool require_scout_return_{false}, aerial_mission_{false}, rover_home_{false}, scout_home_{false};
   double verification_timeout_s_{15.0};
   double verification_retry_s_{5.0};
+  double scout_retry_s_{30.0};
+  rclcpp::Time scout_retry_after_{0, 0, RCL_ROS_TIME};
   rclcpp::Time verification_retry_after_{0, 0, RCL_ROS_TIME};
   rclcpp::Time state_entered_{0, 0, RCL_ROS_TIME};
   rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;

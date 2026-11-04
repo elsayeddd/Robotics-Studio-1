@@ -83,6 +83,7 @@ mission_manager_node:
     max_estimate_stddev_m: 4.0
     verification_timeout_s: 15.0
     verification_retry_s: 5.0
+    scout_retry_s: 30.0
 
 search_planner_node:
   ros__parameters:
@@ -102,6 +103,7 @@ search_planner_node:
     plume_expansion: 0.05
     map_topic: /husky1/map
     robot_clearance_m: 0.8
+    source_standoff_m: 1.2
     max_map_occupancy: 20
     goal_snap_radius_m: 2.0
     reading_timeout_s: 3.0
