@@ -134,6 +134,14 @@ def main():
         print(f"Command {text}: {future.result().message} ({time.monotonic()-began:.3f}s)", flush=True)
         return future.result().accepted
 
+    def start_when_ready(speed=2.5):
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            pump(.4, speed=speed)
+            if command("START"):
+                return
+        raise AssertionError(f"No mission readiness: readings={state['readings']}; health={state['health']}")
+
     with tempfile.TemporaryDirectory(prefix="embertrace_dual_") as directory:
         processes, handles = [], []
 
@@ -208,8 +216,7 @@ def main():
             assert client.wait_for_service(
                 timeout_sec=15
             ), "Mission service unavailable"
-            pump(2)
-            assert command("START")
+            start_when_ready()
             pump(1)
             assert state["mission"].active_platform == MissionState.PLATFORM_DRONE
             pump(4, fires=(True, False))
@@ -219,8 +226,7 @@ def main():
             confirmed(MissionState.PLATFORM_DRONE, 2.5, (False, True))
             assert command("E_STOP") and not command("START")
             assert command("RESET")
-            pump(2, speed=7)
-            assert command("START")
+            start_when_ready(speed=7)
             pump(1, speed=7)
             assert state["mission"].active_platform == MissionState.PLATFORM_ROVER
             confirmed(MissionState.PLATFORM_ROVER, 7, (True, False))
