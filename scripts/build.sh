@@ -15,6 +15,7 @@ source /opt/ros/humble/setup.bash
 set -u
 cd "$REPO_ROOT"
 export CMAKE_BUILD_PARALLEL_LEVEL="${CMAKE_BUILD_PARALLEL_LEVEL:-2}"
+export MAKEFLAGS="${MAKEFLAGS:--j2 -l2}"
 colcon build --symlink-install --parallel-workers 2 --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
 
 echo
