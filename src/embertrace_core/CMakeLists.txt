@@ -130,6 +130,9 @@ if(BUILD_TESTING)
   add_test(NAME ros_mission_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_mission_integration_test.py)
   set_tests_properties(ros_mission_integration PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
+  add_test(NAME ros_motion_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_motion_integration_test.py)
+  set_tests_properties(ros_motion_integration PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
   find_package(ament_cmake_gtest REQUIRED)
   add_executable(test_perception_filter test/test_perception_filter.cpp)
   target_link_libraries(test_perception_filter perception_filter)

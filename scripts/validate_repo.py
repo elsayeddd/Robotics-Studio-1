@@ -7,6 +7,7 @@ import ast
 from pathlib import Path
 import sys
 import xml.etree.ElementTree as ET
+import yaml
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -39,14 +40,33 @@ for path in sorted(ROOT.glob("src/*/package.xml")):
     if root.tag != "package" or root.findtext("name") != path.parent.name:
         fail(f"package name/path mismatch in {path.relative_to(ROOT)}")
 
-for pattern in ("src/**/*.sdf", "src/**/*.urdf", "src/**/*.xacro", "src/**/model.config"):
+for pattern in ("src/**/*.sdf", "src/**/*.urdf", "src/**/*.xacro", "src/**/*.dae", "src/**/model.config"):
     for path in sorted(ROOT.glob(pattern)):
         try:
-            ET.parse(path)
+            tree = ET.parse(path)
+            if path.suffix == ".sdf" and tree.getroot().find(".//geometry/cone") is not None:
+                fail(f"Fortress cannot render cone primitives in {path.relative_to(ROOT)}; use a local mesh")
         except ET.ParseError as exc:
             fail(f"invalid XML in {path.relative_to(ROOT)}: {exc}")
 
-for path in sorted(ROOT.glob("src/**/*.launch.py")):
+class UniqueKeysLoader(yaml.SafeLoader):
+    def construct_mapping(self, node, deep=False):
+        mapping = {}
+        for key_node, value_node in node.value:
+            key = self.construct_object(key_node, deep=deep)
+            if key in mapping:
+                raise ValueError(f"duplicate YAML key: {key}")
+            mapping[key] = self.construct_object(value_node, deep=deep)
+        return mapping
+
+
+for path in sorted(list(ROOT.glob("src/**/*.yaml")) + list(ROOT.glob(".github/**/*.yml"))):
+    try:
+        yaml.load(path.read_text(), Loader=UniqueKeysLoader)
+    except (yaml.YAMLError, ValueError) as exc:
+        fail(f"invalid YAML in {path.relative_to(ROOT)}: {exc}")
+
+for path in sorted(list(ROOT.glob("src/**/*.py")) + list(ROOT.glob("scripts/*.py"))):
     try:
         ast.parse(path.read_text(encoding="utf-8"), filename=str(path))
     except SyntaxError as exc:
@@ -55,6 +75,8 @@ for path in sorted(ROOT.glob("src/**/*.launch.py")):
 text_suffixes = {".md", ".txt", ".py", ".cpp", ".hpp", ".xml", ".yaml", ".yml", ".sdf", ".xacro"}
 for path in ROOT.rglob("*"):
     if path.is_file() and path.suffix in text_suffixes:
+        if any(part in {".git", "build", "install", "log"} for part in path.relative_to(ROOT).parts):
+            continue
         if path.resolve() == Path(__file__).resolve():
             continue
         text = path.read_text(encoding="utf-8", errors="replace")

@@ -16,9 +16,10 @@ using Handle = rclcpp_action::ServerGoalHandle<Navigate>;
 class AdapterTest : public ::testing::Test
 {
 protected:
+  static void SetUpTestSuite() {rclcpp::init(0, nullptr);}
+  static void TearDownTestSuite() {rclcpp::shutdown();}
   void SetUp() override
   {
-    rclcpp::init(0, nullptr);
     node = std::make_shared<rclcpp::Node>("adapter_test");
     auto options = rclcpp::NodeOptions().parameter_overrides({
       rclcpp::Parameter("max_goal_age_s", 0.5),
@@ -42,7 +43,6 @@ protected:
   {
     executor.remove_node(adapter); executor.remove_node(node);
     adapter.reset(); server.reset(); status.reset(); goals.reset(); state.reset(); tf.reset(); node.reset();
-    rclcpp::shutdown();
   }
   bool until(const std::function<bool()> & predicate, double timeout = 3)
   {
@@ -107,9 +107,9 @@ TEST_F(AdapterTest, TransformsGoalAndReportsRealActionSuccess)
 TEST_F(AdapterTest, StopCancelsActiveAction)
 {
   start_server(); mission(true); goal();
-  ASSERT_TRUE(until([this] {return !handles.empty();}));
+  ASSERT_TRUE(until([this] {return !handles.empty() && saw("ACCEPTED");}));
   mission(false, State::EMERGENCY_STOP);
-  EXPECT_TRUE(until([this] {return cancels == 1;})); EXPECT_TRUE(saw("CANCEL_REQUESTED"));
+  EXPECT_TRUE(until([this] {return cancels == 1 && saw("CANCEL_REQUESTED");}));
 }
 TEST_F(AdapterTest, RejectsStaleAndOutOfBoundsGoals)
 {

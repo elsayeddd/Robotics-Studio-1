@@ -1,4 +1,5 @@
 """Run a standalone rover, standalone aircraft, or coordinated mission."""
+import math
 from launch import LaunchDescription
 from launch.actions import DeclareLaunchArgument, IncludeLaunchDescription, OpaqueFunction, TimerAction
 from launch.launch_description_sources import PythonLaunchDescriptionSource
@@ -25,6 +26,9 @@ def _stack(context):
     drone = platform != 'rover' and enabled('use_drone')
     if platform == 'drone' and not drone:
         raise ValueError('A standalone drone mission requires use_drone:=true')
+    wind = float(value('wind_speed_mps'))
+    if not math.isfinite(wind) or wind < 0:
+        raise ValueError('wind_speed_mps must be finite and non-negative')
     nav2 = rover and enabled('use_nav2')
     sim_time, thermal = enabled('use_sim_time'), enabled('use_thermal')
     parameters = PathJoinSubstitution([FindPackageShare('embertrace_bringup'), 'config', 'embertrace.yaml'])
