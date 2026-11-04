@@ -10,6 +10,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
 endif()
 
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
+ament_python_install_package(embertrace_tools PACKAGE_DIR python/embertrace_tools)
 find_package(embertrace_interfaces REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(diagnostic_msgs REQUIRED)
@@ -31,7 +33,7 @@ else()
   set(YAML_CPP_TARGET yaml-cpp)
 endif()
 
-add_library(perception_filter src/perception_filter.cpp src/visual_classifier.cpp src/thermal_detector.cpp)
+add_library(perception_filter src/perception_filter.cpp src/visual_classifier.cpp src/thermal_detector.cpp src/mission_logic.cpp)
 target_include_directories(perception_filter PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:include>)
@@ -92,7 +94,9 @@ ament_target_dependencies(drone_scout_node tf2 tf2_ros)
 add_embertrace_node(velocity_guard_node src/velocity_guard_node.cpp)
 add_embertrace_node(sensor_health_node src/sensor_health_node.cpp)
 ament_target_dependencies(sensor_health_node diagnostic_msgs)
-install(PROGRAMS scripts/record_perception.py scripts/demo_preflight.py DESTINATION lib/${PROJECT_NAME})
+install(PROGRAMS scripts/record_perception.py scripts/demo_preflight.py
+  scripts/mission_simulator.py scripts/fire_state_manager.py scripts/mission_event_logger.py
+  DESTINATION lib/${PROJECT_NAME})
 add_embertrace_node(search_planner_node src/search_planner_node.cpp)
 target_link_libraries(search_planner_node search_estimation)
 ament_target_dependencies(search_planner_node tf2 tf2_geometry_msgs tf2_ros)
@@ -124,22 +128,31 @@ install(FILES src/README.md DESTINATION share/${PROJECT_NAME})
 
 if(BUILD_TESTING)
   find_package(Python3 REQUIRED COMPONENTS Interpreter)
+  add_test(NAME simulation_tools_regression
+    COMMAND ${CMAKE_COMMAND} -E env EMBERTRACE_EVALUATOR=$<TARGET_FILE:evaluate_perception>
+    ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/test_simulation_tools.py)
   add_test(NAME ros_perception_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_perception_integration_test.py)
-  set_tests_properties(ros_perception_integration PROPERTIES TIMEOUT 90 RESOURCE_LOCK ros_transport)
-  add_test(NAME ros_mission_integration
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_mission_integration_test.py)
-  set_tests_properties(ros_mission_integration PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
-  add_test(NAME ros_motion_integration
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_motion_integration_test.py)
-  set_tests_properties(ros_motion_integration PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
-  add_test(NAME ros_search_integration
-    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_search_integration_test.py)
-  set_tests_properties(ros_search_integration PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
+  set_tests_properties(ros_perception_integration PROPERTIES TIMEOUT 60)
+  add_test(NAME ros_dual_platform_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_dual_platform_test.py)
+  set_tests_properties(ros_dual_platform_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
+  set_tests_properties(ros_perception_integration PROPERTIES RUN_SERIAL TRUE)
+  foreach(integration motion search)
+    add_test(NAME ros_${integration}_integration
+      COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_${integration}_integration_test.py)
+    set_tests_properties(ros_${integration}_integration PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+  endforeach()
   find_package(ament_cmake_gtest REQUIRED)
   add_executable(test_perception_filter test/test_perception_filter.cpp)
   target_link_libraries(test_perception_filter perception_filter)
   add_test(NAME perception_regression COMMAND test_perception_filter)
+  add_executable(test_mission_logic test/test_mission_logic.cpp)
+  target_link_libraries(test_mission_logic perception_filter)
+  add_test(NAME mission_policy_regression COMMAND test_mission_logic)
+  add_executable(test_system_logic test/test_system_logic.cpp)
+  target_link_libraries(test_system_logic perception_filter plume_model search_estimation)
+  add_test(NAME system_logic_regression COMMAND test_system_logic)
   ament_add_gtest(test_plume_model test/test_plume_model.cpp)
   if(TARGET test_plume_model)
     target_link_libraries(test_plume_model plume_model)
@@ -149,7 +162,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_nav2_goal_adapter test/test_nav2_goal_adapter.cpp)
   if(TARGET test_nav2_goal_adapter)
     target_link_libraries(test_nav2_goal_adapter nav2_goal_adapter_lib)
-    set_tests_properties(test_nav2_goal_adapter PROPERTIES TIMEOUT 60 RESOURCE_LOCK ros_transport)
+    set_tests_properties(test_nav2_goal_adapter PROPERTIES TIMEOUT 45 RUN_SERIAL TRUE)
     target_include_directories(test_nav2_goal_adapter PRIVATE include)
     ament_target_dependencies(test_nav2_goal_adapter
       rclcpp rclcpp_action nav2_msgs geometry_msgs nav_msgs embertrace_interfaces tf2 tf2_ros tf2_geometry_msgs)

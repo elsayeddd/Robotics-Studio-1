@@ -43,7 +43,7 @@ whole workspace after changing message definitions.
 ```
 
 Choose `mission_platform:=drone` for the aircraft alone or `combined` for the rover
-and scout. In another sourced terminal, run preflight for the same mode:
+and drone available with one selected by wind. In another sourced terminal, run preflight for the same mode:
 
 ```bash
 ros2 run embertrace_core demo_preflight.py --platform rover --timeout 120

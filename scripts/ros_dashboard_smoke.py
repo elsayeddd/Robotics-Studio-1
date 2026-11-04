@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the Qt console starts and shuts down cleanly for each primary vehicle."""
+"""Verify the Qt console starts and shuts down cleanly with both vehicle panels."""
 import argparse
 import os
 from pathlib import Path
@@ -13,11 +13,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('executable')
     args = parser.parse_args()
-    for primary in ('rover', 'drone'):
+    for primary in ('both',):
         with tempfile.TemporaryDirectory(prefix='embertrace_qt_') as directory:
             environment = dict(os.environ, QT_QPA_PLATFORM='offscreen', XDG_RUNTIME_DIR=directory)
             with (Path(directory) / 'console.log').open('w+') as log:
-                process = subprocess.Popen([args.executable, '--ros-args', '-p', f'primary_vehicle:={primary}'],
+                process = subprocess.Popen([args.executable],
                     stdout=log, stderr=subprocess.STDOUT, env=environment)
                 try:
                     deadline = time.monotonic() + 2
@@ -30,7 +30,7 @@ def main():
                     if process.poll() is None:
                         process.kill(); process.wait(timeout=5)
                     log.seek(0); print(log.read(), end='')
-    print('Qt dashboard startup/shutdown passed for rover and drone')
+    print('Qt dashboard startup/shutdown passed with both vehicle panels')
 
 
 if __name__ == '__main__':

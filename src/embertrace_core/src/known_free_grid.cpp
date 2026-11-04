@@ -4,45 +4,40 @@
 #include <cmath>
 #include <limits>
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 
-std::optional<std::pair<int, int>> KnownFreeGrid::cell(const double x, const double y) const
-{
-  if (!std::isfinite(x) || !std::isfinite(y) ||
-    !std::isfinite(origin_x) || !std::isfinite(origin_y) ||
-    !std::isfinite(origin_yaw) || !std::isfinite(resolution) ||
-    resolution <= 0.0 || width == 0U || height == 0U ||
-    data.size() != static_cast<std::size_t>(width) * height)
-  {
+std::optional<std::pair<int, int>> KnownFreeGrid::cell(const double x, const double y) const {
+  if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(origin_x) ||
+      !std::isfinite(origin_y) || !std::isfinite(origin_yaw) || !std::isfinite(resolution) ||
+      resolution <= 0.0 || width == 0U || height == 0U || width > 100000U || height > 100000U ||
+      data.size() != static_cast<std::size_t>(width) * height) {
     return std::nullopt;
   }
   const double dx = x - origin_x;
   const double dy = y - origin_y;
   const double col = (std::cos(origin_yaw) * dx + std::sin(origin_yaw) * dy) / resolution;
   const double row = (-std::sin(origin_yaw) * dx + std::cos(origin_yaw) * dy) / resolution;
-  if (!std::isfinite(col) || !std::isfinite(row) ||
-    col < 0.0 || row < 0.0 || col >= width || row >= height)
-  {
+  if (!std::isfinite(col) || !std::isfinite(row) || col < 0.0 || row < 0.0 || col >= width ||
+      row >= height) {
     return std::nullopt;
   }
   return std::pair<int, int>{static_cast<int>(col), static_cast<int>(row)};
 }
 
-std::pair<double, double> KnownFreeGrid::centre(const int col, const int row) const
-{
+std::pair<double, double> KnownFreeGrid::centre(const int col, const int row) const {
   const double local_x = (col + 0.5) * resolution;
   const double local_y = (row + 0.5) * resolution;
-  return {
-    origin_x + std::cos(origin_yaw) * local_x - std::sin(origin_yaw) * local_y,
-    origin_y + std::sin(origin_yaw) * local_x + std::cos(origin_yaw) * local_y};
+  return {origin_x + std::cos(origin_yaw) * local_x - std::sin(origin_yaw) * local_y,
+          origin_y + std::sin(origin_yaw) * local_x + std::cos(origin_yaw) * local_y};
 }
 
-bool KnownFreeGrid::is_free(
-  const double x, const double y, const double clearance_m, const int max_occupancy) const
-{
+bool KnownFreeGrid::is_free(const double x, const double y, const double clearance_m,
+                            const int max_occupancy) const {
   const auto centre_cell = cell(x, y);
-  if (!centre_cell || clearance_m < 0.0) {
+  if (!centre_cell || !std::isfinite(clearance_m) || clearance_m < 0.0 ||
+      clearance_m / resolution >
+          std::hypot(static_cast<double>(width), static_cast<double>(height)) ||
+      max_occupancy < 0 || max_occupancy > 99) {
     return false;
   }
   // Check the square around the footprint, including cells at its edge. This
@@ -54,9 +49,7 @@ bool KnownFreeGrid::is_free(
       if (std::hypot(cell_x - x, cell_y - y) > clearance_m + resolution * 0.7072) {
         continue;
       }
-      if (row < 0 || col < 0 || row >= static_cast<int>(height) ||
-        col >= static_cast<int>(width))
-      {
+      if (row < 0 || col < 0 || row >= static_cast<int>(height) || col >= static_cast<int>(width)) {
         return false;
       }
       const int value = data[static_cast<std::size_t>(row) * width + col];
@@ -69,17 +62,14 @@ bool KnownFreeGrid::is_free(
 }
 
 std::optional<std::pair<double, double>> KnownFreeGrid::nearest_free(
-  const double x, const double y, const double max_displacement_m,
-  const double clearance_m, const int max_occupancy) const
-{
-  if (!std::isfinite(x) || !std::isfinite(y) ||
-    !std::isfinite(max_displacement_m) || !std::isfinite(clearance_m) ||
-    !std::isfinite(origin_x) || !std::isfinite(origin_y) ||
-    !std::isfinite(origin_yaw) || !std::isfinite(resolution) ||
-    resolution <= 0.0 || width == 0U || height == 0U ||
-    max_displacement_m < 0.0 ||
-    data.size() != static_cast<std::size_t>(width) * height)
-  {
+    const double x, const double y, const double max_displacement_m, const double clearance_m,
+    const int max_occupancy) const {
+  if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(max_displacement_m) ||
+      !std::isfinite(clearance_m) || !std::isfinite(origin_x) || !std::isfinite(origin_y) ||
+      !std::isfinite(origin_yaw) || !std::isfinite(resolution) || resolution <= 0.0 ||
+      width == 0U || height == 0U || max_displacement_m < 0.0 || clearance_m < 0 ||
+      max_occupancy < 0 || max_occupancy > 99 || width > 100000U || height > 100000U ||
+      data.size() != static_cast<std::size_t>(width) * height) {
     return std::nullopt;
   }
   if (is_free(x, y, clearance_m, max_occupancy)) {
@@ -91,14 +81,16 @@ std::optional<std::pair<double, double>> KnownFreeGrid::nearest_free(
   const double dy = y - origin_y;
   const double local_x = std::cos(origin_yaw) * dx + std::sin(origin_yaw) * dy;
   const double local_y = -std::sin(origin_yaw) * dx + std::cos(origin_yaw) * dy;
-  const int min_col = std::max(0, static_cast<int>(
-    std::floor((local_x - max_displacement_m) / resolution)) - 1);
-  const int max_col = std::min(static_cast<int>(width) - 1, static_cast<int>(
-    std::ceil((local_x + max_displacement_m) / resolution)) + 1);
-  const int min_row = std::max(0, static_cast<int>(
-    std::floor((local_y - max_displacement_m) / resolution)) - 1);
-  const int max_row = std::min(static_cast<int>(height) - 1, static_cast<int>(
-    std::ceil((local_y + max_displacement_m) / resolution)) + 1);
+  if (!std::isfinite(local_x) || !std::isfinite(local_y)) {
+    return std::nullopt;
+  }
+  const auto bound = [](double value, std::uint32_t size) {
+    return static_cast<int>(std::clamp(value, 0., static_cast<double>(size) - 1));
+  };
+  const int min_col = bound(std::floor((local_x - max_displacement_m) / resolution) - 1, width);
+  const int max_col = bound(std::ceil((local_x + max_displacement_m) / resolution) + 1, width);
+  const int min_row = bound(std::floor((local_y - max_displacement_m) / resolution) - 1, height);
+  const int max_row = bound(std::ceil((local_y + max_displacement_m) / resolution) + 1, height);
   std::optional<std::pair<double, double>> best;
   double best_distance = std::numeric_limits<double>::infinity();
   for (int row = min_row; row <= max_row; ++row) {

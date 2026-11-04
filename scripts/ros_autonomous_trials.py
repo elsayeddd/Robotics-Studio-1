@@ -51,11 +51,11 @@ def trial(args, seed, output, truth):
     subscriptions = [
         node.create_subscription(MissionState, '/embertrace/mission_state', mission,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
-        node.create_subscription(FireAlert, '/embertrace/fire_alert', lambda msg: state.update(alert=msg),
+        node.create_subscription(FireAlert, '/embertrace/fire_alert', lambda msg: state.update(alert=msg) if msg.confirmed else None,
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
         node.create_subscription(Odometry, f'/{robot}/odometry', odometry, qos_profile_sensor_data),
         node.create_subscription(String, '/embertrace/navigation_status', navigation, 10),
-        node.create_subscription(PoseStamped, '/embertrace/navigation_goal', lambda m: telemetry.update(
+        node.create_subscription(PoseStamped, '/drone1/navigation_goal' if robot == 'drone1' else '/embertrace/navigation_goal', lambda m: telemetry.update(
             goal=[m.pose.position.x, m.pose.position.y, m.header.frame_id]), 10),
         node.create_subscription(PoseWithCovarianceStamped, '/embertrace/source_estimate', lambda m: telemetry.update(
             estimate=[m.pose.pose.position.x, m.pose.pose.position.y, m.pose.covariance[0], m.pose.covariance[7]]), 10),
@@ -99,7 +99,7 @@ def trial(args, seed, output, truth):
                     print(json.dumps({'seed': seed, 'elapsed': round(elapsed, 2), 'pose': state['pose'],
                         'state': result['states'][-1] if result['states'] else None, **telemetry}), flush=True)
                     last_report = time.monotonic()
-                if state['alert'] is not None and 'unresolved' not in state['alert'].evidence:
+                if state['alert'] is not None and state['alert'].source_resolved:
                     break
                 if result['states'] and result['states'][-1] == 'ALERT':
                     if final_state_seen is None: final_state_seen = time.monotonic()
@@ -113,7 +113,7 @@ def trial(args, seed, output, truth):
             alert = state['alert']
             if alert is not None:
                 result['confirmed'] = alert.confirmed
-                result['resolved'] = 'unresolved' not in alert.evidence
+                result['resolved'] = alert.source_resolved
                 p = alert.estimated_source.pose.position
                 result['reported_position'] = [p.x, p.y]
                 if result['resolved']:

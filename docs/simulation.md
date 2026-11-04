@@ -58,7 +58,7 @@ The supplied archive included a 25 m forest plane, visual walls, online Fuel tre
 
 - keeps and renames the useful Husky sensor/bridge structure;
 - keeps the forest texture and required Husky meshes;
-- uses a self-contained aerial sensor model for standalone and coordinated missions;
+- uses a self-contained aerial sensor model for standalone missions and wind-selected automatic dispatch;
 - removes online model dependencies from the main world;
 - expands the world and adds project-specific infrastructure and hazards;
 - replaces demonstration Python autonomy with separate C++ nodes;

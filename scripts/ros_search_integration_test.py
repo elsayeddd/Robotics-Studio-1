@@ -18,12 +18,12 @@ from std_msgs.msg import String
 def main():
     output = Path('log/search-integration'); output.mkdir(parents=True, exist_ok=True)
     rclpy.init(); node = Node('search_integration_test')
-    environment = node.create_publisher(EnvironmentalReading, '/embertrace/environment', qos_profile_sensor_data)
+    environment = node.create_publisher(EnvironmentalReading, '/embertrace/active_environment', qos_profile_sensor_data)
     mission = node.create_publisher(MissionState, '/embertrace/mission_state',
         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
     received = {'goals': [], 'estimate': None, 'status': []}
     subscriptions = [
-        node.create_subscription(PoseStamped, '/embertrace/navigation_goal', lambda m: received['goals'].append(m), 10),
+        node.create_subscription(PoseStamped, '/drone1/navigation_goal', lambda m: received['goals'].append(m), 10),
         node.create_subscription(PoseWithCovarianceStamped, '/embertrace/source_estimate', lambda m: received.update(estimate=m), 10),
         node.create_subscription(String, '/embertrace/search_status', lambda m: received['status'].append(m.data), 10),
     ]
@@ -51,6 +51,7 @@ def main():
             rclpy.spin_once(node, timeout_sec=.01)
     def state(value):
         msg = MissionState(); msg.header.stamp = node.get_clock().now().to_msg()
+        msg.active_platform = msg.PLATFORM_DRONE; msg.mission_epoch = 1
         msg.state = value; msg.motion_allowed = value in (msg.PATROL, msg.INVESTIGATE)
         mission.publish(msg); spin(.1)
     executable = Path(get_package_prefix('embertrace_core')) / 'lib/embertrace_core/search_planner_node'

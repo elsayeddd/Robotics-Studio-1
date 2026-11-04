@@ -17,7 +17,7 @@ from ament_index_python.packages import get_package_share_directory
 from embertrace_interfaces.msg import MissionState, FireAlert
 from embertrace_interfaces.srv import OperatorCommand
 from nav_msgs.msg import Odometry
-from std_msgs.msg import String
+from std_msgs.msg import String, UInt32
 
 
 def main():
@@ -46,6 +46,8 @@ def main():
     def navigation(msg):
         if msg.data in ('ABORTED', 'REJECTED', 'OUT_OF_BOUNDS'): result['navigation_failures'] += 1
     subscriptions = [
+        node.create_subscription(UInt32, '/husky1/patrol_loops',
+            lambda m: result.update(closed_loops=m.data), 10),
         node.create_subscription(MissionState, '/embertrace/mission_state', lambda m: current.update(state=m.state_name),
             QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL)),
         node.create_subscription(Odometry, '/husky1/odometry', odometry, qos_profile_sensor_data),
@@ -78,8 +80,6 @@ def main():
                         match = re.search(r'Patrol loop (\d+) complete', line)
                         if match: wrapped = int(match.group(1))
                         if 'Gave up on an unreachable waypoint' in line: result['skipped_waypoints'] += 1
-                        if f'Patrol goal: {moving} ' in line and wrapped:
-                            result['closed_loops'] = wrapped
                     elapsed = node.get_clock().now().nanoseconds * 1e-9 - started
                     if time.monotonic() - last_report > 15:
                         print(json.dumps({'elapsed': elapsed, **current, **result}), flush=True); last_report = time.monotonic()
@@ -88,7 +88,9 @@ def main():
                     if result['closed_loops'] >= args.loops: break
                     if elapsed > args.max_duration or process.poll() is not None: raise RuntimeError('Patrol mission deadline or launch exit')
                 assert result['closed_loops'] >= args.loops, 'Patrol loops did not complete'
-            command('RETURN'); deadline = time.monotonic() + 90
+            # The mission policy automatically returns after its configured two loops.
+            if current['state'] not in ('RETURN_TO_BASE', 'IDLE'): command('RETURN')
+            deadline = time.monotonic() + 120
             while time.monotonic() < deadline and current['state'] != 'IDLE': rclpy.spin_once(node, timeout_sec=.1)
             assert current['state'] == 'IDLE' and current['pose'] is not None, 'Patrol did not park in IDLE'
             result['return_error_m'] = math.dist(current['pose'], base)

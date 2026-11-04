@@ -23,7 +23,7 @@
 
 ## Migration choices
 
-The Husky was selected as the minimum platform because ground navigation is less risky than coordinating the included drone. The Parrot assets remain in the original archive but are intentionally not copied into the EmberTrace minimum system. An aerial scout is documented as a stretch goal.
+The Husky was selected as the minimum platform because ground navigation is less risky than coordinating the included drone. The navigation branch subsequently supplied the Parrot meshes, URDF and example configurations. These are now included with package paths adapted to embertrace_sim; the working aerial mission uses the velocity-controlled scout model.
 
 
 ## Current integrated scope
@@ -31,4 +31,4 @@ The Husky was selected as the minimum platform because ground navigation is less
 The original migration above describes the initial minimum system. The current
 repository also supplies a self-contained `scout_drone` model, independent sensor
 pipeline and standalone aerial mission controller. It does not depend on the
-original archive's omitted Parrot meshes or an unimplemented Parrot Nav2 server.
+supplied Parrot assets or a separate Parrot Nav2 server.

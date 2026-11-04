@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Assert live wind gating and monotonic watchdogs, including a frozen ROS clock."""
+"""Assert selected-platform motion and monotonic watchdogs, including a frozen ROS clock."""
 import math
 import os
 from pathlib import Path
@@ -10,9 +10,10 @@ import rclpy
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from ament_index_python.packages import get_package_prefix
-from embertrace_interfaces.msg import MissionState, PerceptionStatus
+from embertrace_interfaces.msg import MissionState
 from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Odometry
+from sensor_msgs.msg import LaserScan
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Bool
 
@@ -20,7 +21,7 @@ from std_msgs.msg import Bool
 def main():
     output = Path('log/motion-integration'); output.mkdir(parents=True, exist_ok=True)
     rclpy.init(); node = Node('motion_integration_test')
-    goal = node.create_publisher(PoseStamped, '/embertrace/navigation_goal', 10)
+    goal = node.create_publisher(PoseStamped, '/drone1/navigation_goal', 10)
     command = node.create_publisher(Twist, '/husky1/autonomy_cmd_vel', 10)
     mission = node.create_publisher(MissionState, '/embertrace/mission_state',
         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -28,15 +29,14 @@ def main():
     odom = node.create_publisher(Odometry, '/drone1/odometry', qos_profile_sensor_data)
     health = [node.create_publisher(Bool, topic, 10) for topic in
               ('/embertrace/sensors_ready', '/drone1/sensors_ready')]
-    status = [node.create_publisher(PerceptionStatus, topic, 10) for topic in
-              ('/embertrace/perception_status', '/drone1/perception_status')]
+    scan = node.create_publisher(LaserScan, '/drone1/scan', qos_profile_sensor_data)
     velocities = {}
     subscriptions = [node.create_subscription(Twist, f'/{robot}/cmd_vel',
         lambda msg, robot=robot: velocities.update({robot: (time.monotonic(), msg)}), 10)
         for robot in ('husky1', 'drone1')]
     processes, handles = [], []
     simulated = 100.
-    def pump(seconds, wind=PerceptionStatus.WIND_DRONE_SAFE, allowed=True, streams=True, frozen=False, mode=MissionState.PATROL, target=False):
+    def pump(seconds, platform=MissionState.PLATFORM_DRONE, allowed=True, streams=True, frozen=False, mode=MissionState.PATROL, target=False):
         nonlocal simulated
         deadline = time.monotonic() + seconds; next_sample = 0
         while time.monotonic() < deadline:
@@ -48,10 +48,11 @@ def main():
                 if streams:
                     state = MissionState(); state.header.stamp = value.clock
                     state.state = mode if allowed else state.EMERGENCY_STOP
+                    state.active_platform = platform; state.mission_epoch = 1
                     state.motion_allowed = allowed; mission.publish(state)
-                    reading = PerceptionStatus(); reading.header.stamp = value.clock
-                    reading.environment_fresh = True; reading.wind_condition = wind
-                    for publisher in status: publisher.publish(reading)
+                    laser = LaserScan(); laser.header.stamp = value.clock
+                    laser.range_min = .1; laser.range_max = 20.; laser.ranges = [10.]
+                    scan.publish(laser)
                     for publisher in health: publisher.publish(Bool(data=True))
                     pose = Odometry(); pose.header.stamp = value.clock; pose.header.frame_id = 'husky1_odom'
                     pose.pose.pose.position.x = -14.; pose.pose.pose.position.y = -12.
@@ -73,18 +74,14 @@ def main():
             handle = (output / f'{executable}.log').open('w'); handles.append(handle)
             path = Path(get_package_prefix('embertrace_core')) / 'lib/embertrace_core' / executable
             options = ['--ros-args', '-p', 'use_sim_time:=true']
-            if executable == 'drone_scout_node':
-                options += ['-p', 'autonomous_mission:=true']
             processes.append(subprocess.Popen([str(path), *options],
                 stdout=handle, stderr=subprocess.STDOUT, start_new_session=True))
-        pump(2.5)
-        assert speed('husky1') > .1 and speed('drone1') > .1, 'Safe wind did not permit motion'
-        pump(.5, PerceptionStatus.WIND_ROVER_ONLY)
-        assert speed('husky1') > .1 and speed('drone1') < 1e-6, 'Rover-only wind policy failed'
-        for wind in (PerceptionStatus.WIND_UNSAFE, PerceptionStatus.WIND_UNKNOWN):
-            pump(.4, wind)
-            assert all(speed(r) < 1e-6 for r in velocities), 'Unknown/unsafe wind permitted motion'
-        pump(.4); assert speed('husky1') > .1 and speed('drone1') > .1
+        pump(2.5, platform=MissionState.PLATFORM_ROVER)
+        assert speed('husky1') > .1 and speed('drone1') < 1e-6, 'Rover selection failed'
+        pump(.5)
+        assert speed('husky1') < 1e-6 and speed('drone1') > .1, 'Drone selection failed'
+        pump(.5, platform=MissionState.PLATFORM_NONE)
+        assert all(speed(r) < 1e-6 for r in velocities), 'No-platform state permitted motion'
         pump(.4, mode=MissionState.TRACK)
         assert speed('drone1') < 1e-6, 'Aerial investigation moved without a planner goal'
         pump(.4, mode=MissionState.TRACK, target=True)
@@ -96,7 +93,7 @@ def main():
         pump(.4)
         pump(2., streams=False, frozen=True)
         assert all(speed(r) < 1e-6 for r in velocities), 'Frozen ROS time defeated receipt watchdogs'
-        print('Motion DDS integration passed: vehicle wind limits, aerial investigation goals/expiry, state inhibition and frozen-clock heartbeat expiry', flush=True)
+        print('Motion DDS integration passed: vehicle selection, aerial investigation goals/expiry, state inhibition and frozen-clock heartbeat expiry', flush=True)
     finally:
         for process in processes:
             if process.poll() is None: os.killpg(process.pid, signal.SIGINT)

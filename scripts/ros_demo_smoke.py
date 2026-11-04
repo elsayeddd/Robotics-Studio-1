@@ -23,6 +23,7 @@ def main():
     parser.add_argument('--output', default='log/demo-smoke')
     args = parser.parse_args()
     robots = ('husky1', 'drone1') if args.platform == 'combined' else (('husky1',) if args.platform == 'rover' else ('drone1',))
+    active_robot = 'husky1' if args.platform == 'rover' else 'drone1'
     output = Path(args.output) / args.platform
     output.mkdir(parents=True, exist_ok=True)
     environment = dict(os.environ, IGN_PARTITION=f'embertrace_smoke_{os.getpid()}')
@@ -76,8 +77,11 @@ def main():
             until(lambda: len(poses) == len(robots) and client.service_is_ready(), 25)
             initial = dict(poses)
             command('START')
-            until(lambda: all(math.dist(initial[r], poses[r]) > 0.8 for r in robots), 70)
+            until(lambda: math.dist(initial[active_robot], poses[active_robot]) > 0.8, 70)
             moved = {r: math.dist(initial[r], poses[r]) for r in robots}
+            for robot in robots:
+                if robot != active_robot:
+                    assert moved[robot] < 0.5, f'Unselected {robot} moved'
             command('PAUSE'); pump(1); zero()
             command('RESUME'); until(lambda: state['name'] == 'PATROL', 5)
             command('RETURN'); until(lambda: state['name'] == 'IDLE', 75); pump(1); zero()

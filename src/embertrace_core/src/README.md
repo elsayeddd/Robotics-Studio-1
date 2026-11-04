@@ -1,6 +1,8 @@
 # C++ node development notes
 
-The source files implement the integrated baseline. Keep one executable per file until the team is comfortable with ROS composition.
+Source headers and inline comments explain the runtime responsibilities and failure behaviour.
+The November 2 integration is described in docs/completion-handover.md. Keep one
+executable per node; pure policy/numerical libraries also run without ROS.
 
 ## Recommended ownership
 
@@ -22,8 +24,9 @@ The adapter subscribes to `/embertrace/navigation_goal`, transforms goals into
 `husky1_map`, and sends them to `/husky1/navigate_to_pose` when Nav2 is ready.
 It cancels goals on mission-state changes or when motion is disallowed, rejects
 stale and out-of-bounds goals, and publishes result strings on
-`/embertrace/navigation_status`. The patrol manager consumes action status and route-frame TF proximity, with a
-bounded retry/skip policy and return-to-base completion feedback.
+`/embertrace/navigation_status`. The patrol manager currently advances from
+map-frame odometry proximity; action-result sequencing and full rover acceptance
+remain to be validated on the target ROS machine.
 
 ## Priority 3: search and source estimate
 
@@ -44,8 +47,9 @@ investigation goals. Before enough evidence exists, the rover probes upwind.
 On signal loss it casts on alternating sides of the last detection with a
 bounded increasing sweep. Goal publication stops after 20 s without smoke or
 120 s of searching. A reading older than 3 s is ignored. During `VERIFY`,
-the estimate continues updating, but the planner issues no motion goal. No goal
+the estimate continues updating, but the planner issues no motion goal. For the rover, no goal
 is published until `/husky1/map` and the odom-to-map transform are available.
+Aerial goals use the configured bounded flight layer and the local LiDAR stop instead.
 The map check rejects unknown/occupied cells and requires 0.8 m robot
 clearance. It validates the endpoint; Nav2 remains responsible for route
 planning and live obstacle avoidance. Search timeouts only withhold planner
@@ -75,10 +79,10 @@ the plume. The roadmap's full rover-trial acceptance still needs integrated
 runs with the Nav2 adapter and patrol manager.
 
 For a runtime check after building, launch with `use_nav2:=true` so SLAM
-publishes `/husky1/map`, then send `START` and teleoperate through the plume:
+publishes `/husky1/map`, select the rover with `wind_speed_mps:=7.0`, then send START:
 
 ```bash
-ros2 launch embertrace_bringup embertrace_demo.launch.py use_nav2:=true
+ros2 launch embertrace_bringup embertrace_demo.launch.py use_nav2:=true wind_speed_mps:=7.0
 ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
 ros2 topic echo /embertrace/source_estimate
 ros2 topic echo /embertrace/navigation_goal

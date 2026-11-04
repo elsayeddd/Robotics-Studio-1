@@ -7,11 +7,14 @@
   <license>Apache-2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
+  <exec_depend>rcl_interfaces</exec_depend>
 
   <depend>embertrace_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>diagnostic_msgs</depend>
   <exec_depend>rclpy</exec_depend>
+  <exec_depend>embertrace_sim</exec_depend>
   <exec_depend>lifecycle_msgs</exec_depend>
   <exec_depend>ament_index_python</exec_depend>
   <exec_depend>python3-yaml</exec_depend>

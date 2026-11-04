@@ -18,3 +18,12 @@ string detail
 float32 progress
 bool motion_allowed
 
+# Selected platform owns local sensing, source fitting and movement for this epoch.
+uint8 PLATFORM_NONE=0
+uint8 PLATFORM_ROVER=1
+uint8 PLATFORM_DRONE=2
+uint8 active_platform
+uint8 preferred_platform
+uint64 mission_epoch
+bool manual_control
+bool alert_acknowledged

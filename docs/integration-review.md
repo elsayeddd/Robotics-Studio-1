@@ -1,4 +1,4 @@
-# Integration review — 4 November 2026
+# Integration review — 5 November 2026
 
 ## Scope and branch history
 
@@ -6,12 +6,12 @@ I reviewed the repository documentation against the implementation and fetched e
 
 | Branch | Reviewed head | Integrated capability |
 | --- | --- | --- |
-| feature/nav2-goal-adapter | bf05d73 | Navigation and launch updates |
+| feature/nav2-goal-adapter | c6faa28 | Navigation, launch updates and supplied Parrot assets |
 | feature/waypoint-patrol-manager | 4bafc0a | Action feedback, retry policy, return completion, rover tuning and dashboard |
-| feature/perception-validation | 001d7a5 | Radiometric IR, CO2, persistence, stream health and evaluation |
+| feature/perception-validation | 2d385d5 | Local IR/CO2 perception, selected-platform mission policy, scene controls, UI and evaluation |
 | feature/search-source-estimate | fac37e9 | Already included in the starting main |
 
-The required deployment includes standalone rover and standalone drone missions, as well as the coordinated demonstration. The aircraft remains a Gazebo velocity-controlled model. Standalone aerial search uses the same local-evidence estimator and bounded search policy, with aerial goals executed by its flight controller rather than a ground Nav2 server.
+The required deployment includes standalone rover and standalone drone missions, with both available in the automatic wind-selected demonstration. The aircraft remains a Gazebo velocity-controlled model. Standalone aerial search uses the same local-evidence estimator and bounded search policy, with aerial goals executed by its flight controller rather than a ground Nav2 server.
 
 ## Documentation audit
 
@@ -40,23 +40,42 @@ The required deployment includes standalone rover and standalone drone missions,
 
 - I retained the common simulated odometry origin and namespaced TF wiring. Ground route coordinates stay in `husky1_odom`; Nav2 goals are transformed to `husky1_map`.
 - The rover velocity guard remains the sole rover command publisher. Both vehicles gate motion on fresh mission, sensor and wind evidence.
-- A search timeout now returns control to patrol. A dismissed anomaly must clear before it can trigger another investigation.
-- Coordinated RETURN waits for both vehicles. Standalone aerial RETURN completes from the aircraft's measured home position.
+- Search, verification and return phases are bounded. Verification retries allow five seconds of movement to collect new evidence. New investigations clear the previous signal deadline.
+- The refreshed teammate policy selects one active vehicle from stable safe wind. RETURN waits for that vehicle to reach its measured home position; the drone also lands. `mission_platform:=rover` or `drone` excludes the other vehicle, and `auto`/`combined` makes both available.
 - RESET and the dashboard's explicit E_STOP_RELEASE both return a latched stop to IDLE. Neither resumes motion.
 - Real action-server tests replace checks that only asserted the ROS process remained alive.
 
 ## Validation evidence
 
-- Full five-package Humble/Fortress build passed (`log/integration-build.log`).
-- Full ROS test suite passed: **45 results, zero errors or failures**, including
-  all 79 pure perception assertions (`log/integration-final-tests.log`).
-- Native camera capture reproduced the invisible-decoy defect. Fortress logged
-  unsupported cone geometry. Supported flame volumes now yield 16,159 qualifying
-  flame-colour pixels in a 720 x 480 rover image, without changing detector thresholds
-  (`log/camera-debug-spheres-result.log`). The first mesh experiment rendered white
-  and was discarded; failed captures and trials remain in `log/`.
-- The first recorded campaign stopped at the visual-decoy acceptance check. A fresh
-  complete campaign is running with the repaired geometry; mode-specific motion
-  checks and autonomous source-localisation acceptance are still in progress.
+The fresh merge includes `feature/nav2-goal-adapter` at `c6faa28` and
+`feature/perception-validation` at `2d385d5`. Older waypoint and search heads remain
+ancestors. I resolved shared interfaces and controllers around the new selected
+platform policy, retained supported Fortress flame geometry and the slow-motion
+source-sampling fix, and ported standalone launch/preflight/control checks.
 
-Final runtime results are recorded here as acceptance runs complete. Generated compiler logs, recordings and test output remain under ignored `log/`; they must not be confused with source-controlled evidence or physical robot validation.
+Fresh merged revision:
+
+- Repository validation and strict standalone compilation passed.
+- Perception: 79 checks; mission policy: 54 checks including standalone
+  availability and verification retry; system logic: 41 checks; Python: eight tests passed.
+- Full native build, DDS tests and fresh Gazebo acceptance are in progress.
+  Results are retained under `log/fresh-branch-*`.
+
+Historical evidence from main through `31dbc1d` (requires rerunning for the new
+policy):
+
+- Five-package build and full native suite passed: 48 results, zero failures
+  (`log/integration-final-regressions.log`).
+- All three launch modes passed real Gazebo motion, pause/resume, measured return
+  and emergency-stop checks (`log/integration-mode-checks.log`).
+- Twelve recorded Gazebo perception runs passed: six scenarios with independent
+  training/held-out seeds and both sensor pipelines (`log/gazebo-perception-fixed`).
+- Autonomous drone trial 142 resolved the source with 0.6 m error. The rover
+  confirmed fire but reported an unresolved location; that remains an acceptance
+  issue, not a passing source-localisation trial.
+- Native camera capture reproduced unsupported cone geometry. Supported sphere
+  volumes produced 16,159 qualifying flame-colour pixels in a 720 × 480 image.
+
+Numerical ten-seed fits are unit evidence, not ten autonomous missions. Generated
+recordings and compiler/test logs remain under ignored `log/`. These results do
+not establish physical robot performance.

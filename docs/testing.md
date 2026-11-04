@@ -1,73 +1,81 @@
-# Testing strategy
+# Testing and acceptance
 
-## Test layers
+The November 2 standalone results and requirement matrix are in
+[completion-handover.md](completion-handover.md). See [integration-review.md](integration-review.md) for native results and
+remaining acceptance for the freshly merged branches. Run the following layers
+on the target Ubuntu 22.04/Humble/Fortress VM and retain failures.
 
-### 1. Static repository validation
+## 1. Standalone logic and fixtures
 
 ```bash
-./scripts/validate_repo.py
+bash scripts/validate_all.sh
 ```
 
-This checks package manifests, XML/SDF syntax, launch-file Python syntax, required files and accidental references to the invalid original package name.
+This compiles the actual pure C++ perception, mission and numerical libraries,
+runs scene/replay Python checks, and generates six-scenario synthetic metrics.
+Expected current result: 79 perception + 54 mission + 41 system checks and eight
+Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
 
-### 2. C++ unit tests
+## 2. Clean native build and unit/transport tests
+
+Stop other EmberTrace launches first. Source Humble and the new workspace.
 
 ```bash
-colcon test --packages-select embertrace_core
+./scripts/build.sh
+source install/setup.bash
+ROS_DOMAIN_ID=73 colcon test --packages-select embertrace_core --event-handlers console_direct+
 colcon test-result --verbose
 ```
 
-The suite covers the plume model, source estimation, patrol geometry, timestamp-aware
-perception and image classification. The action tests run a real mock NavigateToPose server and assert transformed goals, rejection, expiry, success and cancellation. A separate mission transport test covers patrol, pause/resume, search timeout, recovery, alert, coordinated return, dropout and the E-stop latch. The perception transport test launches camera,
-perception and mission processes and checks multisensor confirmation, vision-only
-suppression, stale vision, dropout pause and the E-stop latch.
+The suite includes existing plume, search, YAML patrol and Nav2 action tests, the
+pure regressions, scene/replay checks, and ROS perception, mission, search and motion transport tests. The latter test
+real perception/mission nodes with controlled messages, both platform confirmation
+paths, wind selection, stale/IR loss, vision-only rejection and E-stop. ROS tests
+are serialised to avoid shared-topic collisions. They do not launch Gazebo.
 
-### 3. Node-level tests
+## 3. Native scene/sensor/controller integration
 
-Inspect the stamped visual cue and local fused measurements:
-
-```bash
-ros2 topic echo /embertrace/visual_cue
-ros2 topic echo /embertrace/environment
-```
-
-### 4. Integrated simulation trials
-
-With ROS and the workspace sourced, run the full startup/motion check:
+Use [perception-vm-startup.md](perception-vm-startup.md) for terminal-by-terminal
+commands, preflight, IR inspection, wind/tree/battery controls and map/TF checks.
+The smoke script starts its own launch; do not run it over a manual demo.
 
 ```bash
-python3 scripts/ros_demo_smoke.py --platform combined
+ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform combined
+ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform rover
+ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform drone
 ```
 
-It waits for fresh vehicle sensors, map/TF and active Nav2 lifecycle nodes, starts
-the mission, requires actual odometry movement from both vehicles, and checks
-pause/resume, measured return and zero command output after E-stop. Repeat it with `--platform rover` and `--platform drone` for standalone acceptance. Launch logs and result JSON files are retained in `log/demo-smoke/<platform>/`.
+It checks native sensors, map/TF/Nav2 when present, selected-vehicle motion,
+pause/resume, measured return and E-stop. Automatic mode also checks that the
+unselected vehicle remains held. The launch log stays in log/demo-smoke. Use
+`LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` if a virtual display is needed.
 
-Run the recorded perception campaign separately:
+## 4. Recorded perception evidence
 
 ```bash
-python3 scripts/ros_perception_campaign.py
+ROS_DOMAIN_ID=74 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
 ```
 
-It records six stationary near-source scenarios for both vehicles with separate
-training and held-out seeds, checks visible visual-decoy evidence and dropout,
-then writes threshold-sweep and confusion-matrix/latency CSVs. See
-[Perception validation](perception-validation.md) for metric definitions and
-[Demo guide](demo-guide.md) for interactive trials. For headless execution, prefix
-either command with `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a`.
+This launches six near-source scenarios for both platforms with separate training
+and held-out seeds. It records actual inputs, checks CO2/IR presence, tunes only
+on training data and reports confusion matrices, availability, missed events and
+latency. At least three recorded scenarios are required; all six are preferred.
+Use a new output directory each run. A failed/negative trial remains evidence.
 
-Longer operational trials should record each random seed and parameters. Measure:
+## 5. Autonomous mission evidence
 
-- time from plume entry to detection;
-- time from detection to alert;
-- distance from estimated source to configured ground truth;
-- path length;
-- number of lost-plume recoveries;
-- number of collisions or Nav2 failures;
-- false alert rate.
+```bash
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-clear-01 --trials 10 --scenario no_fire
+```
 
-## Fair evaluation
+Trials alternate drone/rover selection and retain individual launch logs and JSON.
+Record completion/return, path length, recoveries, local-exposure alert latency,
+false alerts and resolved source error. Missing estimates must be reported, not
+silently removed to make a median look better. The source-fit numerical test's
+0.282843 m median does not establish the roadmap's autonomous <2 m acceptance.
+Manually inspect collisions and map/TF, which the metrics script cannot certify.
 
-The autonomy nodes must not access source coordinates. Ground truth may be used only after a trial to calculate error. At least one person should prepare blind source locations for final testing.
-
-Exact executed outcomes and remaining limitations are recorded in [integration review](integration-review.md).
+Include image occlusion, tree transitions, wind threshold noise, missing/frozen
+streams, battery return, goal cancellation, manual release/focus loss, alert ACK,
+RESET and E-stop. Repeat in the dense world after the small world passes.

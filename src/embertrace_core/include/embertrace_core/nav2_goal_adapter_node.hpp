@@ -2,17 +2,17 @@
 #define EMBERTRACE_CORE__NAV2_GOAL_ADAPTER_NODE_HPP_
 
 #include <atomic>
+#include <chrono>
 #include <cstdint>
 #include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
-#include <chrono>
 
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "nav_msgs/msg/odometry.hpp"
-#include "nav2_msgs/action/navigate_to_pose.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "nav2_msgs/action/navigate_to_pose.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp_action/rclcpp_action.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -22,25 +22,24 @@
 namespace embertrace_core {
 
 class Nav2GoalAdapterNode : public rclcpp::Node {
-public:
-  explicit Nav2GoalAdapterNode(const rclcpp::NodeOptions & options = rclcpp::NodeOptions());
+ public:
+  Nav2GoalAdapterNode();
   ~Nav2GoalAdapterNode() = default;
 
-  static void normaliseAngle(double & angle);
+  static void normaliseAngle(double& angle);
 
-private:
+ private:
   // ========================================================================
   // ROBOT CONFIGURATION PARAMETERS (all customizable at launch time)
   // ========================================================================
-  std::string robot_namespace_;           // e.g., "husky1", "parrot1", ""
-  std::string odom_topic_;                // e.g., "/odom", "/husky1/odometry"
-  std::string goal_topic_;                // e.g., "/navigation_goal"
-  std::string mission_state_topic_;       // e.g., "/mission_state"
-  std::string action_name_;               // e.g., "/navigate_to_pose"
-  std::string map_frame_;                 // e.g., "map", "husky1_map"
+  std::string robot_namespace_;      // e.g., "husky1", "parrot1", ""
+  std::string odom_topic_;           // e.g., "/odom", "/husky1/odometry"
+  std::string goal_topic_;           // e.g., "/navigation_goal"
+  std::string mission_state_topic_;  // e.g., "/mission_state"
+  std::string action_name_;          // e.g., "/navigate_to_pose"
+  std::string map_frame_;            // e.g., "map", "husky1_map"
   std::string boundary_frame_;
-  std::string odom_frame_;                // e.g., "odom", "husky1_odom"
-
+  std::string odom_frame_;  // e.g., "odom", "husky1_odom"
 
   // ========================================================================
   // STATE MANAGEMENT (thread-safe)
@@ -58,9 +57,8 @@ private:
   std::uint64_t generation_{0};
 
   mutable std::mutex goalHandleMtx_;
-  rclcpp_action::Client<
-    nav2_msgs::action::NavigateToPose>::GoalHandle::SharedPtr
-    active_goal_handle_;
+  rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::GoalHandle::SharedPtr
+      active_goal_handle_;
 
   // TF2
   std::unique_ptr<tf2_ros::Buffer> tf_buffer_;
@@ -72,15 +70,14 @@ private:
   double min_x_, max_x_, min_y_, max_y_;
   std::atomic<bool> motion_allowed_{false};
   int64_t state_{-1};
+  std::uint64_t epoch_{0};
 
   // Action client
   rclcpp_action::Client<nav2_msgs::action::NavigateToPose>::SharedPtr action_client_;
 
   // Subscriptions
-  rclcpp::Subscription<embertrace_interfaces::msg::MissionState>::SharedPtr
-    state_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr
-    goal_subscription_;
+  rclcpp::Subscription<embertrace_interfaces::msg::MissionState>::SharedPtr state_subscription_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goal_subscription_;
   rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr odom_subscription_;
 
   // Publisher
@@ -92,9 +89,9 @@ private:
   // ========================================================================
   // PRIVATE METHODS
   // ========================================================================
-  void sendNav2Goal(const geometry_msgs::msg::PoseStamped & raw_goal);
-  void publish_status(const std::string & status);
-  void cancelActiveGoal(const std::string & reason);
+  void sendNav2Goal(const geometry_msgs::msg::PoseStamped& raw_goal);
+  void publish_status(const std::string& status);
+  void cancelActiveGoal(const std::string& reason);
   void updateDistAndAngleToGoal();
 };
 

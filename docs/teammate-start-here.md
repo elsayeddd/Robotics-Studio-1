@@ -54,6 +54,6 @@ The mathematical plume is part of the simulation, not an autonomy shortcut. Only
 
 Build with `./scripts/build.sh`, then source ROS and `install/setup.bash`. Use
 `./scripts/run_demo.sh mission_platform:=rover` or `mission_platform:=drone` for
-standalone missions, and `combined` for the coordinated demo. Preflight accepts
+standalone missions, and `auto`/`combined` for both vehicles with wind-selected dispatch. Preflight accepts
 the matching `--platform` argument. Use a separate DDS domain for transport tests,
 and stop interactive simulations before running the Gazebo campaign.

@@ -1,233 +1,89 @@
-# Rover and aerial scout demo guide
+# Rover and drone demonstration
 
-## Get and build this implementation in WSL
+Use [perception-vm-startup.md](perception-vm-startup.md) for a complete Linux VM,
+GitHub branch, dependency, build and testing walkthrough. The implementation and
+remaining acceptance evidence are listed in [completion-handover.md](completion-handover.md).
+The code is a supplied snapshot; no remote branch is assumed to exist yet.
 
-Use Ubuntu 22.04 / ROS 2 Humble / Gazebo Fortress, with WSLg available for Gazebo,
-RViz and the Qt dashboard. The integrated code is on `main`.
+## Start a controlled demonstration
 
-```bash
-cd ~/projects/Robotics-Studio-1
-git fetch origin
-git switch main
-git pull --ff-only
-source /opt/ros/humble/setup.bash
-./scripts/install_dependencies.sh
-./scripts/build.sh
-source install/setup.bash
-colcon test --event-handlers console_direct+
-colcon test-result --verbose
-```
-
-## Select a mission platform
-
-Use `mission_platform:=rover`, `mission_platform:=drone` or
-`mission_platform:=combined` with `run_demo.sh`. Run preflight with the matching
-`--platform rover`, `--platform drone` or `--platform combined` option. A standalone
-aircraft has its own perception, source fit and investigation controller and does
-not require a Husky or a ground occupancy map. All modes use the same operator
-service and dashboard. For example:
-
-```bash
-./scripts/run_demo.sh mission_platform:=drone scenario:=no_fire
-ros2 run embertrace_core demo_preflight.py --platform drone --timeout 120
-```
-
-The current simulator names its shared world odometry frame `husky1_odom`, including
-in aerial-only mode. This is a coordinate frame name; it does not require a rover.
-
-## First demo: both vehicles, no fire
-
-In terminal 1:
+In terminal 1, inside the built repository:
 
 ```bash
 source /opt/ros/humble/setup.bash
 source install/setup.bash
-./scripts/run_demo.sh scenario:=no_fire
+export ROS_DOMAIN_ID=26
+ros2 launch embertrace_bringup embertrace_demo.launch.py scenario:=no_fire
 ```
 
-This starts Gazebo, the rover, a blue aerial scout, both sensor bridges, local
-perception pipelines, diagnostics, SLAM, Nav2, the existing patrol/search nodes,
-RViz and the dashboard. It leaves the mission idle so sensors and navigation can
-initialise before motion begins. The scout starts hovering at 8 m.
+This starts both models and sensor pipelines, shared wind/battery simulation, tree
+states, mission, search, rover Nav2/SLAM, dashboard and RViz. Both vehicles wait for
+START. The drone begins grounded and takes off only when selected and permitted.
 
-In terminal 2 (from the repository root):
+In terminal 2, source the same workspace and set the same ROS_DOMAIN_ID:
 
 ```bash
-source /opt/ros/humble/setup.bash
-source install/setup.bash
-ros2 run embertrace_core demo_preflight.py --timeout 60
+ros2 run embertrace_core demo_preflight.py --timeout 90
 ros2 service call /embertrace/operator_command \
-  embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
+  embertrace_interfaces/srv/OperatorCommand "{command: START}"
 ```
 
-Proceed when every preflight row says PASS. The rover follows the original patrol
-route while the drone follows its bounded aerial sweep. Watch the vehicle poses
-and the navigation status; verify the rover actually reaches successive waypoints.
-Use the integration review for completed acceptance evidence.
-Preflight also asks Nav2 to compute the first moving patrol leg without driving.
-This waits for SLAM's initial map coverage instead of starting with an off-map goal.
+Wait for all preflight checks to pass. Default 2.5 m/s wind selects the drone; the
+rover remains held. For a rover demonstration, stop the entire launch and restart
+with `wind_speed_mps:=7.0`. Only the selected platform advances local confirmation,
+search and return. Two patrol loops without a fire lead to automatic return.
 
-```bash
-ros2 topic echo /embertrace/navigation_status
-ros2 topic echo /diagnostics
-```
+For a fire mission restart with `scenario:=fire`. Persistent gas plus heat or
+supporting visual evidence drives investigation, verification and alert. The alert
+marks its position as a fitted source or an unresolved detection sample. After the
+alert hold, the selected robot returns to its measured launch position; the drone
+lands. Missing required sensors or unsafe wind pauses the mission. RESUME is
+explicit and re-checks readiness. E_STOP remains latched until RESET.
 
-`/diagnostics` lists odometry, IMU, LiDAR, RGB, depth and the environmental stream
-for each vehicle. Point-cloud streams are monitored as supplementary diagnostics.
-Depth obstacle points also feed the rover's Nav2 costmaps.
+## Controls and scenarios
 
-## Fire investigation demo
+The dashboard shows the SLAM map, both robot poses, source/sample marker, local
+CO2/smoke/temperature/IR/wind, batteries and stale/disconnected status. It provides
+six mission controls, alert acknowledgement, hold/release manual buttons and
+wind/tree controls. Press Manual control before using the direction buttons;
+release or loss of focus stops the manual command. Manual control retains all
+selection, sensor, wind and E-stop gates.
 
-Stop the first launch with Ctrl+C, then start a fresh trial:
-
-```bash
-./scripts/run_demo.sh scenario:=fire
-```
-
-Run preflight and START again. The rover's local smoke/temperature measurements
-can trigger investigation. Fresh drone environmental evidence can also request
-investigation and select a short rover probe toward the measured sample position.
-The rover still requires its own fresh environmental evidence to confirm an alert.
-
-The search planner retains the existing source estimator and projects every
-investigation goal into known free map space. An aerial cue in unexplored or
-blocked terrain does not grant permission to drive there. In that case, inspect
-the map and navigation logs rather than expecting a direct flight-to-rover goal.
-
-A sustained local plume should lead through INVESTIGATE, TRACK, VERIFY and ALERT.
-An ALERT holds movement. Source coordinates come from the estimator; if the fit
-is not fresh and sufficiently certain, the alert explicitly reports the latest
-sample position as an unresolved-location fallback.
-
-## False alarms and sensor dropout
-
-| Launch argument | What changes | Expected behaviour |
+| Scenario | Fixture | Expected confirmed-fire behaviour |
 | --- | --- | --- |
-| `scenario:=no_fire` | No flame marker, ambient field | Patrol; no confirmation |
-| `scenario:=dust` | Smoke plume, ambient temperature, no flame marker | Investigation possible; no smoke-only confirmation |
-| `scenario:=hot_surface` | Heat field, no smoke plume or flame marker | Thermal evidence; no heat-only confirmation |
-| `scenario:=visual_decoy` | Flame-colour marker, ambient smoke/temperature | Vision alone never confirms |
-| `scenario:=dropout` | Fire field; local sensor stream suppressed for 8 s starting 25 simulated seconds after first odometry | Data goes stale, rover pauses, commands go to zero |
+| no_fire | Healthy tree, ambient field | No confirmed alert |
+| fire | Burning tree, smoke/CO2/heat | Confirmation when sufficiently observable |
+| dust | Smoke without CO2/fire heat | Anomaly possible, no independent fire confirmation |
+| hot_surface | Heated rock without combustion gas | Thermal anomaly, no independent fire confirmation |
+| visual_decoy | Flame-colour geometry at ambient temperature | Colour alone cannot confirm |
+| dropout | Burning tree with controlled missing raw samples | Selected platform pauses after freshness expires; warmup and RESUME required |
 
-After dropout ends, wait for fresh sensors and perception warmup, then explicitly
-RESUME. The system does not automatically resume a paused mission.
+For fire/no_fire/dropout, changing the tree state updates appearance/IR/gas together.
+An unavailable scene change withholds raw sensing. Above 12 m/s wind neither vehicle
+may deploy; above 5 m/s the drone is held and stable safe wind can select the rover.
 
-```bash
-ros2 service call /embertrace/operator_command \
-  embertrace_interfaces/srv/OperatorCommand "{command: 'RESUME'}"
-```
+## Record acceptance
 
-Other controls:
-
-```bash
-ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'PAUSE'}"
-ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'RETURN'}"
-ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'E_STOP'}"
-ros2 service call /embertrace/operator_command embertrace_interfaces/srv/OperatorCommand "{command: 'RESET'}"
-```
-
-RETURN sends the rover to the existing base waypoint and the drone to its base
-hover position. E_STOP latches: START/RESUME/RETURN cannot bypass it; RESET or the dashboard release control is
-required; both land in IDLE and require a fresh START. The rover command guard publishes zero when mission permission, sensor
-readiness or a command heartbeat is missing. The aerial controller applies the
-same mission and sensor checks, a geofence and a LiDAR proximity hold.
-
-## Record perception acceptance evidence
-
-While a scenario is running, open another sourced terminal:
+Stop manual launches before scripts that launch their own Gazebo world:
 
 ```bash
-ros2 run embertrace_core record_perception.py \
-  --robot husky1 --trial fire_01 --duration 120 \
-  --output log/trials/fire_01.csv
-ros2 run embertrace_core evaluate_perception log/trials/fire_01.csv
+bash scripts/validate_all.sh
+ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py
+ROS_DOMAIN_ID=74 python3 scripts/ros_perception_campaign.py --output log/perception-recorded-01
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
 ```
 
-Use `--robot drone1` and a separate filename to record the aerial stream. Record
-at least fire, no_fire and visual_decoy; include dust/hot_surface/dropout for a
-stronger report. Repeat with distinct trial IDs. The evaluation-only truth topic
-never feeds autonomy. It labels local observability in this mathematical model,
-not a real fire dataset.
+Use a new campaign output directory for every run. Keep failed, negative and missing
+frames/trials. For headless rendering prefix with `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a`.
+Native ROS/Gazebo/Qt acceptance remains to be run on the VM. Synthetic filter and
+numerical source-fit tests do not replace actual camera/navigation evidence.
 
-To combine trials (one header only):
+The aerial model is an ideal velocity-controlled sensor proxy, including commanded
+takeoff/landing and simulated battery behaviour. It does not implement rotor
+dynamics, a Parrot/PX4/ArduPilot autopilot or physical sensor drivers.
 
-```bash
-python3 - <<'PY'
-import csv
-from pathlib import Path
-paths = sorted(Path('log/trials').glob('*_*.csv'))
-with Path('log/trials/combined.csv').open('w', newline='') as output:
-    writer = csv.writer(output)
-    for index, path in enumerate(paths):
-        with path.open(newline='') as source:
-            reader = csv.reader(source)
-            header = next(reader)
-            if index == 0:
-                writer.writerow(header)
-            writer.writerows(reader)
-PY
-ros2 run embertrace_core evaluate_perception log/trials/combined.csv > log/trials/metrics.csv
-```
-
-Keep training and acceptance trials separate. The threshold sweep utility and
-metric definitions are in [Perception validation](perception-validation.md).
-
-To record the complete automated campaign (six scenarios, separate training and
-held-out seeds, both vehicles) with the mission idle:
-
-```bash
-python3 scripts/ros_perception_campaign.py
-```
-
-This launches fresh trials near the source, records local sensor observations,
-checks dropout and a visible decoy, tunes on rover training data, and writes
-held-out metrics for each vehicle to `log/gazebo-perception/`. It takes several
-minutes. Close an existing demo first. CI runs the same campaign under Xvfb and
-preserves all CSVs and launch logs as a downloadable artifact.
-
-## Isolate startup problems
-
-For sensor/teleoperation work without Nav2 or the drone:
-
-```bash
-./scripts/run_demo.sh use_nav2:=false use_drone:=false
-ros2 run embertrace_core demo_preflight.py --no-nav2 --no-drone
-```
-
-START the mission before using teleoperation. Route teleop into the guard:
-
-```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-  --ros-args --remap cmd_vel:=/husky1/autonomy_cmd_vel
-```
-
-If GUI windows fail in WSL, first confirm that WSLg can open another Linux GUI
-application. `use_rviz:=false use_dashboard:=false` removes those two optional
-windows. Gazebo still needs a working rendering context to produce camera/LiDAR
-samples; suppressing a window does not substitute for sensor readiness.
-`gazebo_gui:=false` runs the server without its GUI window; cameras still require
-WSLg or an Xvfb/Mesa rendering context. The automated recording campaign uses
-this mode and a fresh Gazebo transport partition for every trial.
-
-For an automated short check on a ROS machine:
-
-```bash
-python3 scripts/ros_demo_smoke.py
-```
-
-On a headless Linux machine with Xvfb and Mesa installed:
-
-```bash
-LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a python3 scripts/ros_demo_smoke.py
-```
-
-The check validates preflight, actual movement of both vehicles and zero command
-output after E-stop, and preserves the launch log under `log/demo-smoke/`.
-
-## Scope of this demo
-
-The new drone is an ideal velocity-controlled Gazebo sensor proxy. It includes
-collision geometry, RGB-D, LiDAR, IMU, odometry and the same local environmental
-field sampler with altitude attenuation. It is suitable for demonstrating aerial
-scouting and rover coordination. Rotor dynamics, takeoff/landing, battery models,
-PX4/ArduPilot integration and physical sensor drivers are not implemented.
+For independent deployment, add `mission_platform:=rover` or
+`mission_platform:=drone` to the main launch. Run preflight with the matching
+`--platform rover` or `--platform drone`. The default `auto` and alias `combined`
+make both vehicles available and hold the unselected one. Wind limits remain
+active in standalone mode; an absent vehicle cannot be selected.

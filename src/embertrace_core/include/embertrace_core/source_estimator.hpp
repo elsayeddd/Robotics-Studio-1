@@ -5,11 +5,9 @@
 #include <deque>
 #include <optional>
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 
-struct SearchSample
-{
+struct SearchSample {
   double x{0.0};
   double y{0.0};
   double smoke_ppm{0.0};
@@ -17,8 +15,7 @@ struct SearchSample
   double wind_direction_rad{0.0};
 };
 
-struct SourceEstimate
-{
+struct SourceEstimate {
   double x{0.0};
   double y{0.0};
   // Marginal position covariance in square metres. xy is the off-diagonal term.
@@ -28,8 +25,7 @@ struct SourceEstimate
   std::size_t sample_count{0};
 };
 
-struct SourceEstimatorConfig
-{
+struct SourceEstimatorConfig {
   std::size_t max_samples{160};
   double minimum_spacing_m{0.3};
   double ambient_temperature_c{22.0};
@@ -45,16 +41,17 @@ struct SourceEstimatorConfig
 };
 
 // Estimates a source from local measurements only; it has no simulator or map input.
-class SourceEstimator
-{
-public:
-  explicit SourceEstimator(SourceEstimatorConfig config = {});
+class SourceEstimator {
+ public:
+  explicit SourceEstimator(SourceEstimatorConfig config = SourceEstimatorConfig{});
   void clear();
-  bool add(const SearchSample & sample);
+  bool add(const SearchSample& sample);
   std::optional<SourceEstimate> estimate() const;
-  std::size_t sample_count() const {return samples_.size();}
+  std::size_t sample_count() const {
+    return samples_.size();
+  }
 
-private:
+ private:
   double score(double x, double y) const;
 
   SourceEstimatorConfig config_;
