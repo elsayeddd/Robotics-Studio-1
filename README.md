@@ -1,30 +1,24 @@
 # EmberTrace
 
-EmberTrace is a ROS 2 forest-fire investigation demonstrator. A simulated Husky rover patrols a forest, measures a noisy smoke plume, decides when to leave patrol and investigate, estimates where the source lies, and reports the result to a ranger-facing interface.
+EmberTrace is a ROS 2 forest-fire investigation demonstrator. A wind-selected Husky rover or aerial simulation proxy patrols a forest, fuses local smoke/CO2, temperature and camera evidence, investigates anomalies, reports a location and sensor data, and returns to its measured launch pose.
 
 The repository is designed for a mixed-experience university team. Existing ROS packages handle simulation, localisation and navigation; the project-specific behaviour is divided into small, documented C++ nodes that can be developed and tested independently.
 
 ## Project status
 
-The navigation, patrol and source estimation modules are integrated with timestamp-aware perception, sensor health and an aerial scout on `feature/perception-validation`. See [Demo guide](docs/demo-guide.md) and [Perception validation](docs/perception-validation.md) for commands, measured synthetic results and outstanding recorded-trial acceptance.
+The November 2 snapshot connects both local perception pipelines to wind-based
+mission dispatch, autonomous investigation/return, scene states and the dashboard.
+See [Completion handover](docs/completion-handover.md) for the C1/C3 requirement
+matrix, changes, measured standalone results and outstanding native acceptance.
 
-| Capability | Status | Notes |
+| Capability | Implementation | Validation status |
 | --- | --- | --- |
-| Forest world and Husky sensor model | Implemented | Self-contained local trees, rocks, logs, base station, fire source and textured terrain |
-| ROS–Gazebo bridge | Implemented | Odometry, IMU, LiDAR, RGB-D camera, commands and simulation clock |
-| Mathematical smoke and temperature field | Implemented baseline | Noisy Gaussian plume driven by robot position and configurable wind |
-| Environmental perception | Implemented; recorded trials pending | Timestamp-aware filtering/hysteresis, stale/dropout recovery, validity and guarded confirmation |
-| Mission decision state machine | Implemented baseline | Idle, patrol, investigate, track, recover, verify, alert, return and emergency stop |
-| Search and source estimation | Implemented baseline | Bounded sample history, source/covariance fit, map-safe goals and timed recovery; unit tests included |
-| Sample heatmap in RViz | Implemented baseline | Colour-coded smoke samples and current estimate |
-| Ranger dashboard | Implemented baseline | C++/Qt status display and mission controls |
-| Nav2 goal execution | Implemented baseline; rover validation pending | Namespaced `NavigateToPose` client transforms and bounds-checks goals, cancels on mission changes and publishes result status |
-| Camera fire verification | Implemented simulation heuristic | Connected colour patches, valid stamped cues and consecutive frames; real-image validation pending |
-| Aerial scout | Implemented demo proxy | Velocity-controlled drone, RGB-D/LiDAR/IMU, local environment samples and rover investigation cues |
-| Sensor health and motion guard | Implemented | All sensor streams monitored; missing readiness/mission/command heartbeat inhibits motion |
-| Perception evaluation | Implemented | Six scenarios, CSV recorder/evaluator, threshold sweep, synthetic confusion matrices and latency |
-| Patrol route manager | Implemented baseline; rover validation pending | YAML route loading, sequential goals, pause/resume and return to base; odometry is transformed into the route frame for arrival checks |
-| Automated end-to-end tests | Partial | Plume, search and patrol unit tests are included; full Gazebo/Nav2 rover trials remain |
+| IR/CO2/smoke/temperature/RGB perception | Independent per-platform filters, image persistence, timestamp alignment and stale watchdogs | Pure regressions passed; native images/recorded trials pending |
+| Wind dispatch and mission policy | Stable safe wind selects drone or rover; selected-local confirmation, E-stop, timeouts and ACK | 45 pure policy checks passed; native transport tests provided |
+| Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | Numerical tests passed; actual autonomous trials pending |
+| Scene state and shared inputs | Healthy/burning/burnt tree rendering/emissions; configurable wind/battery | Eight Python fixture/replay tests passed; Fortress services pending |
+| Map/dashboard/manual control | Both platforms, source/sample marker, health, controls and event log | Native Qt/TF review and interaction tests pending |
+| Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | 60 synthetic trials reproduced; target-machine campaigns pending |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 
@@ -94,21 +88,20 @@ ros2 service call /embertrace/operator_command \
   embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
 ```
 
-Valid commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET` and `E_STOP`.
+Commands are `START`, `PAUSE`, `RESUME`, `RETURN`, `RESET`, `E_STOP`, `ACK`,
+`MANUAL_ON` and `MANUAL_OFF`. Deployment requires stable safe wind and fresh sensors.
 
 ## What should appear
 
-- Gazebo opens the `embertrace_forest` world with a Husky rover at the ranger base and an aerial scout hovering above its base.
+- Gazebo opens the `embertrace_forest` world with a Husky rover and a grounded aerial proxy at their launch positions.
 - RViz shows the robot, LiDAR, smoke samples and source estimate. The map and investigation goals appear when SLAM is running.
-- The EmberTrace dashboard displays mission state, smoke, temperature, confidence and alert information.
-- After `START`, the state is `PATROL`. Moving the robot into the plume causes `INVESTIGATE` and then `TRACK`; sufficiently strong combined evidence causes `VERIFY` and `ALERT`.
+- The dashboard displays a SLAM map, both platforms, smoke/CO2/local temperature/IR, confidence, batteries, health, alerts and controls.
+- After START, default 2.5 m/s wind selects the drone, which takes off and patrols. With `wind_speed_mps:=7.0`, the rover owns the mission. The unselected vehicle stays held. Local evidence drives investigation/verification/alert; alert hold, two-loop completion or low battery triggers return.
 
-For a launch with `use_nav2:=false`, START the mission, then use teleoperation to move through the plume:
-
-```bash
-ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-  --ros-args --remap cmd_vel:=/husky1/autonomy_cmd_vel
-```
+For manual rover operation, use safe rover-selection wind, START and MANUAL_ON,
+then hold the dashboard buttons or remap keyboard input to
+`/embertrace/manual_cmd_vel`. Do not publish around the command guards. Follow the
+[VM startup guide](docs/perception-vm-startup.md) for exact terminal commands.
 
 ## Repository layout
 
@@ -145,15 +138,15 @@ For the exact installation set and common runtime problems, see [Dependencies](d
 
 - Smoke is a mathematical field, not computational fluid dynamics. This keeps the system deterministic and achievable in 12 weeks.
 - The environment simulator knows the hidden fire coordinates, but publishes only local sensor readings. Decision nodes must never subscribe to ground truth.
-- Scenario switches remove the visible fire model for no_fire, dust and hot_surface trials. The visual_decoy scenario deliberately retains it without a fire field.
+- Scenarios set the initial scene. The dynamic tree service keeps fire/no_fire/dropout tree state, thermal appearance and gas emissions consistent. The visual_decoy retains flame-like geometry at ambient temperature without a fire field.
 - The colour-based camera verifier is a simulation heuristic, and the drone is an ideal velocity-controlled proxy without rotor dynamics or a physical flight controller.
-- The synthetic perception report does not establish recorded Gazebo or hardware performance. Complete at least three recorded perception scenarios and ten source-localisation rover trials on the target machine.
+- The synthetic perception report does not establish recorded Gazebo or hardware performance. Complete at least three recorded perception scenarios and ten autonomous seeded trials across the selected platforms on the target machine.
 
 ## Origin of supplied material
 
 The simulation structure, Husky model, sensor bridge conventions, forest texture and meshes were adapted from the supplied `41068_ignition_bringup_v1.zip`. See [Original package audit](docs/original-package-audit.md) and [NOTICE](NOTICE.md) before publishing the repository publicly.
 
-## October 20 perception update
+## Complete perception integration update
 
 Native IR cameras, explicit CO2, freshness/persistence and evaluation changes are documented in
 [perception validation](docs/perception-validation.md).
