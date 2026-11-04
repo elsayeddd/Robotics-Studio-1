@@ -141,6 +141,9 @@ if(BUILD_TESTING)
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_dual_platform_test.py --raw-delay 0.25)
   set_tests_properties(ros_delayed_perception_integration PROPERTIES TIMEOUT 90 RUN_SERIAL TRUE)
   set_tests_properties(ros_perception_integration PROPERTIES RUN_SERIAL TRUE)
+  add_test(NAME ros_environment_clock_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_environment_clock_test.py)
+  set_tests_properties(ros_environment_clock_integration PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)
   add_test(NAME ros_status_timestamp_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_status_timestamp_test.py)
   set_tests_properties(ros_status_timestamp_integration PROPERTIES TIMEOUT 20 RUN_SERIAL TRUE)

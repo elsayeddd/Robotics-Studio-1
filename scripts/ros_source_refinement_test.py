@@ -31,9 +31,11 @@ def main():
     estimates = node.create_publisher(PoseWithCovarianceStamped, '/embertrace/source_estimate', 10)
     client = node.create_client(OperatorCommand, '/embertrace/operator_command')
     next_sample = 0
+    inputs = {}
 
     def pump(seconds, fire=False, source=False, speed=7, source_age=0):
         nonlocal next_sample
+        inputs.update(fire=fire, source=source, speed=speed, source_age=source_age)
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             if time.monotonic() >= next_sample:
@@ -81,8 +83,12 @@ def main():
         request = OperatorCommand.Request()
         request.command = text
         future = client.call_async(request)
-        rclpy.spin_until_future_complete(node, future, timeout_sec=3)
+        deadline = time.monotonic() + 3
+        # Sensors continue running while the operator awaits a service response.
+        while not future.done() and time.monotonic() < deadline:
+            pump(.05, **inputs)
         assert future.done() and future.result().accepted == expected, text
+        print(f'{text}: {future.result().message}', flush=True)
 
     def confirmed(after=0):
         return [a for a in received['alerts'] if a.confirmed and a.alert_id > after]

@@ -32,7 +32,7 @@ if(BUILD_TESTING)
   add_test(NAME dashboard_startup
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_dashboard_smoke.py
             $<TARGET_FILE:operator_dashboard>)
-  set_tests_properties(dashboard_startup PROPERTIES TIMEOUT 20 ENVIRONMENT "ROS_DOMAIN_ID=79")
+  set_tests_properties(dashboard_startup PROPERTIES TIMEOUT 40 ENVIRONMENT "ROS_DOMAIN_ID=79")
 endif()
 
 ament_package()

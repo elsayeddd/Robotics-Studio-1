@@ -175,7 +175,18 @@ def run():
         rclpy.spin_until_future_complete(node, future, timeout_sec=3)
         if not future.done():
             raise RuntimeError("Operator command timed out: " + text)
-        return future.result().accepted
+        response = future.result()
+        if not response.accepted:
+            print(f"{text} rejected: {response.message}")
+        return response.accepted
+
+    def start_when_ready():
+        deadline = time.monotonic() + 10
+        while time.monotonic() < deadline:
+            pump(0.25, 1)
+            if command("START"):
+                return
+        raise AssertionError("Mission did not become ready after fresh sensor input")
 
     logs = tempfile.TemporaryDirectory(prefix="embertrace_ros_test_")
     processes, handles = [], []
@@ -216,8 +227,7 @@ def run():
             )
         if not client.wait_for_service(timeout_sec=10):
             raise RuntimeError("Mission service did not start")
-        pump(1.2, 1)
-        assert command("START")
+        start_when_ready()
         pump(3, 1)
         assert state["value"] == "PATROL" and state["alerts"] == 0, "Vision-only alarm"
         assert (
@@ -238,8 +248,7 @@ def run():
         assert command("E_STOP")
         assert not command("START"), "START bypassed E-stop latch"
         assert command("RESET")
-        pump(1.0, 1)
-        assert command("START")
+        start_when_ready()
         pump(3.0)
         assert state["value"] == "PAUSED", "Environmental dropout did not pause mission"
         print("ROS perception/mission integration passed")

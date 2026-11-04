@@ -101,7 +101,13 @@ for the stricter rover two-loop check: no skipped stops, no false critical alert
 and automatic measured return, without an operator RETURN request.
 
 Mission trials use independent Gazebo partitions and DDS domains. `--domain-base`
-reserves one domain per trial (default: ROS_DOMAIN_ID, otherwise 140). This keeps
+reserves one domain per trial (default: ROS_DOMAIN_ID, otherwise 20). This keeps
 old simulation clocks/readiness packets from contaminating the next fresh world.
 Readiness status carries the acquisition timestamp/frame; a native regression
 checks delayed samples against that contract.
+
+The environmental publisher regression freezes ROS time, advances it and resets
+the epoch. It requires exactly one raw/truth acquisition for each timestamp;
+consumer replay rejection and monotonic expiry remain tested separately. The
+rover patrol check records physical visits in route order, including the final
+base closure, as well as loop counters and automatic return.

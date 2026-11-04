@@ -244,7 +244,7 @@ def trial(args, output, number):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="log/autonomous-campaign")
-    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "140")))
+    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "20")))
     parser.add_argument("--platform", choices=["alternating", "drone", "rover"], default="alternating")
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--seed-start", type=int, default=300)

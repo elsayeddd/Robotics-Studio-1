@@ -19,6 +19,8 @@
 #include <array>
 #include <chrono>
 #include <cmath>
+#include <csignal>
+#include <iostream>
 #include <deque>
 #include <memory>
 #include <optional>
@@ -44,6 +46,10 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 namespace embertrace_ui {
+namespace {
+volatile std::sig_atomic_t shutdown_requested = 0;
+void request_shutdown(int) { shutdown_requested = 1; }
+}  // namespace
 class DashboardNode : public rclcpp::Node {
  public:
   using State = embertrace_interfaces::msg::MissionState;
@@ -377,7 +383,9 @@ class DashboardWindow : public QMainWindow {
     setCentralWidget(central);
     timer_ = new QTimer(this);
     connect(timer_, &QTimer::timeout, this, [this]() {
-      if (!rclcpp::ok()) {
+      if (shutdown_requested || !rclcpp::ok()) {
+        manual_x_ = manual_y_ = manual_z_ = 0;
+        publish_manual();
         QApplication::quit();
         return;
       }
@@ -494,12 +502,23 @@ class DashboardWindow : public QMainWindow {
 };
 }  // namespace embertrace_ui
 int main(int argc, char** argv) {
-  rclcpp::init(argc, argv);
-  QApplication app(argc, argv);
-  auto node = std::make_shared<embertrace_ui::DashboardNode>();
-  embertrace_ui::DashboardWindow window(node);
-  window.show();
-  int result = app.exec();
+  // Qt owns orderly teardown. An asynchronous ROS shutdown can invalidate the
+  // context while a timer creates its temporary executor.
+  std::signal(SIGINT, embertrace_ui::request_shutdown);
+  std::signal(SIGTERM, embertrace_ui::request_shutdown);
+  rclcpp::init(argc, argv, rclcpp::InitOptions(), rclcpp::SignalHandlerOptions::None);
+  int result = 0;
+  {
+    QApplication app(argc, argv);
+    auto node = std::make_shared<embertrace_ui::DashboardNode>();
+    {
+      embertrace_ui::DashboardWindow window(node);
+      window.show();
+      std::cout << "EmberTrace dashboard ready" << std::endl;
+      result = app.exec();
+      window.close();
+    }
+  }
   rclcpp::shutdown();
   return result;
 }

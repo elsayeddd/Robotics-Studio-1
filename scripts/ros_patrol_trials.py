@@ -31,8 +31,12 @@ def main():
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
     if (output / 'result.json').exists(): raise FileExistsError('Use a fresh output directory')
     route = yaml.safe_load((Path(get_package_share_directory('embertrace_bringup')) / 'config/patrol_waypoints.yaml').read_text())['waypoints']
-    base = (route[0]['x'], route[0]['y']); moving = route[1]['name']
+    base = (route[0]['x'], route[0]['y'])
+    expected_visits = len(route) * args.loops + 1
+    visit_tolerance = 1.7
     result = {'source_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'src'], text=True).strip(),
+              'harness_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'scripts/ros_patrol_trials.py'], text=True).strip(),
+              'visited_waypoints': [], 'visit_tolerance_m': visit_tolerance,
               'closed_loops': 0, 'skipped_waypoints': 0, 'navigation_failures': 0, 'path_length_m': 0., 'false_alerts': 0, 'passed': False}
     rclpy.init(); node = Node('patrol_acceptance')
     node.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=True)])
@@ -43,6 +47,10 @@ def main():
             distance = math.dist(pose, current['pose'])
             if distance < 2: result['path_length_m'] += distance
         current['pose'] = pose
+        if len(result['visited_waypoints']) < expected_visits:
+            wanted = route[len(result['visited_waypoints']) % len(route)]
+            if math.dist(pose, (wanted['x'], wanted['y'])) <= visit_tolerance:
+                result['visited_waypoints'].append(wanted['name'])
     def navigation(msg):
         if msg.data in ('ABORTED', 'REJECTED', 'OUT_OF_BOUNDS'): result['navigation_failures'] += 1
     subscriptions = [
@@ -90,8 +98,9 @@ def main():
                 assert result['closed_loops'] >= args.loops, 'Patrol loops did not complete'
             # The mission policy automatically returns after its configured two loops.
             deadline = time.monotonic() + 120
-            while time.monotonic() < deadline and current['state'] != 'IDLE': rclpy.spin_once(node, timeout_sec=.1)
+            while time.monotonic() < deadline and (current['state'] != 'IDLE' or len(result['visited_waypoints']) < expected_visits): rclpy.spin_once(node, timeout_sec=.1)
             assert current['state'] == 'IDLE' and current['pose'] is not None, 'Patrol did not park in IDLE'
+            assert len(result['visited_waypoints']) == expected_visits, 'Route points were not physically visited in order'
             result['return_error_m'] = math.dist(current['pose'], base)
             assert result['return_error_m'] < 1.7 and result['skipped_waypoints'] == 0 and result['false_alerts'] == 0
             result['mission_time_s'] = node.get_clock().now().nanoseconds * 1e-9 - started

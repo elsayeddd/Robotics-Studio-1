@@ -59,9 +59,9 @@ Fresh merged revision:
 - Perception: 79 checks; mission policy: 61 checks including standalone
   availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **59 tests, zero errors/failures/skips**, including
+- Full native suite passed: **60 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/readiness-native-acceptance.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/final-native-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
   includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -76,7 +76,8 @@ Fresh merged revision:
   rover home is captured from actual Gazebo odometry.
 - Native compilation exposed a cross-branch waypoint API regression. I retained
   the newer retry library and added selected-platform, loop and measured-home
-  feedback. Qt shutdown now checks the ROS context before spinning.
+  feedback. Qt handles termination through a quit flag and destroys its windows
+  before shutting down ROS; both SIGINT and SIGTERM exit cleanly.
 
 Historical evidence from main through `31dbc1d` (requires rerunning for the new
 policy):
@@ -128,4 +129,14 @@ time, which could make an old warmup status appear newer than a delayed valid
 acquisition. Status now identifies the acquisition/frame it describes. The new
 regression fails against the old binary and passes against the corrected one.
 Mission cohorts now also use separate DDS domains per world, alongside separate
-Gazebo partitions. A fresh ten-seed cohort will use that controller revision.
+Gazebo partitions.
+
+The second cohort exposed repeated environmental acquisitions whenever Gazebo
+briefly stopped advancing its clock. The simulator now publishes each timestamp
+once, while retaining normal replay rejection and frozen-stream expiry downstream.
+The new regression fails against the old producer and passes with the correction,
+including clock advance and simulation restart. I retained both interrupted cohorts.
+The final native run passes all 60 checks. I also corrected two fixture scheduling
+assumptions: initial START waits for actual readiness, and source-refinement sensor
+streams continue while an operator service response is pending. The ten-mission
+campaign and complete two-loop patrol checks will use this tested revision.

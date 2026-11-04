@@ -173,13 +173,18 @@ class EnvironmentSimulatorNode : public rclcpp::Node {
 
  private:
   void publish_reading() {
-    const double current = now().seconds();
+    const auto acquisition = now();
+    const double current = acquisition.seconds();
     if (last_clock_ >= 0 && current < last_clock_) {
       // A restarted simulation begins a new acquisition epoch.
       wind_seen_ = have_odometry_ = have_start_ = false;
       wind_stamp_ = -1;
+      last_acquisition_ns_ = -1;
     }
     last_clock_ = current;
+    // Wall timers can run repeatedly while Gazebo pauses at the same ROS time.
+    // A repeated timestamp is not another sensor acquisition or truth event.
+    if (acquisition.nanoseconds() <= last_acquisition_ns_) return;
     if (require_wind_ &&
         (!wind_seen_ || now().seconds() - wind_stamp_ > 2 || now().seconds() < wind_stamp_ - .1 ||
          std::chrono::duration<double>(std::chrono::steady_clock::now() - wind_receipt_).count() >
@@ -200,6 +205,7 @@ class EnvironmentSimulatorNode : public rclcpp::Node {
             .count() > odometry_timeout_s_) {
       return;
     }
+    last_acquisition_ns_ = acquisition.nanoseconds();
     const auto& position = latest_odometry_.pose.pose.position;
     const bool dynamic_source =
         scenario_ == "fire" || scenario_ == "dropout" || scenario_ == "no_fire";
@@ -210,9 +216,9 @@ class EnvironmentSimulatorNode : public rclcpp::Node {
         std::exp(-std::max(0.0, position.z) / std::max(0.1, altitude_decay_m_));
     sample.smoke_ppm = baseline_ + (sample.smoke_ppm - baseline_) * attenuation;
     sample.temperature_c = ambient_ + (sample.temperature_c - ambient_) * attenuation;
-    const double elapsed = (now() - start_).seconds();
+    const double elapsed = (acquisition - start_).seconds();
     embertrace_interfaces::msg::TrialTruth truth;
-    truth.header.stamp = now();
+    truth.header.stamp = acquisition;
     truth.scenario = scenario_;
     // This evaluation-only topic is never subscribed to by decision nodes.
     truth.fire_present =
@@ -262,6 +268,7 @@ class EnvironmentSimulatorNode : public rclcpp::Node {
   bool scene_ready_{true}, require_wind_{true}, wind_seen_{false};
   double wind_stamp_{-1};
   double last_clock_{-1};
+  std::int64_t last_acquisition_ns_{-1};
   std::chrono::steady_clock::time_point wind_receipt_;
   rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr wind_subscription_;
   rclcpp::Subscription<embertrace_interfaces::msg::FireState>::SharedPtr fire_subscription_;
