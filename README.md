@@ -17,7 +17,7 @@ matrix and [integration review](docs/integration-review.md) for current acceptan
 | Wind dispatch and mission policy | Stable safe wind selects drone or rover; selected-local confirmation, E-stop, timeouts and ACK | 61 pure policy checks and native transport tests passed |
 | Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | All launch modes pass movement/control/return checks; fire-source campaign pending |
 | Scene state and shared inputs | Healthy/burning/burnt tree rendering/emissions; configurable wind/battery | Eight fixtures and native healthy/burning/burnt service + sensor check passed |
-| Map/dashboard/manual control | Both platforms, source/sample marker, health, controls and event log | Native Qt/map/TF and actual-window interaction checks passed, including release/focus/connection loss |
+| Map/dashboard/manual control | SLAM or local odometry positions, both platforms, source/sample marker, health, controls and event log | Native Qt/map/TF and actual-window interaction checks passed, including release/focus/connection loss |
 | Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | 60 synthetic trials reproduced; target-machine campaigns pending |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.

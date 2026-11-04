@@ -20,6 +20,10 @@ This starts both models and sensor pipelines, shared wind/battery simulation, tr
 states, mission, search, rover Nav2/SLAM, dashboard and RViz. Both vehicles wait for
 START. The drone begins grounded and takes off only when selected and permitted.
 
+In drone-only mode, the position panel uses a labelled odometry grid because no
+rover SLAM process is present. Drone and source/sample markers remain visible.
+When a SLAM map is available, markers use its actual frame and origin.
+
 In terminal 2, source the same workspace and set the same ROS_DOMAIN_ID:
 
 ```bash
@@ -70,7 +74,7 @@ Stop manual launches before scripts that launch their own Gazebo world:
 bash scripts/validate_all.sh
 ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py
 ROS_DOMAIN_ID=74 python3 scripts/ros_perception_campaign.py --output log/perception-recorded-01
-ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
+ROS_DOMAIN_ID=20 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
 ```
 
 Use a new campaign output directory for every run. Keep failed, negative and missing

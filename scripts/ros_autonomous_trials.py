@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Measure autonomous fire investigations using evaluation-only source truth.
+"""Diagnose source investigation using evaluation-only source truth.
 
 Launches fresh seeded Gazebo missions. It never publishes source coordinates or
 sensor substitutes. Failed and unresolved trials remain in the summary.
+This source-only diagnostic stops at the alert; use run_mission_campaign.py for
+full mission, return, landing and patrol acceptance.
 """
 import argparse
 import json

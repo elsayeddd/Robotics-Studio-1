@@ -47,8 +47,10 @@ jobs:
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
+          test_domain=90
           for platform in rover drone combined; do
-            xvfb-run -a python3 scripts/ros_demo_smoke.py --platform "$platform"
+            ROS_DOMAIN_ID="$test_domain" xvfb-run -a python3 scripts/ros_demo_smoke.py --platform "$platform" --max-sensor-holds 2
+            test_domain=$((test_domain + 1))
           done
       - name: Recorded Gazebo perception campaign
         if: ${{ !cancelled() && steps.build.outcome == 'success' }}
@@ -56,7 +58,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
           LP_NUM_THREADS: "2"
-          ROS_DOMAIN_ID: "74"
+          ROS_DOMAIN_ID: "100"
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash

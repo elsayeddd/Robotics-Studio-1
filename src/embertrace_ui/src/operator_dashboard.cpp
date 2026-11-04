@@ -194,12 +194,14 @@ class DashboardNode : public rclcpp::Node {
                                                              : "Wind setting rejected";
         });
   }
-  std::optional<geometry_msgs::msg::PoseStamped> in_map(geometry_msgs::msg::PoseStamped pose) {
-    if (!map || pose.header.frame_id.empty()) return std::nullopt;
+  std::optional<geometry_msgs::msg::PoseStamped> in_frame(geometry_msgs::msg::PoseStamped pose,
+                                                        const std::string& frame) {
+    if (pose.header.frame_id.empty()) return std::nullopt;
     pose.header.stamp.sec = 0;
     pose.header.stamp.nanosec = 0;
+    if (pose.header.frame_id == frame) return pose;
     try {
-      return buffer->transform(pose, map->header.frame_id);
+      return buffer->transform(pose, frame);
     } catch (const tf2::TransformException&) {
       return std::nullopt;
     }
@@ -233,7 +235,7 @@ class DashboardNode : public rclcpp::Node {
   std::shared_ptr<rclcpp::AsyncParametersClient> parameters;
 };
 
-/** Occupancy map and telemetry are projected into the map's actual origin and yaw. */
+/** Show a real occupancy map when present, otherwise labelled local odometry. */
 class MapWidget : public QWidget {
  public:
   explicit MapWidget(std::shared_ptr<DashboardNode> node) : node_(std::move(node)) {
@@ -244,13 +246,9 @@ class MapWidget : public QWidget {
   void paintEvent(QPaintEvent*) override {
     QPainter painter(this);
     painter.fillRect(rect(), QColor("#17212b"));
-    if (!node_->map) {
-      painter.setPen(Qt::white);
-      painter.drawText(rect(), Qt::AlignCenter, "Waiting for SLAM map");
-      return;
-    }
-    const auto& m = *node_->map;
-    if (revision_ != node_->map_revision) {
+    const bool mapped = static_cast<bool>(node_->map);
+    if (mapped && revision_ != node_->map_revision) {
+      const auto& m = *node_->map;
       image_ = QImage(m.info.width, m.info.height, QImage::Format_RGB32);
       for (std::size_t y = 0; y < m.info.height; ++y)
         for (std::size_t x = 0; x < m.info.width; ++x) {
@@ -261,21 +259,45 @@ class MapWidget : public QWidget {
         }
       revision_ = node_->map_revision;
     }
-    QRect target = QRect(QPoint(0, 0), image_.size().scaled(size(), Qt::KeepAspectRatio));
+    const QSize view_size = mapped ? image_.size() : QSize(40, 40);
+    QRect target = QRect(QPoint(0, 0), view_size.scaled(size(), Qt::KeepAspectRatio));
     target.moveCenter(rect().center());
-    painter.drawImage(target, image_);
-    const auto& q = m.info.origin.orientation;
-    const double yaw = std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+    std::string frame = "husky1_odom";
+    double origin_x = -20, origin_y = -20, resolution = 1, width = 40, height = 40, yaw = 0;
+    if (mapped) {
+      const auto& m = *node_->map;
+      painter.drawImage(target, image_);
+      frame = m.header.frame_id;
+      origin_x = m.info.origin.position.x;
+      origin_y = m.info.origin.position.y;
+      resolution = m.info.resolution;
+      width = m.info.width;
+      height = m.info.height;
+      const auto& q = m.info.origin.orientation;
+      yaw = std::atan2(2 * (q.w * q.z + q.x * q.y), 1 - 2 * (q.y * q.y + q.z * q.z));
+    } else {
+      // Standalone aerial missions have odometry but no rover SLAM process.
+      // This coordinate grid does not represent free or occupied terrain.
+      painter.setPen(QColor("#334155"));
+      for (int step = 0; step <= 8; ++step) {
+        const int x = target.left() + step * target.width() / 8;
+        const int y = target.top() + step * target.height() / 8;
+        painter.drawLine(x, target.top(), x, target.bottom());
+        painter.drawLine(target.left(), y, target.right(), y);
+      }
+      painter.setPen(Qt::white);
+      painter.drawText(target.adjusted(6, 6, -6, -6), Qt::AlignTop | Qt::AlignLeft,
+                       "Local positions (odometry)\n5 m grid; no occupancy map");
+    }
     const auto marker = [&](const geometry_msgs::msg::PoseStamped& raw, const QColor& color,
                             const QString& label) {
-      const auto pose = node_->in_map(raw);
+      const auto pose = node_->in_frame(raw, frame);
       if (!pose) return;
-      const double dx = pose->pose.position.x - m.info.origin.position.x,
-                   dy = pose->pose.position.y - m.info.origin.position.y;
-      const double x = (std::cos(yaw) * dx + std::sin(yaw) * dy) / m.info.resolution;
-      const double y = (-std::sin(yaw) * dx + std::cos(yaw) * dy) / m.info.resolution;
-      QPointF point(target.left() + x / m.info.width * target.width(),
-                    target.bottom() - y / m.info.height * target.height());
+      const double dx = pose->pose.position.x - origin_x, dy = pose->pose.position.y - origin_y;
+      const double x = (std::cos(yaw) * dx + std::sin(yaw) * dy) / resolution;
+      const double y = (-std::sin(yaw) * dx + std::cos(yaw) * dy) / resolution;
+      QPointF point(target.left() + x / width * target.width(),
+                    target.bottom() - y / height * target.height());
       painter.setPen(color);
       painter.setBrush(color);
       painter.drawEllipse(point, 5, 5);

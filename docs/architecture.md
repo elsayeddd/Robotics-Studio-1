@@ -22,7 +22,7 @@ truth or tree-state messages. Evaluation reads truth separately to score outcome
 | velocity_guard_node | Sole rover output; selected/health/mission/command gates and manual/autonomous separation |
 | drone_scout_node | Aerial ascent, sweep, local investigation, return/landing, obstacle stop and heartbeat/envelope guards |
 | heatmap_node | Bounded selected-platform samples for operator awareness |
-| operator_dashboard | Map, both-platform telemetry/health, alerts/ACK, commands, hold/release manual input, wind/tree controls |
+| operator_dashboard | SLAM map or labelled local odometry view, both-platform telemetry/health, alerts/ACK, commands, hold/release manual input, wind/tree controls |
 | mission_event_logger.py | Flushed bounded CSV of transitions and alerts |
 | recorder/evaluator/campaign scripts | Independent truth joins, replay/tuning and retained actual trial metrics |
 

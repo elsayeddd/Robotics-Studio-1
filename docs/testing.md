@@ -46,8 +46,8 @@ The smoke script starts its own launch; do not run it over a manual demo.
 
 ```bash
 ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform combined
-ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform rover
-ROS_DOMAIN_ID=74 python3 scripts/ros_demo_smoke.py --platform drone
+ROS_DOMAIN_ID=75 python3 scripts/ros_demo_smoke.py --platform rover
+ROS_DOMAIN_ID=76 python3 scripts/ros_demo_smoke.py --platform drone
 ```
 
 It checks native sensors, map/TF/Nav2 when present, selected-vehicle motion,
@@ -55,18 +55,25 @@ pause/resume, measured return and E-stop. Automatic mode also checks that the
 unselected vehicle remains held. The launch log stays in log/demo-smoke. Use
 `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` if a virtual display is needed.
 
+CI passes `--max-sensor-holds 2` for the operator smoke check. If rendering stalls
+IR acquisition, it must first observe zero commands and less than 0.2 m stopped
+drift, pass fresh continuous preflight, then issue an explicit RESUME. Each such
+recovery is recorded; navigation failures and E-stop cannot use this path. The
+default smoke check permits no unexpected hold. Autonomous acceptance always
+fails on any pause and sends no recovery commands.
+
 The scene check exercises real healthy → burning → burnt replacements and
 requires the native IR and local gas readings to follow those changes:
 
 ```bash
-ROS_DOMAIN_ID=76 LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=2 xvfb-run -a \
+ROS_DOMAIN_ID=77 LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=2 xvfb-run -a \
   python3 scripts/ros_scene_integration_test.py --output log/scene-integration-01
 ```
 
 ## 4. Recorded perception evidence
 
 ```bash
-ROS_DOMAIN_ID=74 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
+ROS_DOMAIN_ID=100 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
 ```
 
 This launches six near-source scenarios for both platforms with separate training
@@ -75,11 +82,17 @@ on training data and reports confusion matrices, availability, missed events and
 latency. At least three recorded scenarios are required; all six are preferred.
 Use a new output directory each run. A failed/negative trial remains evidence.
 
+The perception campaign reserves twelve DDS domains from `--domain-base`
+(ROS_DOMAIN_ID, otherwise 100), one per world, and records source/harness revisions.
+Default detector settings must detect fire/dropout and reject the four negative
+scenarios on both platforms. CI smoke modes also use separate domains.
+
 ## 5. Autonomous mission evidence
 
 ```bash
-ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
-ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py --output log/autonomous-clear-01 --trials 2 --scenario no_fire --sim-timeout 1200 --wall-timeout 1800
+ROS_DOMAIN_ID=20 python3 scripts/run_mission_campaign.py --output log/autonomous-fire-01 --trials 10
+ROS_DOMAIN_ID=35 python3 scripts/ros_patrol_trials.py --output log/rover-patrol-01
+ROS_DOMAIN_ID=36 python3 scripts/run_mission_campaign.py --output log/drone-patrol-01 --platform drone --scenario no_fire --trials 1 --sim-timeout 1200 --wall-timeout 1800
 ```
 
 Trials alternate drone/rover selection and retain individual launch logs and JSON.

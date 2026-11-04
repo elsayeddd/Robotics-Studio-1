@@ -41,7 +41,10 @@ Recommended final trials:
 
 ## Changing the hidden source
 
-Edit the launch parameters rather than C++:
+The current acceptance scene uses a source at (12, 7). A custom scene must move
+the visible/thermal source and both mathematical fields together. Set `source_x`
+and `source_y` in both `environment_simulator_node` and
+`drone_environment_simulator_node` parameter blocks, for example:
 
 ```yaml
 environment_simulator_node:
@@ -50,7 +53,12 @@ environment_simulator_node:
     source_y: 7.0
 ```
 
-For blind assessment, one team member can set these values shortly before a trial without telling the autonomy developers.
+Set the fire-state manager's `tree_pose` parameter in the bringup launch to the
+same location; update the world's source include for scenarios that do not use
+that manager. Restart the scene and verify native IR and gas readings before a
+blind assessment. Editing only a gas-field coordinate leaves the thermal fire in
+its old location and does not define a valid integrated trial. Decision nodes
+must not receive these hidden coordinates.
 
 ## Added assets versus supplied archive
 

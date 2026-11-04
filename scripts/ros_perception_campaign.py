@@ -41,10 +41,10 @@ def stop(process):
             process.wait(timeout=5)
 
 
-def trial(output, split, scenario, seed, duration):
+def trial(output, split, scenario, seed, duration, domain):
     name = f"{split}_{scenario}_{seed}"
     paths = {}
-    rclpy.init()
+    rclpy.init(domain_id=domain)
     executor = SingleThreadedExecutor()
     nodes = []
     for robot in ("husky1", "drone1"):
@@ -56,6 +56,7 @@ def trial(output, split, scenario, seed, duration):
         executor.add_node(node)
     with (output / f"{name}.log").open("w") as log:
         trial_env = dict(os.environ)
+        trial_env['ROS_DOMAIN_ID'] = str(domain)
         # Gazebo transport is separate from DDS. Fresh partitions prevent a
         # stopped trial's discovery data from interfering with the next world.
         trial_env["IGN_PARTITION"] = f"embertrace_{name}_{os.getpid()}"
@@ -160,19 +161,29 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="log/gazebo-perception")
     parser.add_argument("--duration", type=float, default=12)
+    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "100")))
     args = parser.parse_args()
     if args.duration < 10:
         parser.error("duration must cover warmup, dropout and recovery (at least 10 s)")
+    if args.domain_base < 0 or args.domain_base + 2*len(SCENARIOS)-1 > 200:
+        parser.error("Reserve twelve trial DDS domains within 0..200")
     output = Path(args.output).resolve()
-    output.mkdir(parents=True, exist_ok=True)
+    output.mkdir(parents=True, exist_ok=False)
+    (output/'campaign_metadata.json').write_text(json.dumps(dict(
+        source_revision=subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'src'], text=True).strip(),
+        harness_revision=subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'scripts/ros_perception_campaign.py'], text=True).strip(),
+        domain_base=args.domain_base, duration_s=args.duration,
+        scenarios=list(SCENARIOS), training_seed=42, heldout_seed=142), indent=2)+'\n')
     files = {
         (split, robot): []
         for split in ("training", "heldout")
         for robot in ("husky1", "drone1")
     }
+    trial_index = 0
     for split, seed in [("training", 42), ("heldout", 142)]:
         for scenario in SCENARIOS:
-            paths = trial(output, split, scenario, seed, args.duration)
+            paths = trial(output, split, scenario, seed, args.duration, args.domain_base+trial_index)
+            trial_index += 1
             for robot, path in paths.items():
                 files[split, robot].append(path)
     for (split, robot), paths in files.items():
@@ -214,16 +225,16 @@ def main():
             rows = list(csv.DictReader(io.StringIO(result)))
             if len(rows) != len(SCENARIOS):
                 raise RuntimeError("Missing scenario metrics")
-            if robot == "husky1" and label == "defaults":
+            if label == "defaults":
                 for row in rows:
                     if row["scenario"] in ("fire", "dropout"):
                         if int(row["detected_events"]) < 1:
                             raise RuntimeError(
-                                "Rover did not detect " + row["scenario"]
+                                robot + " did not detect " + row["scenario"]
                             )
                     elif int(row["fp"]) != 0:
                         raise RuntimeError(
-                            "False rover confirmation in " + row["scenario"]
+                            "False " + robot + " confirmation in " + row["scenario"]
                         )
             print(f"{robot} / {label}\n{result}", flush=True)
     print(

@@ -201,3 +201,21 @@ visits and measured return distance.
 The expanded local suite passes all 63 tests with zero errors, failures or skips
 (`log/final-native-63-acceptance.log`). A fresh fetch still finds every teammate
 branch head included in main.
+
+The standalone drone dashboard previously waited for a rover SLAM map that is
+absent in that mode. It now shows a labelled 5 m odometry grid with fresh vehicle
+and source/sample markers. I verified this against a live drone return and also
+verified the real rover SLAM map, telemetry and detection-sample marker. Qt
+startup/termination still passes; the combined native results remain 63/63.
+The snapshots are in `log/dashboard-live-drone.png` and
+`log/dashboard-live-rover-active.png`.
+
+GitHub run `41920968542` passed all 63 native tests and twelve recorded perception
+runs. The rover operator smoke test correctly paused after IR freshness expired.
+The smoke harness can now explicitly verify stopped commands/body drift and a
+fresh preflight before a bounded operator RESUME; CI permits at most two such
+recoveries and records them. The autonomous campaign still rejects every pause
+and issues no recovery command. Neither sensor expiry nor E-stop is bypassed.
+Smoke modes and recorded worlds now use separate DDS domains, and baseline
+perception acceptance is enforced for both vehicles. The older source-only
+diagnostic is labelled separately from full mission acceptance.
