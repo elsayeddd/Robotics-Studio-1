@@ -8,7 +8,6 @@
 
   
 
-  <!-- <xacro:include filename="$(find 41068_ignition_bringup)/urdf_husky/wheel.urdf.xacro"/> -->
 
   <gazebo reference="${prefix}imu_link">
     <turnGravityOff>true</turnGravityOff>
