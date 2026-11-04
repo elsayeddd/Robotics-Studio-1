@@ -99,3 +99,9 @@ latency is zero if already confirmed on entry and otherwise starts at that local
 exposure. Missing exposure/estimates remain explicit. Use `ros_patrol_trials.py`
 for the stricter rover two-loop check: no skipped stops, no false critical alerts
 and automatic measured return, without an operator RETURN request.
+
+Mission trials use independent Gazebo partitions and DDS domains. `--domain-base`
+reserves one domain per trial (default: ROS_DOMAIN_ID, otherwise 140). This keeps
+old simulation clocks/readiness packets from contaminating the next fresh world.
+Readiness status carries the acquisition timestamp/frame; a native regression
+checks delayed samples against that contract.

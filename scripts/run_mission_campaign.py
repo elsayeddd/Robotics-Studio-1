@@ -31,12 +31,14 @@ def stop(process):
 def trial(args, output, number):
     robot = ("drone1" if number % 2 == 0 else "husky1") if args.platform == "alternating" else ("drone1" if args.platform == "drone" else "husky1")
     seed = args.seed_start + number
+    domain = args.domain_base + number
     name = f"{robot}_{seed}"
     result = dict(
         trial=name,
         source_revision=args.source_revision,
         harness_revision=args.harness_revision,
         seed=seed,
+        ros_domain_id=domain,
         platform=robot,
         success=False,
         mission_time_s=None,
@@ -55,7 +57,7 @@ def trial(args, output, number):
         latest_estimate=None,
         error=None,
     )
-    rclpy.init()
+    rclpy.init(domain_id=domain)
     node = Node("mission_campaign_recorder")
     node.set_parameters([rclpy.parameter.Parameter("use_sim_time", value=True)])
     messages = {
@@ -148,6 +150,7 @@ def trial(args, output, number):
     ]
     client = node.create_client(OperatorCommand, "/embertrace/operator_command")
     environment = dict(os.environ)
+    environment["ROS_DOMAIN_ID"] = str(domain)
     environment["IGN_PARTITION"] = f"embertrace_{name}_{os.getpid()}"
     environment["GZ_PARTITION"] = environment["IGN_PARTITION"]
     with (output / (name + ".log")).open("x") as log:
@@ -232,7 +235,7 @@ def trial(args, output, number):
         finally:
             stop(process)
             node.destroy_node()
-            rclpy.shutdown()
+            if rclpy.ok(): rclpy.shutdown()
     (output / (name + ".json")).write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)
     return result
@@ -241,6 +244,7 @@ def trial(args, output, number):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", default="log/autonomous-campaign")
+    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "140")))
     parser.add_argument("--platform", choices=["alternating", "drone", "rover"], default="alternating")
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--seed-start", type=int, default=300)
@@ -252,6 +256,8 @@ def main():
     args = parser.parse_args()
     if (
         args.trials < 1
+        or args.domain_base < 0
+        or args.domain_base + args.trials - 1 > 200
         or not all(
             math.isfinite(value)
             for value in (
@@ -264,7 +270,7 @@ def main():
         or args.sim_timeout <= 0
         or args.wall_timeout <= 0
     ):
-        parser.error("Trials and deadlines must be positive")
+        parser.error("Trials/deadlines must be positive; reserve trial DDS domains within 0..200")
     output = Path(args.output).resolve()
     output.mkdir(parents=True, exist_ok=False)
     args.source_revision = subprocess.check_output(["git", "log", "-1", "--format=%H", "--", "src"], text=True).strip()
@@ -283,7 +289,16 @@ def main():
         median_source_error_m=statistics.median(errors) if errors else None,
         results=results,
     )
+    summary["platforms"] = {}
+    for robot in sorted({r["platform"] for r in results}):
+        cohort = [r for r in results if r["platform"] == robot]
+        positions = [r["source_error_m"] for r in cohort if r["source_error_m"] is not None]
+        summary["platforms"][robot] = dict(trials=len(cohort),
+            successful=sum(r["success"] for r in cohort), resolved_sources=len(positions),
+            median_source_error_m=statistics.median(positions) if positions else None)
     summary["passed"] = summary["successful"] == args.trials and (args.scenario == "no_fire" or (len(errors) == args.trials and summary["median_source_error_m"] < 2))
+    if args.scenario == "fire":
+        summary["passed"] &= all(p["median_source_error_m"] is not None and p["median_source_error_m"] < 2 for p in summary["platforms"].values())
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
         f"Recorded {len(results)} autonomous trials; {summary['successful']} completed. Failures are retained."

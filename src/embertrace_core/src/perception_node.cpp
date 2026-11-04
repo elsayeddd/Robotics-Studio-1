@@ -9,6 +9,7 @@
 #include "embertrace_core/perception_filter.hpp"
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
 #include "embertrace_interfaces/msg/perception_status.hpp"
+#include "std_msgs/msg/header.hpp"
 #include "embertrace_interfaces/msg/thermal_cue.hpp"
 #include "embertrace_interfaces/msg/visual_cue.hpp"
 #include "rclcpp/rclcpp.hpp"
@@ -90,6 +91,7 @@ class PerceptionNode : public rclcpp::Node {
                 acquisition, last_accepted_stamp_, now().seconds() - acquisition);
           } else {
             last_accepted_stamp_ = acquisition;
+            status_acquisition_ = input->header;
           }
           if (result && result->valid) {
             auto out = *input;
@@ -140,7 +142,9 @@ class PerceptionNode : public rclcpp::Node {
   void publish_status() {
     filter_->tick(now().seconds(), steady());
     embertrace_interfaces::msg::PerceptionStatus s;
-    s.header.stamp = now();
+    // Readiness describes the accepted acquisition. Publication time can make an
+    // older warmup status appear newer than a valid delayed reading on another topic.
+    s.header = status_acquisition_;
     s.environment_fresh = filter_->environment_fresh(now().seconds());
     s.visual_fresh = filter_->visual_fresh(now().seconds());
     s.confirmation_candidate = filter_->confirmation_candidate(now().seconds());
@@ -159,6 +163,7 @@ class PerceptionNode : public rclcpp::Node {
   std::string expected_camera_frame_;
   std::uint64_t adapter_rejected_{0};
   bool co2_valid_{false};
+  std_msgs::msg::Header status_acquisition_;
   double last_accepted_stamp_{-1};
   double latest_wind_{0}, drone_wind_limit_{5}, rover_wind_limit_{12};
   std::unique_ptr<PerceptionFilter> filter_;

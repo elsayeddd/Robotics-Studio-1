@@ -100,9 +100,14 @@ class MissionManagerNode : public rclcpp::Node {
               return;
             }
             const double age = now().seconds() - seconds(msg->header.stamp);
-            if (age < -.1 || age > 2 || !msg->environment_fresh ||
+            if (age < -.1 || age > policy_->config().sensor_timeout_s || !msg->environment_fresh ||
                 (policy_->config().require_co2 && !msg->co2_valid) ||
                 (policy_->config().require_thermal && !msg->thermal_fresh)) {
+              if (policy_->snapshot().active == p) {
+                RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 2000,
+                    "Health unavailable for %s: age %.3fs, environment=%d CO2=%d IR=%d",
+                    platform_name(p), age, msg->environment_fresh, msg->co2_valid, msg->thermal_fresh);
+              }
               policy_->unavailable(p);
             }
           });

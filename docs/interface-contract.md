@@ -101,3 +101,8 @@ sensor values remain available in the fallback alert. If localisation expires,
 the confirmed incident remains recorded with an explicitly unresolved location,
 then proceeds through alert hold and return. Wind, battery, sensor and operator
 motion guards retain priority. Consumers counting incidents must deduplicate IDs.
+
+`PerceptionStatus.header` identifies the latest accepted environmental acquisition
+and its frame. It is not the publication clock. This lets the mission adapter
+discard late warmup/unavailable statuses after a newer valid reading has arrived.
+Expiry still uses current acquisition age and monotonic receipt time.

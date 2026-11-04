@@ -59,9 +59,9 @@ Fresh merged revision:
 - Perception: 79 checks; mission policy: 61 checks including standalone
   availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **58 tests, zero errors/failures/skips**, including
+- Full native suite passed: **59 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/source-refinement-native-acceptance.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/readiness-native-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
   includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -121,3 +121,11 @@ travelled (`log/rover-source-refinement`). Its incident count remains one.
 Manual command selection/release passed through both real ROS controllers
 (`log/manual-motion-acceptance.log`). Healthy/burning/burnt changes also passed in
 the dense world (`log/dense-scene-acceptance`).
+
+The first final cohort caught an immediate rover startup pause and is retained
+under `log/final-fire-campaign`. Readiness metadata previously used publication
+time, which could make an old warmup status appear newer than a delayed valid
+acquisition. Status now identifies the acquisition/frame it describes. The new
+regression fails against the old binary and passes against the corrected one.
+Mission cohorts now also use separate DDS domains per world, alongside separate
+Gazebo partitions. A fresh ten-seed cohort will use that controller revision.
