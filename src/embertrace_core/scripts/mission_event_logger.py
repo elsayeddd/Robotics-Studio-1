@@ -18,14 +18,16 @@ class EventLogger(Node):
             self.declare_parameter("directory", "log/mission-events").value
         ).expanduser()
         directory.mkdir(parents=True, exist_ok=True)
-        name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ") + ".csv"
-        self.handle = (directory / name).open("x", newline="")
-        self.writer = csv.writer(self.handle)
-        self.writer.writerow(["received_utc", "kind", "detail"])
-        self.rows = 0
         self.limit = int(self.declare_parameter("maximum_rows", 100000).value)
         if self.limit < 1:
             raise ValueError("maximum_rows must be positive")
+        name = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S.%fZ") + ".csv"
+        self.csv_handle = (directory / name).open("x", newline="")
+        self.writer = csv.writer(self.csv_handle)
+        self.writer.writerow(["received_utc", "kind", "detail"])
+        self.csv_handle.flush()
+        self.rows = 0
+        self.get_logger().info(f"Mission event log: {directory / name}")
         self.create_subscription(
             String,
             "/embertrace/mission_event",
@@ -43,7 +45,7 @@ class EventLogger(Node):
         if self.rows >= self.limit:
             return
         self.writer.writerow([datetime.now(timezone.utc).isoformat(), kind, detail])
-        self.handle.flush()
+        self.csv_handle.flush()
         self.rows += 1
 
 
@@ -55,7 +57,7 @@ def main():
     except KeyboardInterrupt:
         pass
     finally:
-        node.handle.close()
+        node.csv_handle.close()
         node.destroy_node()
         if rclpy.ok():
             rclpy.shutdown()

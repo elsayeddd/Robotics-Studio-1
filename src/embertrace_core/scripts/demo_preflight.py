@@ -23,6 +23,8 @@ from tf2_ros import Buffer, TransformListener
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeout", type=float, default=30)
+    parser.add_argument("--stable-seconds", type=float, default=2,
+                        help="Require all readiness checks to stay healthy before START")
     parser.add_argument("--platform", choices=("auto", "combined", "rover", "drone"), default="auto")
     parser.add_argument("--no-rover", action="store_true")
     parser.add_argument("--no-drone", action="store_true")
@@ -32,6 +34,10 @@ def main():
     )
     parser.add_argument("--waypoints-file")
     args, ros_args = parser.parse_known_args()
+    if (not math.isfinite(args.timeout) or args.timeout <= 0 or
+            not math.isfinite(args.stable_seconds) or args.stable_seconds < 0 or
+            args.stable_seconds >= args.timeout):
+        parser.error("Use a positive timeout longer than the non-negative stability window")
     args.no_rover |= args.platform == "drone"
     args.no_drone |= args.platform == "rover"
     args.no_nav2 |= args.no_rover
@@ -50,6 +56,7 @@ def main():
     checks = {
         "mission heartbeat": False,
         "ambient wind": False,
+        "event logging": False,
     }
     if not args.no_rover:
         checks.update({"rover sensors": False, "rover perception": False})
@@ -163,8 +170,14 @@ def main():
     active = {client: False for client in clients}
     last_poll = 0
     start = time.monotonic()
+    stable_since = None
     while rclpy.ok() and time.monotonic() - start < args.timeout:
         rclpy.spin_once(node, timeout_sec=0.1)
+        checks["event logging"] = all(
+            any(info.node_name == "mission_event_logger" for info in
+                node.get_subscriptions_info_by_topic(topic))
+            for topic in ("/embertrace/mission_event", "/embertrace/fire_alert")
+        )
         if not args.no_nav2:
             checks["Nav2 action"] = action.server_is_ready()
             checks["map to odom TF"] = buffer.can_transform(
@@ -236,12 +249,19 @@ def main():
             if key != "occupancy map" and time.monotonic() - seen > 2:
                 checks[key] = False
         if all(checks.values()):
-            break
+            if stable_since is None:
+                stable_since = time.monotonic()
+            if time.monotonic() - stable_since >= args.stable_seconds:
+                break
+        else:
+            stable_since = None
+    stable = stable_since is not None and time.monotonic() - stable_since >= args.stable_seconds
     for key, valid in checks.items():
         print(("PASS" if valid else "FAIL") + ": " + key)
+    print(("PASS" if stable else "FAIL") + ": continuous readiness window")
     node.destroy_node()
     rclpy.shutdown()
-    raise SystemExit(0 if all(checks.values()) else 1)
+    raise SystemExit(0 if all(checks.values()) and stable else 1)
 
 
 if __name__ == "__main__":

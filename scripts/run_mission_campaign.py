@@ -9,10 +9,13 @@ from pathlib import Path
 import signal
 import subprocess
 import time
+import yaml
 import rclpy
+from ament_index_python.packages import get_package_share_directory
 from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from nav_msgs.msg import Odometry
+from std_msgs.msg import UInt32
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from embertrace_interfaces.msg import FireAlert, MissionState, TrialTruth
 from embertrace_interfaces.srv import OperatorCommand
@@ -33,6 +36,17 @@ def trial(args, output, number):
     seed = args.seed_start + number
     domain = args.domain_base + number
     name = f"{robot}_{seed}"
+    config_root = Path(get_package_share_directory('embertrace_bringup'))/'config'
+    config = yaml.safe_load((config_root/'embertrace.yaml').read_text())
+    required_loops = config['mission_manager_node']['ros__parameters']['patrol_loops']
+    if robot == 'drone1':
+        flight = config['drone_scout_node']['ros__parameters']
+        route = [dict(name=f'sweep_{i+1}', x=x, y=y) for i, (x, y) in
+                 enumerate(zip(flight['sweep_x'], flight['sweep_y']))]
+    else:
+        route = yaml.safe_load((config_root/'patrol_waypoints.yaml').read_text())['waypoints']
+    expected_visits = len(route)*required_loops + int(robot == 'husky1')
+    visit_tolerance = 1.0 if robot == 'drone1' else 1.7
     result = dict(
         trial=name,
         source_revision=args.source_revision,
@@ -41,6 +55,18 @@ def trial(args, output, number):
         ros_domain_id=domain,
         platform=robot,
         success=False,
+        mission_completed=False,
+        preflight_passed=False,
+        preflight_time_s=None,
+        patrol_loops=0,
+        required_patrol_loops=required_loops,
+        expected_patrol_visits=expected_visits,
+        visited_patrol_waypoints=[],
+        visit_tolerance_m=visit_tolerance,
+        initial_position=None,
+        final_position=None,
+        return_error_m=None,
+        return_reason=None,
         mission_time_s=None,
         path_length_m=0.0,
         detection_latency_s=None,
@@ -80,6 +106,8 @@ def trial(args, output, number):
             result["recoveries"] += 1
         messages["last_phase"] = message.state
         messages["state"] = message
+        if message.state == MissionState.RETURN_TO_BASE and previous != message.state:
+            result['return_reason'] = message.detail
         if messages["start"] is not None and previous == MissionState.RETURN_TO_BASE and message.state == MissionState.IDLE:
             messages["finished"] = True
 
@@ -113,9 +141,18 @@ def trial(args, output, number):
     def pose(message):
         p = message.pose.pose.position
         current = (p.x, p.y, p.z)
+        if result['initial_position'] is None:
+            result['initial_position'] = list(current)
+        result['final_position'] = list(current)
         if messages["start"] is not None and messages["previous_pose"] is not None:
             result["path_length_m"] += math.dist(current, messages["previous_pose"])
         messages["previous_pose"] = current
+        visited = result['visited_patrol_waypoints']
+        if messages['start'] is not None and len(visited)<expected_visits:
+            target = route[len(visited)%len(route)]
+            at_altitude = robot != 'drone1' or p.z >= flight['altitude_m']-.8
+            if at_altitude and math.hypot(p.x-target['x'], p.y-target['y'])<=visit_tolerance:
+                visited.append(target['name'])
 
     def truth(message):
         if (
@@ -138,6 +175,8 @@ def trial(args, output, number):
 
     root = "/embertrace" if robot == "husky1" else "/drone1"
     subscriptions = [
+        node.create_subscription(UInt32, '/'+robot+'/patrol_loops',
+            lambda m: result.update(patrol_loops=m.data), 10),
         node.create_subscription(PoseWithCovarianceStamped, "/embertrace/source_estimate", estimate, 10),
         node.create_subscription(
             MissionState, "/embertrace/mission_state", state, transient
@@ -177,6 +216,13 @@ def trial(args, output, number):
             start_new_session=True,
             env=environment,
         )
+        startup = time.monotonic()
+        preflight_log = (output/(name+'.preflight.log')).open('x')
+        preflight = subprocess.Popen(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',
+            '--platform', 'drone' if robot == 'drone1' else 'rover', '--timeout', '120'],
+            stdout=preflight_log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
+        reader = (output/(name+'.log')).open()
+        pending_log = ''
         deadline = time.monotonic() + args.wall_timeout
         pending = None
         last_attempt = -10
@@ -185,6 +231,17 @@ def trial(args, output, number):
             while time.monotonic() < deadline:
                 if process.poll() is not None:
                     raise RuntimeError("Launch exited before mission completed")
+                pending_log += reader.read()
+                lines = pending_log.split('\n')
+                pending_log = lines.pop()
+                for line in lines:
+                    if 'process has died' in line:
+                        raise RuntimeError('A launched subsystem exited: '+line)
+                if not result['preflight_passed'] and preflight.poll() is not None:
+                    if preflight.returncode != 0:
+                        raise RuntimeError('Preflight failed; see '+str(output/(name+'.preflight.log')))
+                    result['preflight_passed'] = True
+                    result['preflight_time_s'] = time.monotonic()-startup
                 rclpy.spin_once(node, timeout_sec=0.05)
                 now_s = node.get_clock().now().nanoseconds / 1e9
                 mission = messages["state"]
@@ -205,6 +262,7 @@ def trial(args, output, number):
                 )
                 if (
                     messages["start"] is None
+                    and result['preflight_passed']
                     and pending is None
                     and mission is not None
                     and mission.preferred_platform == expected
@@ -220,11 +278,19 @@ def trial(args, output, number):
                     if mission.state in (MissionState.PAUSED, MissionState.EMERGENCY_STOP):
                         raise RuntimeError("Autonomous mission stopped: " + mission.detail)
                     if messages["finished"]:
+                        result['mission_completed'] = True
+                        if result['initial_position'] is None or result['final_position'] is None:
+                            raise RuntimeError('Mission ended without measured odometry')
+                        result['return_error_m'] = math.dist(result['initial_position'], result['final_position'])
                         result["success"] = result["false_alerts"] == 0 and (
-                            result["alerts"] > 0
+                            result["alerts"] > 0 and result['source_resolved']
                             if args.scenario == "fire"
-                            else result["alerts"] == 0
+                            else result["alerts"] == 0 and result['patrol_loops']>=required_loops
+                                and len(result['visited_patrol_waypoints'])==expected_visits
                         )
+                        result['success'] &= result['return_error_m'] < (0.8 if robot=='drone1' else 1.7)
+                        if not result['success']:
+                            result['error'] = ('Mission ended but source, route coverage or measured return failed acceptance')
                         break
                     if now_s - messages["start"] > args.sim_timeout:
                         raise TimeoutError("Simulation-time mission deadline exceeded")
@@ -233,6 +299,9 @@ def trial(args, output, number):
         except (RuntimeError, TimeoutError) as error:
             result["error"] = str(error)
         finally:
+            stop(preflight)
+            preflight_log.close()
+            reader.close()
             stop(process)
             node.destroy_node()
             if rclpy.ok(): rclpy.shutdown()
@@ -248,8 +317,8 @@ def main():
     parser.add_argument("--platform", choices=["alternating", "drone", "rover"], default="alternating")
     parser.add_argument("--trials", type=int, default=10)
     parser.add_argument("--seed-start", type=int, default=300)
-    parser.add_argument("--sim-timeout", type=float, default=300)
-    parser.add_argument("--wall-timeout", type=float, default=360)
+    parser.add_argument("--sim-timeout", type=float, default=480)
+    parser.add_argument("--wall-timeout", type=float, default=900)
     parser.add_argument("--scenario", choices=["fire", "no_fire"], default="fire")
     parser.add_argument("--source-x", type=float, default=12)
     parser.add_argument("--source-y", type=float, default=7)
@@ -284,6 +353,7 @@ def main():
     summary = dict(
         scenario=args.scenario,
         trials=len(results),
+        completed=sum(r['mission_completed'] for r in results),
         successful=sum(r["success"] for r in results),
         resolved_sources=len(errors),
         median_source_error_m=statistics.median(errors) if errors else None,
@@ -301,7 +371,8 @@ def main():
         summary["passed"] &= all(p["median_source_error_m"] is not None and p["median_source_error_m"] < 2 for p in summary["platforms"].values())
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
-        f"Recorded {len(results)} autonomous trials; {summary['successful']} completed. Failures are retained."
+        f"Recorded {len(results)} autonomous trials; {summary['completed']} completed, "
+        f"{summary['successful']} accepted. Failures are retained."
     )
 
     raise SystemExit(0 if summary["passed"] else 1)

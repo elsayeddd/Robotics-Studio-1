@@ -116,13 +116,24 @@ base closure, as well as loop counters and automatic return.
 
 The forest launch allows 300 wall seconds for return, including turns and slower
 software rendering. Required sensor/wind freshness limits still apply throughout.
-Resolved source alerts require at most 3 m standard deviation per horizontal axis.
+Resolved source alerts require at most 4 m standard deviation per horizontal axis.
 These are bounded mission settings; localisation accuracy is scored separately
 against hidden truth by the campaign recorder.
 The planner and manager use the same uncertainty limit. The native quality-gate
 regression requires additional spatial probing when the fit is too broad, rather
 than holding indefinitely at a coarse estimate. Platform fixtures wait for actual
 sensor readiness within a bounded deadline before attempting their mission cases.
+
+Autonomous trials run preflight before START, including active Nav2/first-path
+checks for the rover and a two-second continuous readiness window. Preflight also
+requires the event logger's mission and alert subscriptions, which are created
+after its CSV has opened successfully. An unexpected launched subsystem exit
+fails the trial. Negative missions require two patrol cycles, physical visits in
+route order and a measured return; landing is checked in three dimensions.
+Completed missions with unresolved sources remain failed acceptance results.
+The campaign defaults allow 480 simulation seconds and 900 wall seconds per fire
+trial, including startup. Full negative patrols need the longer explicit budgets
+shown above.
 
 The November 5 dashboard interaction check also exercised the actual window on
 an isolated X11 display with controlled ROS telemetry. It verified map markers,

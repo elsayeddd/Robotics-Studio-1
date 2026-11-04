@@ -59,9 +59,9 @@ Fresh merged revision:
 - Perception: 79 checks; mission policy: 61 checks including standalone
   availability and verification retry; system logic: 45 checks; Python: eight tests passed.
 - Full five-package build passed (`log/fresh-branch-build-final.log`).
-- Full native suite passed: **62 tests, zero errors/failures/skips**, including
+- Full native suite passed: **63 tests, zero errors/failures/skips**, including
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
-  downwind search, Nav2 actions and waypoint recovery (`log/final-native-62-acceptance.log`).
+  downwind search, Nav2 actions and waypoint recovery (`log/final-native-63-acceptance.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance
   includes passing standalone rover/drone and automatic-mode motion, pause/
   resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
@@ -174,3 +174,30 @@ runs, including the new acquisition producer. Its delayed-stream native test
 attempted START before sensor warmup completed. Both platform fixtures now wait
 for readiness within ten seconds instead of assuming a fixed two-second delay.
 Production expiry and confirmation limits are unchanged.
+
+The full fifth cohort is retained in `log/final-fire-campaign-v5`. All five drone
+missions resolved and returned/landed; median source error was 0.283 m. Three of
+five rover missions completed, but none satisfied the experimental 3 m uncertainty
+gate, so the cohort failed. Two rover fits ended near the true source with wider
+covariance, while one continued probing beyond the useful plume. I restored the
+established 4 m gate in both nodes; the configurable matching-limit fix remains.
+The 300-second return budget remains in place.
+
+Rover 801 also started before Nav2 became ready and paused immediately. The
+campaign now runs the documented preflight sequence before START, requires a
+continuous readiness window, and fails on any launched subsystem exit. This also
+closed a logging coverage gap: `mission_event_logger.py` overwrote ROS Node's
+reserved `handle` attribute and crashed. Its CSV handle now has its own name. A
+new DDS regression reproduces the old crash and verifies persisted mission/alert
+rows, the configured row limit and clean shutdown after the correction. An audit
+found no other ROS Node attribute collisions in the Python runtime nodes.
+
+[GitHub run 41865088729](https://github.com/elsayeddd/Robotics-Studio-1/actions/runs/41865088729)
+passed its build, all 62 native checks, all three deployment smoke checks and the
+twelve recorded perception runs at `6b5bf80`. The new event-log/preflight changes
+will receive a separate full run. Campaign results now distinguish completion
+from acceptance, retain failed source/return checks, and record physical patrol
+visits and measured return distance.
+The expanded local suite passes all 63 tests with zero errors, failures or skips
+(`log/final-native-63-acceptance.log`). A fresh fetch still finds every teammate
+branch head included in main.

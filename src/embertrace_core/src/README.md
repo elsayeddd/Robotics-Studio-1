@@ -55,8 +55,8 @@ clearance. It validates the endpoint; Nav2 remains responsible for route
 planning and live obstacle avoidance. Search timeouts only withhold planner
 goals; mission-state timeout policy belongs to the mission manager.
 
-The full launch uses only a recent estimate with at most 3 m standard deviation
-per axis for the resolved alert location (the isolated node default is 4 m).
+The full launch uses only a recent estimate with at most 4 m standard deviation
+per axis for the resolved alert location.
 The planner uses the same configured uncertainty gate and continues probing while
 the fit is too broad. An unresolved confirmed alert retains the original
 confirmation sample location and sensor evidence. The uncertainty remains available

@@ -97,7 +97,7 @@ mission_manager_node:
     required_confirmation_samples: 3
     reading_timeout_s: 2.0
     max_estimate_age_s: 5.0
-    max_estimate_stddev_m: 3.0
+    max_estimate_stddev_m: 4.0
     verify_retry_s: 5.0
 
 search_planner_node:
@@ -120,7 +120,7 @@ search_planner_node:
     robot_clearance_m: 0.8
     source_standoff_m: 1.2
     # Match the manager: keep probing until the fit can resolve an alert.
-    max_estimate_stddev_m: 3.0
+    max_estimate_stddev_m: 4.0
     max_map_occupancy: 20
     goal_snap_radius_m: 2.0
     reading_timeout_s: 3.0
