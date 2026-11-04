@@ -21,9 +21,13 @@ struct KnownFreeGrid
   std::vector<std::int8_t> data;
 
   bool is_free(double x, double y, double clearance_m, int max_occupancy) const;
+  // Optional start/travel constraints keep a snapped probe outside the
+  // controller's arrival radius without changing occupancy or clearance rules.
   std::optional<std::pair<double, double>> nearest_free(
     double x, double y, double max_displacement_m, double clearance_m,
-    int max_occupancy) const;
+    int max_occupancy,
+    std::optional<std::pair<double, double>> start = std::nullopt,
+    double minimum_travel_m = 0.0) const;
 
 private:
   std::optional<std::pair<int, int>> cell(double x, double y) const;

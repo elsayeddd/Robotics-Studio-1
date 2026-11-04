@@ -1,0 +1,33 @@
+{
+  "rover": {
+    "platform": "rover",
+    "movement_m": {
+      "husky1": 0.8055710906794491
+    },
+    "controls": "passed",
+    "return": "passed",
+    "emergency_stop": "passed",
+    "verified_sensor_holds": []
+  },
+  "drone": {
+    "platform": "drone",
+    "movement_m": {
+      "drone1": 0.834999999999991
+    },
+    "controls": "passed",
+    "return": "passed",
+    "emergency_stop": "passed",
+    "verified_sensor_holds": []
+  },
+  "combined": {
+    "platform": "combined",
+    "movement_m": {
+      "husky1": 0.0,
+      "drone1": 0.8099999999999915
+    },
+    "controls": "passed",
+    "return": "passed",
+    "emergency_stop": "passed",
+    "verified_sensor_holds": []
+  }
+}

@@ -79,6 +79,12 @@ class SearchPlannerNode : public rclcpp::Node {
     reading_timeout_s_ = std::max(0.5, declare_parameter<double>("reading_timeout_s", 3.0));
     robot_clearance_m_ = std::max(0.0, declare_parameter<double>("robot_clearance_m", 0.8));
     goal_snap_radius_m_ = std::max(0.0, declare_parameter<double>("goal_snap_radius_m", 2.0));
+    probe_detour_radius_m_ = declare_parameter<double>("probe_detour_radius_m", 4.0);
+    minimum_probe_distance_m_ = declare_parameter<double>("minimum_probe_distance_m", 1.5);
+    if (!std::isfinite(probe_detour_radius_m_) || probe_detour_radius_m_ < goal_snap_radius_m_ ||
+        !std::isfinite(minimum_probe_distance_m_) || minimum_probe_distance_m_ <= 0) {
+      throw std::invalid_argument("Probe detour must contain the snap radius and require finite progress");
+    }
     max_map_occupancy_ = std::clamp<int>(declare_parameter<int>("max_map_occupancy", 20), 0, 99);
     map_topic_ = declare_parameter<std::string>("map_topic", "/husky1/map");
 
@@ -288,11 +294,17 @@ class SearchPlannerNode : public rclcpp::Node {
   }
 
   void publish_goal(const Reading& reading, const rclcpp::Time& current) {
+    // Bound failed map searches as well as successful publications.
+    last_goal_time_ = current;
+    have_last_goal_ = true;
     const auto& position = reading.sample_pose.pose.position;
     double target_x = position.x;
     double target_y = position.y;
     bool casting = state_ == MissionState::RECOVER ||
                    !(reading.smoke_detected || reading.co2_detected || reading.temperature_anomaly);
+    const bool probing = casting || !estimate_ ||
+        std::max(estimate_->variance_x, estimate_->variance_y) >
+            max_estimate_stddev_m_ * max_estimate_stddev_m_;
     if (casting) {
       // Expanding alternating crosswind casts revisit the last measured plume.
       const auto& anchor = have_signal_ ? last_signal_pose_.pose.position : position;
@@ -334,8 +346,6 @@ class SearchPlannerNode : public rclcpp::Node {
         set_yaw(goal.pose, std::atan2(estimate_->y - target_y, estimate_->x - target_x));
       }
       drone_goal_publisher_->publish(goal);
-      last_goal_time_ = current;
-      have_last_goal_ = true;
       if (casting) {
         ++cast_count_;
       }
@@ -355,18 +365,35 @@ class SearchPlannerNode : public rclcpp::Node {
     requested.header.stamp.nanosec = 0;
     set_yaw(requested.pose, std::atan2(target_y - position.y, target_x - position.x));
 
-    geometry_msgs::msg::PoseStamped goal;
+    geometry_msgs::msg::PoseStamped goal, robot_in_map;
     try {
       // Samples use odom coordinates; cells and navigation goals use map coordinates.
       goal = tf_buffer_->transform(requested, map_frame_);
+      auto robot = reading.sample_pose;
+      robot.header.stamp = requested.header.stamp;
+      robot_in_map = tf_buffer_->transform(robot, map_frame_);
     } catch (const tf2::TransformException& error) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                            "No map transform; withholding goal: %s", error.what());
       return;
     }
-    const auto safe =
+    const auto start = std::pair<double, double>{robot_in_map.pose.position.x,
+                                                robot_in_map.pose.position.y};
+    auto safe =
         grid_.nearest_free(goal.pose.position.x, goal.pose.position.y, goal_snap_radius_m_,
-                           robot_clearance_m_, max_map_occupancy_);
+                           robot_clearance_m_, max_map_occupancy_, start,
+                           probing ? minimum_probe_distance_m_ : 0.0);
+    if (!safe && probing) {
+      // I use a short surveyed detour when the first LiDAR view has gaps.
+      // A snapped goal inside Nav2's stop radius cannot gather another view.
+      safe = grid_.nearest_free(goal.pose.position.x, goal.pose.position.y, probe_detour_radius_m_,
+                                robot_clearance_m_, max_map_occupancy_, start,
+                                minimum_probe_distance_m_);
+      if (safe) {
+        RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                            "Using a known-free detour to gather another search view");
+      }
+    }
     if (!safe) {
       RCLCPP_WARN_THROTTLE(get_logger(), *get_clock(), 5000,
                            "No known free goal near search target");
@@ -376,8 +403,6 @@ class SearchPlannerNode : public rclcpp::Node {
     goal.pose.position.y = safe->second;
     goal.header.stamp = current;
     goal_publisher_->publish(goal);
-    last_goal_time_ = current;
-    have_last_goal_ = true;
     if (casting) {
       ++cast_count_;
     }
@@ -420,6 +445,8 @@ class SearchPlannerNode : public rclcpp::Node {
   double reading_timeout_s_{3.0};
   double robot_clearance_m_{0.8};
   double goal_snap_radius_m_{2.0};
+  double probe_detour_radius_m_{4.0};
+  double minimum_probe_distance_m_{1.5};
   double world_min_x_{-18.5};
   double world_max_x_{18.5};
   double world_min_y_{-18.5};

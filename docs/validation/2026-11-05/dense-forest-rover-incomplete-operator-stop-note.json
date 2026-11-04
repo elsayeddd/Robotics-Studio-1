@@ -1,0 +1,7 @@
+{
+  "reason": "Stopped the incomplete second loop to prioritise remaining tests after the rover stalled near the base. Operator PAUSE was issued; this is not an autonomous patrol pass.",
+  "planner_potential_failures": 21,
+  "recovery_spins": 3,
+  "recovery_backups": 3,
+  "recovery_waits": 3
+}

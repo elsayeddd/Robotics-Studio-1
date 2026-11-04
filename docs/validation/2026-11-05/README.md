@@ -7,7 +7,7 @@ integration; they do not establish physical sensor or flight performance.
 
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
-| Five-package native build and regression suite | 63 tests, zero failures/errors/skips | Local `log/final-native-63-acceptance.log`; [CI at 97b38bb](https://github.com/elsayeddd/Robotics-Studio-1/actions/runs/41927966123), native test step |
+| Five-package native build and regression suite | 63 tests, zero failures/errors/skips | Local `log/final-native-63-acceptance.log`; [CI at 5fa2f3c](https://github.com/elsayeddd/Robotics-Studio-1/actions/runs/41932033248), native test step |
 | Standard 40 × 40 m forest, autonomous fire missions | 10/10 accepted, five per vehicle; every source resolved and vehicle returned; all drones landed | [Complete results](standard-forest-fire-missions.json) |
 | Source position accuracy in those missions | Median 0.338 m overall, 0.316 m drone, 0.412 m rover | Same complete results; five noise seeds per vehicle, fixed source location |
 | Dense 70 × 70 m forest, drone negative patrol | Two loops, all 12 sweep visits, no alerts/pauses, automatic return and landing; final 3D displacement 0.195 m | [Complete result](dense-forest-drone-patrol.json) |
@@ -16,11 +16,28 @@ integration; they do not establish physical sensor or flight performance.
 | Operator dashboard | Actual START/PAUSE/RESUME/RETURN/RESET/E-stop/ACK/manual controls, confirmation cancellation, tree/wind controls and zero release/focus/disconnection commands pass | Local `log/dashboard-interaction/result.json`; live rover/drone screenshots and Qt lifecycle tests |
 | Shared wind and battery | Live simulator parameter changes, depletion/low-battery return, invalid-setting rejection and unsafe/missing-input holds pass | Local `log/mission-inputs-acceptance.log` and native suite |
 
-Full dense rover patrol and dense fire-response checks are still running. A new
-CI run is checking the WSL launch split and smoke-recorder startup change. The
-linked older CI run passed native tests, the rover smoke and recorded perception,
-but failed when its late-joining drone recorder received no telemetry; it is not
-an overall green CI result.
+The dense rover negative patrol completed one loop and 11/21 measured visits,
+then stalled near the base on the second loop. I issued PAUSE to move on to the
+remaining tests, as requested. This run is incomplete and is not accepted:
+[result](dense-forest-rover-incomplete-result.json) and
+[operator stop/recovery counts](dense-forest-rover-incomplete-operator-stop-note.json).
+Planner/path-following refinement was explicitly deferred until the other tests
+finish. No controller configuration was changed during this run.
+
+The larger-forest fire cohort accepted the drone mission, including a resolved
+source and automatic landing, but the rover remained at base and reached its wall
+deadline. [Both retained results](dense-forest-fire-missions-before-detour.json)
+show this as one of two accepted missions. The captured initial map had no
+clearance-safe cell within 2 m of the upwind target. A bounded detour to surveyed
+space now passes the real DDS regression, which fails against the previous
+planner. Its full Gazebo rerun and a fresh CI run are pending.
+
+[CI at 5fa2f3c](https://github.com/elsayeddd/Robotics-Studio-1/actions/runs/41932033248)
+is fully green: 63 native tests, all three mode smoke checks and twelve recorded
+perception worlds. The [mode results](ci-mode-checks.json) show zero unexpected
+sensor-hold recoveries in every mode and no unselected rover motion in automatic
+mode. The held-out CSV tables above are from this run. This CI result precedes
+the new search-detour change.
 
 The strict mission recorder sends START, then observes autonomy. It sends no
 operator RETURN or RESUME, rejects every safety pause, requires a resolved source

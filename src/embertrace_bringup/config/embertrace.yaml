@@ -123,6 +123,9 @@ search_planner_node:
     max_estimate_stddev_m: 4.0
     max_map_occupancy: 20
     goal_snap_radius_m: 2.0
+    probe_detour_radius_m: 4.0
+    # Stay beyond Nav2's 1 m arrival tolerance when collecting another view.
+    minimum_probe_distance_m: 1.5
     reading_timeout_s: 3.0
     signal_loss_timeout_s: 20.0
     search_timeout_s: 120.0

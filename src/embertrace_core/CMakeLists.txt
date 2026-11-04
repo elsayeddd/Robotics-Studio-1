@@ -156,6 +156,9 @@ if(BUILD_TESTING)
   add_test(NAME ros_search_quality_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_search_integration_test.py --strict-source-gate)
   set_tests_properties(ros_search_quality_integration PROPERTIES TIMEOUT 60 RUN_SERIAL TRUE)
+  add_test(NAME ros_search_map_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_search_map_test.py)
+  set_tests_properties(ros_search_map_integration PROPERTIES TIMEOUT 30 RUN_SERIAL TRUE)
   add_test(NAME ros_event_logger_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_event_logger_test.py)
   set_tests_properties(ros_event_logger_integration PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)

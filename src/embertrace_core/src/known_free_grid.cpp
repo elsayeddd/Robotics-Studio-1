@@ -63,16 +63,23 @@ bool KnownFreeGrid::is_free(const double x, const double y, const double clearan
 
 std::optional<std::pair<double, double>> KnownFreeGrid::nearest_free(
     const double x, const double y, const double max_displacement_m, const double clearance_m,
-    const int max_occupancy) const {
+    const int max_occupancy, const std::optional<std::pair<double, double>> start,
+    const double minimum_travel_m) const {
   if (!std::isfinite(x) || !std::isfinite(y) || !std::isfinite(max_displacement_m) ||
       !std::isfinite(clearance_m) || !std::isfinite(origin_x) || !std::isfinite(origin_y) ||
       !std::isfinite(origin_yaw) || !std::isfinite(resolution) || resolution <= 0.0 ||
       width == 0U || height == 0U || max_displacement_m < 0.0 || clearance_m < 0 ||
       max_occupancy < 0 || max_occupancy > 99 || width > 100000U || height > 100000U ||
-      data.size() != static_cast<std::size_t>(width) * height) {
+      data.size() != static_cast<std::size_t>(width) * height ||
+      !std::isfinite(minimum_travel_m) || minimum_travel_m < 0 ||
+      (start && (!std::isfinite(start->first) || !std::isfinite(start->second))) ||
+      (!start && minimum_travel_m > 0)) {
     return std::nullopt;
   }
-  if (is_free(x, y, clearance_m, max_occupancy)) {
+  const auto progresses = [&](double candidate_x, double candidate_y) {
+    return !start || std::hypot(candidate_x-start->first, candidate_y-start->second) >= minimum_travel_m;
+  };
+  if (progresses(x, y) && is_free(x, y, clearance_m, max_occupancy)) {
     return std::pair<double, double>{x, y};
   }
   // Bound the search in grid coordinates; scanning the entire SLAM map for a
@@ -97,7 +104,8 @@ std::optional<std::pair<double, double>> KnownFreeGrid::nearest_free(
     for (int col = min_col; col <= max_col; ++col) {
       const auto candidate = centre(col, row);
       const double distance = std::hypot(candidate.first - x, candidate.second - y);
-      if (distance > max_displacement_m || distance >= best_distance) {
+      if (distance > max_displacement_m || distance >= best_distance ||
+          !progresses(candidate.first, candidate.second)) {
         continue;
       }
       if (is_free(candidate.first, candidate.second, clearance_m, max_occupancy)) {

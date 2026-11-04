@@ -1,0 +1,27 @@
+{
+  "source_revision": "5fa2f3c967252db0238cdbbc0b0abd1408c32bd6",
+  "harness_revision": "061bfd84fd90f2adfff0b37f09065167727a3d44",
+  "world_file": "embertrace_forest_dense.sdf",
+  "gazebo_gui": true,
+  "visited_waypoints": [
+    "ranger_base",
+    "west_south",
+    "west_centre",
+    "west_north",
+    "north_centre",
+    "north_east",
+    "east_centre",
+    "junction",
+    "centre",
+    "west_centre_return",
+    "ranger_base"
+  ],
+  "visit_tolerance_m": 1.7,
+  "closed_loops": 1,
+  "skipped_waypoints": 0,
+  "navigation_failures": 1,
+  "path_length_m": 95.21510654714118,
+  "false_alerts": 0,
+  "passed": false,
+  "failure": "Unexpected mission state during no-fire patrol: {'state': 'PAUSED', 'pose': (-14.482513884428238, -13.0186444277294)}"
+}

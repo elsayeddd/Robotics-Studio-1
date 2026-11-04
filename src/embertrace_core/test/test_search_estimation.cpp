@@ -241,4 +241,45 @@ TEST(KnownFreeGrid, HandlesRotatedOrigin)
   EXPECT_TRUE(grid.is_free(-4.5, 2.5, 0.0, 20));
 }
 
+TEST(KnownFreeGrid, DetoursAroundAnUnknownProbeWithoutRelaxingClearance)
+{
+  KnownFreeGrid grid;
+  grid.width = grid.height = 20;
+  grid.resolution = 0.5;
+  grid.origin_x = grid.origin_y = -5.0;
+  grid.data.assign(400, -1);
+  // Only the patch to the rover's left has been surveyed. The upwind
+  // target at (2, 0) remains unknown in the initial view.
+  for (int row = 5; row < 15; ++row) {
+    for (int col = 2; col < 10; ++col) grid.data[row*20+col] = 0;
+  }
+  EXPECT_FALSE(grid.nearest_free(2, 0, 2, .8, 20));
+  const auto start = std::pair<double, double>{0, 0};
+  const auto detour = grid.nearest_free(2, 0, 4, .8, 20, start, 1.5);
+  ASSERT_TRUE(detour);
+  EXPECT_GE(std::hypot(detour->first, detour->second), 1.5);
+  EXPECT_LE(std::hypot(detour->first-2, detour->second), 4);
+  EXPECT_TRUE(grid.is_free(detour->first, detour->second, .8, 20));
+  EXPECT_FALSE(grid.is_free(2, 0, .8, 20));
+  grid.data.assign(400, -1);
+  EXPECT_FALSE(grid.nearest_free(2, 0, 4, .8, 20, start, 1.5));
+  grid.data.assign(400, 100);
+  EXPECT_FALSE(grid.nearest_free(2, 0, 4, .8, 20, start, 1.5));
+}
+
+TEST(KnownFreeGrid, ProbeCannotSnapInsideTheArrivalRadius)
+{
+  KnownFreeGrid grid;
+  grid.width = grid.height = 20;
+  grid.resolution = 0.5;
+  grid.origin_x = grid.origin_y = -5.0;
+  grid.data.assign(400, 0);
+  const auto start = std::pair<double, double>{0, 0};
+  const auto probe = grid.nearest_free(.1, 0, 2, .8, 20, start, 1.5);
+  ASSERT_TRUE(probe);
+  EXPECT_GE(std::hypot(probe->first, probe->second), 1.5);
+  EXPECT_FALSE(grid.nearest_free(.1, 0, .5, .8, 20, start, 1.5));
+  EXPECT_FALSE(grid.nearest_free(.1, 0, 2, .8, 20, std::nullopt, 1.5));
+}
+
 }  // namespace embertrace_core

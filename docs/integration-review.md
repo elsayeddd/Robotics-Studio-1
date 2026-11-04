@@ -263,3 +263,24 @@ the separate GPU viewer. The dense rover test uses the new automatic WSL launch
 split at `5fa2f3c`; it is still running. The source/noise-seed results and held-out
 perception metrics are now saved under `docs/validation/2026-11-05` so the core
 acceptance data is available from Git, alongside the ignored detailed logs.
+
+CI at `5fa2f3c` is fully green: all 63 native tests, rover/drone/combined
+operator smoke checks (zero sensor-hold recoveries), and twelve recorded
+perception worlds with both vehicle baselines enforced. The current metric tables
+and mode results are saved under `docs/validation/2026-11-05`.
+
+The larger forest adds two important failures to the acceptance record. The rover
+negative patrol completed one loop and eleven measured visits, then stalled near
+the base on its second loop. I paused it to prioritise the other tests after the
+user deferred movement refinement. Its three recovery spins and retained stop
+note are saved. The dense drone fire mission completed, resolved its source and
+landed, but the rover fire mission reached its wall deadline without leaving base.
+The captured initial map has narrow unknown gaps between LiDAR rays: no point
+within 2 m of the upwind target satisfies the existing 0.8 m clearance check.
+
+Search now tries a bounded 4 m detour to already surveyed free space when an
+initial probe cannot be placed. Probe goals must also be at least 1.5 m from the
+robot, beyond Nav2's 1 m arrival tolerance. Unknown/occupied cells and clearance
+rules are unchanged; failed goal searches are throttled to the normal goal
+interval. Focused grid/source tests and real DDS map/goal tests pass. The actual
+dense rover fire regression is still required before accepting this fix.
