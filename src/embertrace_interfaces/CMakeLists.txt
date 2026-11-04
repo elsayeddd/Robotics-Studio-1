@@ -13,9 +13,11 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ThermalCue.msg"
   "msg/PerceptionStatus.msg"
   "msg/TrialTruth.msg"
+  "msg/FireState.msg"
   "msg/FireAlert.msg"
   "msg/MissionState.msg"
   "srv/OperatorCommand.srv"
+  "srv/SetFireState.srv"
   DEPENDENCIES builtin_interfaces geometry_msgs std_msgs
 )
 

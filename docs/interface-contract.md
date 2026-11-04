@@ -1,102 +1,91 @@
 # ROS interface contract
 
-Treat this document as the integration agreement. Discuss changes before renaming a topic, service, frame or field.
+This is the integration contract for the November 2 snapshot. Rebuild all packages
+after applying message changes. Use message frames and acquisition timestamps;
+do not substitute publication time or an image hotspot for a source coordinate.
 
-## Topics
+## Per-vehicle sensing
 
-| Name | Type | Publisher | Subscribers | Purpose |
-| --- | --- | --- | --- | --- |
-| `/husky1/odometry` | `nav_msgs/msg/Odometry` | Gazebo bridge | Environment simulator, localisation | Raw simulated odometry |
-| `/husky1/odom` | `nav_msgs/msg/Odometry` | EKF | Nav2 and future consumers | Filtered robot odometry |
-| `/husky1/map` | `nav_msgs/msg/OccupancyGrid` | SLAM Toolbox | Search planner, Nav2, RViz | Known free cells for goal selection |
-| `/husky1/scan` | `sensor_msgs/msg/LaserScan` | Gazebo bridge | SLAM/Nav2/RViz | Obstacle perception |
-| `/husky1/camera/image` | `sensor_msgs/msg/Image` | Gazebo bridge | Camera verifier/RViz | RGB image |
-| `/embertrace/raw_environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Environment simulator | Perception | Noisy local simulated sensors |
-| `/embertrace/visual_fire_cue` | `std_msgs/msg/Float32` | Camera verifier | Perception | Visual confidence from 0 to 1 |
-| `/embertrace/environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Perception | Mission, search, UI, heatmap | Filtered/fused evidence |
-| `/embertrace/mission_state` | `embertrace_interfaces/msg/MissionState` | Mission manager | Search, UI, adapter | Authoritative state |
-| `/embertrace/navigation_goal` | `geometry_msgs/msg/PoseStamped` | Search planner | Future Nav2 adapter, RViz | Next short map-frame investigation goal in known free space |
-| `/embertrace/source_estimate` | `geometry_msgs/msg/PoseWithCovarianceStamped` | Search planner | Mission manager, RViz | Source position and x/y covariance from local sensor history; sample frame |
-| `/embertrace/fire_alert` | `embertrace_interfaces/msg/FireAlert` | Mission manager | UI, logging | Confirmed or suspected alert |
-| `/embertrace/sample_markers` | `visualization_msgs/msg/MarkerArray` | Heatmap | RViz | Colour-coded sample history |
+Use `/embertrace` as the rover perception root and `/drone1` as the drone root.
+Images/odometry use robot roots `/husky1` and `/drone1` respectively.
 
-## Service
+| Suffix or topic | Type | Meaning |
+| --- | --- | --- |
+| `/{robot}/odometry` | nav_msgs/Odometry | Measured pose in shared simulation frame `husky1_odom` |
+| `/{robot}/camera/image` | sensor_msgs/Image | RGB image |
+| `/{robot}/thermal/image` | sensor_msgs/Image | Radiometric mono16/16UC1, 0.01 K/unit; not an RGB substitute |
+| `{root}/raw_environment` | EnvironmentalReading | Independent noisy local smoke, scalar temperature, CO2 and shared wind |
+| `{root}/visual_cue` | VisualCue | Acquisition header, confidence and validity |
+| `{root}/thermal_cue` | ThermalCue | Acquisition header, valid persistent hotspot, peak C and cluster measures |
+| `{root}/environment` | EnvironmentalReading | Filtered local readings, gas/heat flags, IR summary and fused confidence |
+| `{root}/perception_status` | PerceptionStatus | Acquisition health, camera freshness, CO2 validity, confirmation candidate and rejections |
+| `{root}/sensors_ready` | std_msgs/Bool | Fresh required bridge streams and raw environment |
+| `/{robot}/battery` | sensor_msgs/BatteryState | Simulated fraction in percentage, with stamped availability |
+| `/{robot}/patrol_loops` | std_msgs/UInt32 | Completed route loops; policy counts from the mission's start baseline |
+| `/{robot}/mission_navigation_status` | std_msgs/String | RETURNED, ABORTED or TIMEOUT for the selected platform |
+| `{root}/validation/truth` | TrialTruth | Evaluation-only exposure/dropout label; never an autonomy input |
+| `/diagnostics` | diagnostic_msgs/DiagnosticArray | Per-stream sensor freshness |
 
-### `/embertrace/operator_command`
+Scalar `temperature_c` is the local environmental measurement. It is not replaced
+by the camera's peak. Gas confidence uses the stronger smoke/CO2 score, avoiding
+addition of correlated gas channels. RGB alone cannot confirm a fire. Legacy
+Float32 visual cue topics remain for compatibility but are not fusion inputs.
 
-Type: `embertrace_interfaces/srv/OperatorCommand`
+## Shared mission and navigation
 
-Accepted command strings:
+| Topic | Type | Meaning |
+| --- | --- | --- |
+| `/embertrace/wind` | geometry_msgs/Vector3Stamped | Ambient vector in `husky1_odom`; acquisition and receipt freshness required |
+| `/embertrace/mission_state` | MissionState | Sole authoritative policy state, selected/preferred platform, epoch, permissions, acknowledgement |
+| `/embertrace/active_environment` | EnvironmentalReading | Selected platform's local readings for search/heatmap; no unselected evidence mixing |
+| `/embertrace/navigation_goal` | geometry_msgs/PoseStamped | Rover patrol/search goal; Nav2 adapter transforms into map and bounds-checks |
+| `/drone1/navigation_goal` | geometry_msgs/PoseStamped | Bounded aerial investigation goal in shared odometry frame |
+| `/embertrace/navigation_status` | std_msgs/String | Rover action adapter status for patrol/retry/failure handling |
+| `/embertrace/source_estimate` | geometry_msgs/PoseWithCovarianceStamped | Local-history fit, covariance and sample frame; no simulator truth |
+| `/embertrace/fire_alert` | FireAlert | Suspected warning or confirmed event with id/platform, sensor values and source_resolved flag |
+| `/embertrace/sample_markers` | visualization_msgs/MarkerArray | Bounded selected-platform sample history for RViz |
+| `/embertrace/manual_cmd_vel` | geometry_msgs/Twist | Operator input, effective only for selected platform in manual mode |
+| `/husky1/autonomy_cmd_vel` | geometry_msgs/Twist | Nav2 input to rover guard |
+| `/husky1/cmd_vel` | geometry_msgs/Twist | Sole guarded rover output to Gazebo |
+| `/drone1/cmd_vel` | geometry_msgs/Twist | Guarded aerial controller output to Gazebo |
+| `/embertrace/mission_event` | std_msgs/String | Actual policy transitions/acknowledgements, persisted by CSV logger |
+| `/embertrace/fire_state` | FireState | Latched scene state; rendered=false suspends simulated raw samples |
+| `/husky1/map` | nav_msgs/OccupancyGrid | SLAM occupancy map; map-safe rover goal selection and dashboard |
 
-| Command | Intended behaviour |
+`confirmed=false` denotes a suspected-anomaly warning, not a confirmed fire.
+A new warning is sent when an investigation begins; confirmation has its own
+persistence gate. ACK applies to either kind. An alert with `source_resolved=false` locates the measured detection sample, not a
+fitted fire source. Consumers and metrics must preserve this distinction. Mission
+state and alerts use transient-local QoS. Environmental/image streams use sensor
+QoS. Mission epochs invalidate old goals, commands, fits and confirmation evidence.
+
+## Services and commands
+
+`/embertrace/operator_command` uses `embertrace_interfaces/srv/OperatorCommand`.
+Invalid or unsafe commands return accepted=false with a reason.
+
+| Command | Behaviour |
 | --- | --- |
-| `START` | Begin or restart the patrol from idle |
-| `PAUSE` | Hold the mission without clearing evidence |
-| `RESUME` | Resume the state stored before pause |
-| `RETURN` | Request return to base |
-| `RESET` | Clear alert/emergency state and return to idle |
-| `E_STOP` | Latch emergency stop immediately |
+| START | Select stable safe wind platform and begin patrol with fresh sensors |
+| PAUSE | Stop active autonomy; retain a resume state and clear confirmation counts |
+| RESUME | Re-check wind/sensors; restore same-platform phase or start newly selected platform patrol |
+| RETURN | Return selected platform to measured launch pose if conditions permit |
+| RESET | Stop, increment epoch and clear emergency/mission state to IDLE |
+| E_STOP | Latch stop; START/RESUME/manual cannot clear it |
+| ACK | Acknowledge a recorded alert without changing its sensor evidence |
+| MANUAL_ON | Hold autonomy and enable bounded, selected-platform operator commands |
+| MANUAL_OFF | Disable manual commands; explicit RESUME is required |
 
-Unknown commands must be rejected with `accepted=false` and an explanatory message.
+`/embertrace/set_fire_state` uses `embertrace_interfaces/srv/SetFireState` with state
+healthy, burning or burnt. It is simulation-only. The scene controller and sensor
+simulators use it; perception/mission/search do not read the source scene state.
+Use `/mission_simulator` ROS parameters to set wind and initial battery fraction.
 
 ## Frames
 
-| Frame | Meaning |
-| --- | --- |
-| `husky1_map` | SLAM/Nav2 global frame |
-| `husky1_odom` | Locally continuous odometry frame |
-| `husky1_base_link` | Robot body frame |
-| `husky1_base_scan` | LiDAR frame |
-| `husky1_camera_link` | Camera frame |
-
-Environmental sample poses and source estimates use `husky1_odom`. Fortress OdometryPublisher reports world positions; the simulation EKF preserves that origin by fusing x/y/yaw. Both vehicle environmental streams use this shared simulation frame. Patrol waypoints are in that frame, not the arbitrary SLAM map origin. The search planner transforms candidate goals into `husky1_map` before checking the occupancy map and publishing them. Consumers must use the message header frame rather than assuming all poses share a frame.
-
-
-
-## Added perception and aerial integration interfaces
-
-| Topic | Type | Purpose |
-| --- | --- | --- |
-| `/embertrace/visual_cue` | `embertrace_interfaces/msg/VisualCue` | Timestamped valid rover camera cue; legacy Float32 still published |
-| `/embertrace/perception_status` | `embertrace_interfaces/msg/PerceptionStatus` | Environment/vision freshness, confirmation candidate and rejection counts |
-| `/embertrace/sensors_ready` | `std_msgs/msg/Bool` | Required rover sensor freshness |
-| `/husky1/autonomy_cmd_vel` | `geometry_msgs/msg/Twist` | Nav2/teleop input to sole rover command guard |
-| `/husky1/cmd_vel` | `geometry_msgs/msg/Twist` | Guarded rover command to Gazebo |
-| `/diagnostics` | `diagnostic_msgs/msg/DiagnosticArray` | Per-stream vehicle sensor freshness |
-| `/drone1/odometry` | `nav_msgs/msg/Odometry` | Scout pose in shared `husky1_odom` |
-| `/drone1/cmd_vel` | `geometry_msgs/msg/Twist` | Guarded aerial sweep/return velocity |
-| `/drone1/imu` | `sensor_msgs/msg/Imu` | Scout inertial data |
-| `/drone1/scan` and `/drone1/scan/points` | `LaserScan` / `PointCloud2` | Scout obstacle scan and cloud |
-| `/drone1/camera/image` | `sensor_msgs/msg/Image` | Downward RGB image |
-| `/drone1/camera/depth/image` and `/drone1/camera/depth/points` | `Image` / `PointCloud2` | Downward depth data |
-| `/{husky1,drone1}/camera/camera_info` | `sensor_msgs/msg/CameraInfo` | RGB-D calibration |
-| `/drone1/raw_environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Independent noisy altitude-attenuated scout samples |
-| `/drone1/visual_cue` | `embertrace_interfaces/msg/VisualCue` | Independent stamped scout visual evidence |
-| `/drone1/environment` | `embertrace_interfaces/msg/EnvironmentalReading` | Independent filtered scout evidence; investigation cue only |
-| `/drone1/perception_status` | `embertrace_interfaces/msg/PerceptionStatus` | Scout perception freshness |
-| `/drone1/sensors_ready` | `std_msgs/msg/Bool` | Required scout sensor freshness |
-| `/{embertrace,drone1}/validation/truth` | `embertrace_interfaces/msg/TrialTruth` | Evaluation-only local observability/dropout label; autonomy never subscribes |
-
-`VisualCue` has a header, confidence and validity. `PerceptionStatus` has a
-publication header, environment/visual freshness, confirmation candidate,
-rejected sample count and consecutive fresh sample count. EnvironmentalReading
-retains its existing fields and now preserves the raw acquisition timestamp.
-
-All vehicle transforms share `/husky1/tf` and `/husky1/tf_static` for this
-simulation. Drone frames are `drone1_base_link` and `drone1_camera_link`.
-The drone's environmental pose is its measured position, not a source estimate.
-The aerial hint is checked for acquisition age and never supplies fire ground
-truth to the rover. The source estimator continues using rover samples only.
-
-## October 20 full perception sensors
-
-- `/husky1/thermal/image`, `/drone1/thermal/image`: SensorDataQoS Image, radiometric
-  mono16 / 16UC1, 0.01 K per unit. Not an RGB display image.
-- `/embertrace/thermal_cue`, `/drone1/thermal_cue`: SensorDataQoS ThermalCue with
-  acquisition header, explicit validity, persistent hotspot, peak C and cluster data.
-- EnvironmentalReading now also includes explicit CO2 concentration/validity/detection
-  and IR validity/hotspot/peak. Scalar `temperature_c` stays the local field measurement.
-- PerceptionStatus includes CO2 validity, IR freshness and wind classification constants.
-- Full launch requires CO2-valid raw data and fresh IR before confirmation. Legacy
-  recordings and explicit reduced debug mode remain separate from C1 acceptance.
-- Message changes require rebuilding every dependent package and re-sourcing all shells.
+All transforms are carried on `/husky1/tf` and `/husky1/tf_static`. `husky1_map`
+is the SLAM frame. `husky1_odom` is the shared simulation odometry frame, based on
+Fortress world-position odometry. Robot body/camera frames are `husky1_base_link`,
+`husky1_camera_link`, `drone1_base_link` and `drone1_camera_link`. The dashboard
+transforms poses into the actual map frame, including its origin yaw. Verify these
+origins with the map/TF acceptance trial; do not assume a SLAM origin is world zero.

@@ -36,6 +36,7 @@ camera_verifier_node:
 
 perception_node:
   ros__parameters:
+    expected_camera_frame: husky1_camera_link
     require_co2: true
     require_thermal: true
     thermal_topic: /embertrace/thermal_cue
@@ -68,6 +69,20 @@ perception_node:
 
 mission_manager_node:
   ros__parameters:
+    drone_enabled: true
+    require_co2: true
+    drone_wind_limit_mps: 5.0
+    rover_wind_limit_mps: 12.0
+    wind_hysteresis_mps: 0.5
+    wind_dwell_s: 2.0
+    wind_timeout_s: 2.0
+    patrol_loops: 2
+    search_timeout_s: 120.0
+    recovery_timeout_s: 20.0
+    verify_timeout_s: 15.0
+    return_timeout_s: 120.0
+    alert_hold_s: 10.0
+    low_battery_fraction: 0.2
     require_thermal_confirmation: true
     use_sim_time: true
     investigate_confidence: 0.22
@@ -171,6 +186,7 @@ drone_camera_verifier_node:
 
 drone_perception_node:
   ros__parameters:
+    expected_camera_frame: drone1_camera_link
     require_co2: true
     require_thermal: true
     thermal_topic: /drone1/thermal_cue

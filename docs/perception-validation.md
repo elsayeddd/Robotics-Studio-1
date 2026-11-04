@@ -1,4 +1,4 @@
-# Perception implementation and acceptance — updated 20 October 2026
+# Perception implementation and acceptance — updated 2 November 2026
 
 ## Scope review
 
@@ -46,16 +46,18 @@ The work is based on the uploaded main ZIP, archive commit
    plus heat or visual corroboration. Thermal-only and CO2-only anomalies can start
    investigation; they do not independently establish a confirmed fire without
    the required corroboration. `mission_manager_node` adds its own confirmation
-   count and excludes drone evidence from rover-local confirmation.
+   count and accepts only the currently selected platform’s local evidence. Both the
+   rover and drone can independently complete confirmation when selected.
 8. Invalid raw values clear environmental evidence; old acquisition timestamps
    remain rejected until a clock rewind. The wall watchdog also clears stale data
    when `/clock` freezes. Status confirmation is re-evaluated when cameras expire.
 9. The status message publishes wind classification: unknown, drone-safe,
    rover-only or unsafe, using configurable 5 and 12 m/s limits. These are project
-   assumptions to validate, not certified equipment limits. Actual deployment is
-   the mission/navigation team's responsibility. The uploaded `platform_select`
-   launch still uses random selection and does not consume this classification.
-10. Sensor health monitors IR. Dashboard displays rover CO2 and IR peak, and shows
+   assumptions to validate, not certified equipment limits. The mission policy
+   consumes stamped shared wind, applies filtering/dwell/hysteresis, selects the
+   drone or rover, and pauses on unsafe/stale wind. `platform_select` now launches
+   the same complete system with safe demonstration presets.
+10. Sensor health monitors IR. Dashboard displays both platforms’ CO2 and IR peak, and shows
     unavailable data instead of presenting an old measurement as current. Alert
     evidence includes CO2/IR values. The existing perception-loss mission pause and
     velocity guard remain in use; frozen-time environmental loss also pauses motion.
@@ -75,8 +77,8 @@ For each robot:
 
 Rover roots are `/embertrace` for environmental/cue/status topics and `/husky1` for
 sensor images. Drone roots are `/drone1`. Both raw and output observations preserve
-acquisition and sample-pose timestamps. New fields were added to EnvironmentalReading
-and PerceptionStatus, plus a new ThermalCue type: rebuild **all packages** after
+acquisition and sample-pose timestamps. New fields were added to EnvironmentalReading,
+PerceptionStatus, MissionState and FireAlert, plus ThermalCue/FireState and SetFireState: rebuild **all packages** after
 applying these changes, then source the rebuilt workspace in every terminal.
 
 An IR hotspot is image evidence, not a triangulated source coordinate. Source fitting
@@ -111,9 +113,12 @@ C1 IR acceptance. Do not use that setting to claim complete perception acceptanc
 
 ## Evaluation and test results available here
 
-- **79 regression assertions passed**, covering legacy smoke behaviour, independent
+- **79 perception regression assertions passed**, covering legacy smoke behaviour, independent
   CO2, IR decoding/clusters/byte order/Celsius floats, frame persistence, temporal
   rejections, camera expiry, freeze/recovery and evidence gating.
+- **45 mission policy checks, 41 system logic checks and eight Python tests passed**.
+  The numerical ten-seed source-fit median error is 0.282843 m; these are not
+  autonomous mission trials. See completion-handover.md for the requirement matrix.
 - C++ compilation uses C++17 and `-Wall -Wextra -Wpedantic -Werror`.
 - AddressSanitizer/UndefinedBehaviorSanitizer check passed (leak detection disabled
   because the execution sandbox cannot support it).
@@ -138,7 +143,7 @@ coverage. Dust/hot surfaces produce anomaly flags by design while remaining nega
 for confirmed fire; reports separate anomaly and confirmation confusion matrices.
 
 ```bash
-bash scripts/validate_perception.sh
+bash scripts/validate_all.sh
 ```
 
 The evaluator accepts the old 13-column schema (legacy reduced mode) and new
@@ -191,8 +196,8 @@ other settings use documented defaults.
 6. C3 map/TF trial and ten autonomous seeded runs with Adam; evaluate the source
    estimator separately from local detection. Measure actual operator-alert latency.
 7. Demonstrate both platforms through the shared pipeline; test UI stale warnings,
-   IR/CO2 values and mission pause/recovery. Wind dispatch itself needs separate
-   integration with measured wind; the random selector is not evidence of it.
+   IR/CO2 values and mission pause/recovery. Exercise the implemented shared-wind
+   deployment policy, threshold hysteresis, low-battery return and tree states.
 
 ## External references and handover
 

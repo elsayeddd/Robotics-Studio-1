@@ -1,6 +1,6 @@
 # Linux VM, GitHub and perception testing — step by step
 
-This guide accompanies the October 20 code update based on the newly uploaded main
+This guide accompanies the November 2 code update based on the newly uploaded main
 branch ZIP. Run the commands **inside the Linux VM**, except for downloading/transferring
 the patch ZIP. Commands assume Bash and a repository at `~/projects/Robotics-Studio-1`.
 Replace GitHub OWNER/email placeholders with your own values. No repository URL was
@@ -93,7 +93,7 @@ cd ~/projects/Robotics-Studio-1
 git remote -v
 git switch main
 git pull --ff-only origin main
-git switch -c feature/perception-ir-co2
+git switch -c feature/perception-complete
 ```
 
 If you already have a clone, begin with `git status` and save unrelated uncommitted
@@ -102,20 +102,25 @@ clone and do not replace its `.git` directory with a downloaded ZIP.
 
 ## 4. Apply this update
 
-Transfer/download `EmberTrace-Perception-Oct20-Changes.zip` into the VM and extract it
+Transfer/download `EmberTrace-Perception-Complete-Nov02-Changes.zip` into the VM and extract it
 into `~/Downloads/embertrace-perception-update`. The archive contains:
 
 - `files/`: repository-relative versions of added/modified files.
-- `perception-oct20.patch`: diff against the supplied main ZIP commit.
+- `from-oct20.patch`: changes since the previous delivered code.
+- `from-uploaded-main.patch`: complete diff against the supplied main ZIP commit.
 - `CHANGED_FILES.txt`: exact list.
 - `START_HERE.md`: handover summary.
+
+If your branch already contains the October 20 delivery, use `from-oct20.patch`
+below. If it still matches the newly supplied main ZIP without that delivery, use
+`from-uploaded-main.patch` in both commands instead. Apply exactly one patch.
 
 From your cloned repository:
 
 ```bash
 cd ~/projects/Robotics-Studio-1
-git apply --check ~/Downloads/embertrace-perception-update/perception-oct20.patch
-git apply ~/Downloads/embertrace-perception-update/perception-oct20.patch
+git apply --check ~/Downloads/embertrace-perception-update/from-oct20.patch
+git apply ~/Downloads/embertrace-perception-update/from-oct20.patch
 git status
 git diff --stat
 git diff --check
@@ -170,8 +175,7 @@ and Python consumer agrees about the new fields.
 ```bash
 cd ~/projects/Robotics-Studio-1
 source /opt/ros/humble/setup.bash
-python3 scripts/validate_repo.py
-bash scripts/validate_perception.sh
+bash scripts/validate_all.sh
 colcon build --symlink-install --parallel-workers 2 \
   --cmake-args -DCMAKE_BUILD_TYPE=RelWithDebInfo
 source install/setup.bash
@@ -197,11 +201,14 @@ ROS_DOMAIN_ID=73 colcon test --packages-select embertrace_core \
 colcon test-result --verbose
 ```
 
-This includes the pure regression executable and actual ROS perception/mission test.
+This includes the pure regressions, scene/replay checks and both actual ROS
+perception/mission transport tests. It also includes the existing plume, search,
+waypoint and Nav2 action tests.
 You can run the ROS test directly to see its logs:
 
 ```bash
 ROS_DOMAIN_ID=73 python3 scripts/ros_perception_integration_test.py
+ROS_DOMAIN_ID=73 python3 scripts/ros_dual_platform_test.py
 ```
 
 Expected: no failed tests. The integration test sends known RGB/IR/gas data, checks
@@ -293,7 +300,7 @@ Stop Terminal 1 with Ctrl+C and wait until that launch closes. Restart it with:
 ros2 launch embertrace_bringup embertrace_demo.launch.py \
   use_nav2:=false use_drone:=true use_thermal:=true \
   use_rviz:=true use_dashboard:=true scenario:=fire \
-  rover_x:=10.5 rover_y:=5.5 drone_x:=12.0 drone_y:=7.0
+  rover_x:=10.5 rover_y:=5.5 drone_x:=12.0 drone_y:=7.0 drone_z:=8.0
 ```
 
 These spawn positions are an explicit test fixture near the world fire, not source
@@ -416,25 +423,41 @@ ros2 service call /embertrace/operator_command \
   embertrace_interfaces/srv/OperatorCommand "{command: 'START'}"
 ```
 
-Observe both vehicles, sensor detections, mission transitions, rover investigation,
-location estimation and operator alert. Do not start `platform_select.launch.py` on
-top of this launch: it can create another goal adapter and currently uses a random
-platform choice rather than measured wind. The new wind status output needs the
-team's deployment-policy integration before C1 R13 can be claimed complete.
+At default 2.5 m/s wind, START selects the drone; the unselected rover stays held.
+Observe takeoff, patrol, local investigation, alert and return/landing. For the rover
+trial start a fresh launch with `wind_speed_mps:=7.0`. The rover then owns patrol,
+investigation and Nav2 return. Do not start `platform_select.launch.py` on top of the
+demo: it is now an alternative entry point for the same complete system.
 
 If teleoperation is needed with `use_nav2:=false`, keep the safety guard in the path:
 
 ```bash
+ros2 service call /embertrace/operator_command \
+  embertrace_interfaces/srv/OperatorCommand "{command: MANUAL_ON}"
 ros2 run teleop_twist_keyboard teleop_twist_keyboard \
-  --ros-args -r cmd_vel:=/husky1/autonomy_cmd_vel
+  --ros-args -r cmd_vel:=/embertrace/manual_cmd_vel
 ```
 
-START and ready sensors are needed for the guard to permit commands. Do not publish
+Select the rover with safe wind and START, then enable MANUAL_ON. Use the shared
+manual topic as shown above. Ready sensors are still required. Do not publish
 directly to `/husky1/cmd_vel` while demonstrating PAUSE/E-stop/health protection.
 
-Run at least ten autonomous repetitions with distinct `random_seed` values and
-record seed, sensor performance, failures, source error and mission behaviour with
-Adam. The perception campaign's static fixtures do not replace these C3 runs.
+Run the autonomous campaign from a new terminal after stopping manual launches:
+
+```bash
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py \
+  --output log/autonomous-fire-01 --trials 10
+ROS_DOMAIN_ID=75 python3 scripts/run_mission_campaign.py \
+  --output log/autonomous-clear-01 --trials 10 --scenario no_fire
+```
+
+It alternates drone/rover missions, retains each launch log and JSON result, and
+reports mission completion, path length, recovery count, latency, false alerts and
+resolved source error. No source coordinate enters autonomy. Unresolved sources
+are reported separately and must not be counted as successful localisation.
+Increase deadlines explicitly if the VM runs slowly; retain timed-out runs. The
+static perception campaign and numerical source-fit tests do not replace these
+C3 autonomous trials with Adam.
 Only after the small world works, add:
 
 ```text
@@ -443,7 +466,49 @@ world_file:=embertrace_forest_dense.sdf
 
 Re-check visibility, false positives, obstacle navigation and VM performance there.
 
-## 13. Commit and share the reviewed change
+## 13. Test wind, scene states, batteries and controls
+
+Use a sourced simulation terminal alongside the full demo. Start with all sensors
+ready and the mission running. The dashboard exposes the same controls.
+
+```bash
+ros2 param set /mission_simulator wind_speed_mps 7.0
+ros2 topic echo /embertrace/mission_state --once
+```
+
+A running drone is paused immediately when wind exceeds 5 m/s. After wind settles
+for the configured dwell, RESUME can select the rover. Above 12 m/s neither vehicle
+may start/resume. Return to 2.5 m/s and allow filtering/hysteresis to settle before
+a drone trial. Changing vehicle pauses the previous controller and invalidates old
+goals; it does not make an unsafe vehicle fly home automatically.
+
+```bash
+ros2 service call /embertrace/set_fire_state \
+  embertrace_interfaces/srv/SetFireState "{state: healthy}"
+ros2 service call /embertrace/set_fire_state \
+  embertrace_interfaces/srv/SetFireState "{state: burning}"
+ros2 service call /embertrace/set_fire_state \
+  embertrace_interfaces/srv/SetFireState "{state: burnt}"
+ros2 topic echo /embertrace/fire_state --once
+```
+
+Inspect the scene and both raw sensor streams after each change. This service is
+available for fire, dropout and no_fire with `use_fire_states:=true`. Those scenario
+names describe the initial state; after an operator tree change, retain a separate
+trial label instead of comparing the run to its original scenario name.
+
+```bash
+ros2 param set /mission_simulator initial_battery_fraction 0.19
+ros2 topic echo /embertrace/mission_state --once
+```
+
+The active vehicle should enter RETURN_TO_BASE, travel to its measured launch pose
+and become IDLE. This resets both simulated battery fractions, so restore 1.0 before
+a new mission. Test ACK after alert; test manual button release and loss of window
+focus; test PAUSE/RESUME, RETURN, RESET and latched E_STOP in motion. RESET is
+required to clear E_STOP. Logs are CSV files under `log/mission-events/`.
+
+## 14. Commit and share the reviewed change
 
 After the tests you can actually run:
 
@@ -458,8 +523,8 @@ recordings and private keys. Then:
 
 ```bash
 git diff --cached --stat
-git commit -m "Complete IR and CO2 perception integration and validation tools"
-git push -u origin feature/perception-ir-co2
+git commit -m "Complete perception and selected-platform mission integration"
+git push -u origin feature/perception-complete
 ```
 
 Open a pull request into main and report the tests **actually run**, outstanding VM

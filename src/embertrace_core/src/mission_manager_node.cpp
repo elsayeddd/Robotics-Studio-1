@@ -1,380 +1,284 @@
-/**
- * EmberTrace mission decision state machine.
- *
- * COMPLETE BASELINE: owns the authoritative mission state, applies debounced
- * evidence thresholds, handles operator commands and emits a fire alert.
- *
- * TODO(student): consume Nav2 action results, add explicit timeouts for every state,
- * persist mission events, and unit-test every valid/invalid transition.
+/** ROS adapter for the tested, platform-independent mission policy.
+ * A single selected vehicle supplies local confirmation and source-estimation data.
+ * The other vehicle's observations remain available for display and independent tests.
  */
-
-#include <algorithm>
-#include <cctype>
+#include <array>
 #include <chrono>
 #include <cmath>
-#include <cstdint>
-#include <functional>
 #include <memory>
-#include <string>
 #include <stdexcept>
+#include <string>
 
+#include "embertrace_core/mission_logic.hpp"
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
-#include "embertrace_interfaces/msg/perception_status.hpp"
-#include "embertrace_core/perception_filter.hpp"
 #include "embertrace_interfaces/msg/fire_alert.hpp"
 #include "embertrace_interfaces/msg/mission_state.hpp"
+#include "embertrace_interfaces/msg/perception_status.hpp"
 #include "embertrace_interfaces/srv/operator_command.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/pose_with_covariance_stamped.hpp"
+#include "geometry_msgs/msg/vector3_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
-
-using namespace std::chrono_literals;
-
-namespace embertrace_core
-{
-
-class MissionManagerNode : public rclcpp::Node
-{
-public:
-  using MissionState = embertrace_interfaces::msg::MissionState;
-
-  MissionManagerNode()
-  : Node("mission_manager_node")
-  {
-    investigate_confidence_ = declare_parameter<double>("investigate_confidence", 0.22);
-    track_confidence_ = declare_parameter<double>("track_confidence", 0.38);
-    verify_confidence_ = declare_parameter<double>("verify_confidence", 0.68);
-    alert_confidence_ = declare_parameter<double>("alert_confidence", 0.74);
-    lost_confidence_ = declare_parameter<double>("lost_confidence", 0.12);
-    visual_confirmation_ = declare_parameter<double>("visual_confirmation", 0.55);
-    require_thermal_ = declare_parameter<bool>("require_thermal_confirmation", false);
-    reading_timeout_s_ = declare_parameter<double>("reading_timeout_s", 2.0);
-    if (!std::isfinite(reading_timeout_s_) || reading_timeout_s_ <= 0) {
-      throw std::invalid_argument("reading_timeout_s must be finite and positive");
+#include "sensor_msgs/msg/battery_state.hpp"
+#include "std_msgs/msg/string.hpp"
+#include "std_msgs/msg/u_int32.hpp"
+namespace embertrace_core {
+class MissionManagerNode : public rclcpp::Node {
+ public:
+  using Reading = embertrace_interfaces::msg::EnvironmentalReading;
+  using State = embertrace_interfaces::msg::MissionState;
+  MissionManagerNode() : Node("mission_manager_node") {
+    MissionConfig c;
+    c.drone_enabled = declare_parameter<bool>("drone_enabled", true);
+    c.require_co2 = declare_parameter<bool>("require_co2", true);
+    c.require_thermal = declare_parameter<bool>("require_thermal_confirmation", true);
+#define LOAD(member, name) c.member = declare_parameter<double>(name, c.member)
+    LOAD(drone_wind_limit, "drone_wind_limit_mps");
+    LOAD(rover_wind_limit, "rover_wind_limit_mps");
+    LOAD(wind_hysteresis, "wind_hysteresis_mps");
+    LOAD(wind_alpha, "wind_filter_alpha");
+    LOAD(wind_dwell_s, "wind_dwell_s");
+    LOAD(sensor_timeout_s, "reading_timeout_s");
+    LOAD(wind_timeout_s, "wind_timeout_s");
+    LOAD(investigate_confidence, "investigate_confidence");
+    LOAD(track_confidence, "track_confidence");
+    LOAD(verify_confidence, "verify_confidence");
+    LOAD(alert_confidence, "alert_confidence");
+    LOAD(lost_confidence, "lost_confidence");
+    LOAD(visual_threshold, "visual_confirmation");
+    LOAD(search_timeout_s, "search_timeout_s");
+    LOAD(recovery_timeout_s, "recovery_timeout_s");
+    LOAD(verify_timeout_s, "verify_timeout_s");
+    LOAD(return_timeout_s, "return_timeout_s");
+    LOAD(alert_hold_s, "alert_hold_s");
+    LOAD(low_battery_fraction, "low_battery_fraction");
+#undef LOAD
+    const auto count = [this](const char* name, std::size_t fallback) {
+      int value = declare_parameter<int>(name, static_cast<int>(fallback));
+      return value > 0 ? static_cast<std::size_t>(value) : 0;
+    };
+    c.detection_samples = count("required_detection_samples", c.detection_samples);
+    c.confirmation_samples = count("required_confirmation_samples", c.confirmation_samples);
+    c.patrol_loops = count("patrol_loops", c.patrol_loops);
+    max_estimate_age_ = declare_parameter<double>("max_estimate_age_s", 5);
+    max_estimate_stddev_ = declare_parameter<double>("max_estimate_stddev_m", 4);
+    if (!std::isfinite(max_estimate_age_) || max_estimate_age_ <= 0 ||
+        !std::isfinite(max_estimate_stddev_) || max_estimate_stddev_ <= 0) {
+      throw std::invalid_argument("Invalid source-estimate age or uncertainty limit");
     }
-    max_estimate_age_s_ = declare_parameter<double>("max_estimate_age_s", 5.0);
-    max_estimate_stddev_m_ = declare_parameter<double>("max_estimate_stddev_m", 4.0);
-    required_detection_samples_ = std::max<int>(
-      1L, declare_parameter<int>("required_detection_samples", 3));
-    required_confirmation_samples_ = std::max<int>(
-      1L, declare_parameter<int>("required_confirmation_samples", 3));
-
-    state_publisher_ = create_publisher<MissionState>(
-      "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable());
-    alert_publisher_ = create_publisher<embertrace_interfaces::msg::FireAlert>(
-      "/embertrace/fire_alert", rclcpp::QoS(1).transient_local().reliable());
-    reading_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
-      "/embertrace/environment", rclcpp::SensorDataQoS(),
-      std::bind(&MissionManagerNode::on_reading, this, std::placeholders::_1));
-    estimate_subscription_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
-      "/embertrace/source_estimate", 10,
-      [this](const geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr message) {
-        latest_estimate_ = *message;
-        have_estimate_ = true;
-      });
-    health_subscription_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
-      "/embertrace/perception_status", 10,
-      [this](const embertrace_interfaces::msg::PerceptionStatus::SharedPtr status) {
-        perception_available_ = status->environment_fresh;
-        if (!perception_available_) {detection_count_ = confirmation_count_ = 0;}
-        // IR loss suppresses confirmation, while gas-only investigation can continue.
-        if (require_thermal_ && !status->thermal_fresh) {confirmation_count_ = 0;}
-      });
-    scout_subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
-      "/drone1/environment", rclcpp::SensorDataQoS(),
-      [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr sample) {
-        const double age = (now() - rclcpp::Time(sample->header.stamp)).seconds();
-        if (state_ == MissionState::PATROL && age >= 0 && age <= reading_timeout_s_ &&
-          sample->header.frame_id == "husky1_odom" &&
-          (sample->smoke_detected || sample->co2_detected || sample->temperature_anomaly) &&
-          sample->fused_confidence >= track_confidence_)
-        {
-          transition_to(MissionState::INVESTIGATE, "Aerial environmental cue; rover must verify locally");
-        }
-      });
-    command_service_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
-      "/embertrace/operator_command",
-      std::bind(
-        &MissionManagerNode::on_command, this, std::placeholders::_1, std::placeholders::_2));
-    state_timer_ = create_wall_timer(500ms, std::bind(&MissionManagerNode::publish_state, this));
-
-    transition_to(MissionState::IDLE, "Waiting for operator START");
+    policy_ = std::make_unique<MissionLogic>(c);
+    state_ = create_publisher<State>("/embertrace/mission_state", rclcpp::QoS(1).transient_local());
+    alert_ = create_publisher<embertrace_interfaces::msg::FireAlert>(
+        "/embertrace/fire_alert", rclcpp::QoS(1).transient_local());
+    active_reading_ =
+        create_publisher<Reading>("/embertrace/active_environment", rclcpp::SensorDataQoS());
+    events_ = create_publisher<std_msgs::msg::String>("/embertrace/mission_event", 50);
+    wind_ = create_subscription<geometry_msgs::msg::Vector3Stamped>(
+        "/embertrace/wind", rclcpp::SensorDataQoS(),
+        [this](geometry_msgs::msg::Vector3Stamped::SharedPtr msg) {
+          if (msg->header.frame_id != "husky1_odom") {
+            return;
+          }
+          const double speed = std::hypot(msg->vector.x, msg->vector.y, msg->vector.z);
+          policy_->wind(speed, seconds(msg->header.stamp), now().seconds(), wall());
+          publish();
+        });
+    for (std::size_t i = 0; i < 2; ++i) {
+      const auto p = i == 0 ? Platform::Rover : Platform::Drone;
+      const std::string root = i == 0 ? "/embertrace" : "/drone1";
+      const std::string robot = i == 0 ? "/husky1" : "/drone1";
+      readings_[i] = create_subscription<Reading>(
+          root + "/environment", rclcpp::SensorDataQoS(),
+          [this, p, i](Reading::SharedPtr msg) { on_reading(p, i, *msg); });
+      health_[i] = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
+          root + "/perception_status", 10,
+          [this, p, i](embertrace_interfaces::msg::PerceptionStatus::SharedPtr msg) {
+            if (seconds(msg->header.stamp) < seconds(latest_[i].header.stamp)) {
+              return;
+            }
+            const double age = now().seconds() - seconds(msg->header.stamp);
+            if (age < -.1 || age > 2 || !msg->environment_fresh ||
+                (policy_->config().require_co2 && !msg->co2_valid) ||
+                (policy_->config().require_thermal && !msg->thermal_fresh)) {
+              policy_->unavailable(p);
+            }
+          });
+      batteries_[i] = create_subscription<sensor_msgs::msg::BatteryState>(
+          robot + "/battery", 10, [this, p](sensor_msgs::msg::BatteryState::SharedPtr msg) {
+            const double age = now().seconds() - seconds(msg->header.stamp);
+            if (age >= -.1 && age <= 2) {
+              policy_->battery(p, msg->percentage, now().seconds(), wall());
+            }
+          });
+      loops_[i] = create_subscription<std_msgs::msg::UInt32>(
+          robot + "/patrol_loops", 10, [this, p](std_msgs::msg::UInt32::SharedPtr msg) {
+            policy_->loops(p, msg->data, now().seconds(), wall());
+          });
+      navigation_[i] = create_subscription<std_msgs::msg::String>(
+          robot + "/mission_navigation_status", 10,
+          [this, p](std_msgs::msg::String::SharedPtr msg) {
+            if (msg->data == "RETURNED") {
+              policy_->arrived(p, now().seconds(), wall());
+            } else if (msg->data == "ABORTED" || msg->data == "TIMEOUT") {
+              policy_->navigation_failed(p, now().seconds(), wall());
+            }
+          });
+    }
+    estimate_ = create_subscription<geometry_msgs::msg::PoseWithCovarianceStamped>(
+        "/embertrace/source_estimate", 10,
+        [this](geometry_msgs::msg::PoseWithCovarianceStamped::SharedPtr msg) {
+          latest_estimate_ = *msg;
+          have_estimate_ = true;
+        });
+    commands_ = create_service<embertrace_interfaces::srv::OperatorCommand>(
+        "/embertrace/operator_command",
+        [this](embertrace_interfaces::srv::OperatorCommand::Request::SharedPtr request,
+               embertrace_interfaces::srv::OperatorCommand::Response::SharedPtr response) {
+          response->accepted =
+              policy_->command(request->command, now().seconds(), wall(), response->message);
+          publish();
+        });
+    timer_ = create_wall_timer(std::chrono::milliseconds(100), [this]() { publish(); });
   }
 
-private:
-  static std::string uppercase(std::string text)
-  {
-    std::transform(text.begin(), text.end(), text.begin(), [](const unsigned char character) {
-      return static_cast<char>(std::toupper(character));
-    });
-    return text;
+ private:
+  static double wall() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
   }
-
-  static const char * state_name(const std::uint8_t state)
-  {
-    switch (state) {
-      case MissionState::IDLE: return "IDLE";
-      case MissionState::PATROL: return "PATROL";
-      case MissionState::INVESTIGATE: return "INVESTIGATE";
-      case MissionState::TRACK: return "TRACK";
-      case MissionState::RECOVER: return "RECOVER";
-      case MissionState::VERIFY: return "VERIFY";
-      case MissionState::ALERT: return "ALERT";
-      case MissionState::RETURN_TO_BASE: return "RETURN_TO_BASE";
-      case MissionState::PAUSED: return "PAUSED";
-      case MissionState::EMERGENCY_STOP: return "EMERGENCY_STOP";
-      default: return "UNKNOWN";
-    }
+  static double seconds(const builtin_interfaces::msg::Time& t) {
+    return t.sec + t.nanosec * 1e-9;
   }
-
-  static bool permits_motion(const std::uint8_t state)
-  {
-    return state == MissionState::PATROL || state == MissionState::INVESTIGATE ||
-      state == MissionState::TRACK || state == MissionState::RECOVER ||
-      state == MissionState::RETURN_TO_BASE;
-  }
-
-  void transition_to(const std::uint8_t next_state, const std::string & detail)
-  {
-    if (state_ != next_state) {
-      RCLCPP_INFO(
-        get_logger(), "Mission transition: %s -> %s (%s)", state_name(state_),
-        state_name(next_state), detail.c_str());
-    }
-    state_ = next_state;
-    detail_ = detail;
-    publish_state();
-  }
-
-  void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading)
-  {
-    const auto current = now();
-    if (current < last_clock_) {
-      have_reading_ = have_estimate_ = false; detection_count_ = confirmation_count_ = 0;
-    }
-    last_clock_ = current;
-    if (reading->header.stamp.sec < 0) {detection_count_ = confirmation_count_ = 0; return;}
-    const double age = (current - rclcpp::Time(reading->header.stamp)).seconds();
-    if (age < -0.1 || age > reading_timeout_s_ || !std::isfinite(reading->fused_confidence) ||
-      reading->fused_confidence < 0 || reading->fused_confidence > 1 ||
-      !std::isfinite(reading->visual_confidence) ||
-      reading->header.frame_id.empty() ||
-      (have_reading_ && rclcpp::Time(reading->header.stamp) <= last_reading_stamp_))
-    {detection_count_ = confirmation_count_ = 0; return;}
-    if (have_reading_ && (current - last_reading_stamp_).seconds() > reading_timeout_s_) {
-      detection_count_ = confirmation_count_ = 0;
-    }
-    last_receipt_ = std::chrono::steady_clock::now();
-    perception_available_ = true;
-    last_reading_stamp_ = rclcpp::Time(reading->header.stamp);
-    latest_reading_ = *reading;
-    have_reading_ = true;
-
-    if (state_ == MissionState::IDLE || state_ == MissionState::PAUSED ||
-      state_ == MissionState::EMERGENCY_STOP || state_ == MissionState::RETURN_TO_BASE ||
-      state_ == MissionState::ALERT)
-    {
+  void on_reading(Platform platform, std::size_t i, const Reading& msg) {
+    const auto& p = msg.sample_pose.pose.position;
+    const auto& q = msg.sample_pose.pose.orientation;
+    if (msg.header.frame_id != "husky1_odom" ||
+        msg.sample_pose.header.frame_id != msg.header.frame_id ||
+        msg.sample_pose.header.stamp != msg.header.stamp || !std::isfinite(p.x) ||
+        !std::isfinite(p.y) || !std::isfinite(p.z) || !std::isfinite(q.x) || !std::isfinite(q.y) ||
+        !std::isfinite(q.z) || !std::isfinite(q.w) ||
+        std::abs(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w - 1) > .1) {
+      policy_->unavailable(platform);
       return;
     }
-
-    detection_count_ = reading->fused_confidence >= investigate_confidence_ ||
-      reading->smoke_detected || reading->co2_detected || reading->temperature_anomaly ?
-      detection_count_ + 1 : 0;
-    confirmation_count_ = confirmation_allowed(!require_thermal_ || reading->thermal_valid,
-      reading->smoke_detected || reading->co2_detected,
-      reading->temperature_anomaly, reading->visual_confidence, reading->fused_confidence,
-      visual_confirmation_, alert_confidence_) ?
-      confirmation_count_ + 1 : 0;
-
-    switch (state_) {
-      case MissionState::PATROL:
-        if (detection_count_ >= required_detection_samples_) {
-          transition_to(MissionState::INVESTIGATE, "Persistent smoke evidence detected");
-        }
-        break;
-      case MissionState::INVESTIGATE:
-        if (reading->fused_confidence >= track_confidence_) {
-          transition_to(MissionState::TRACK, "Plume signal strong enough to track");
-        }
-        break;
-      case MissionState::TRACK:
-        if (reading->fused_confidence < lost_confidence_) {
-          transition_to(MissionState::RECOVER, "Plume signal lost; begin crosswind cast");
-        } else if (reading->fused_confidence >= verify_confidence_ && reading->temperature_anomaly) {
-          transition_to(MissionState::VERIFY, "High smoke and thermal evidence near source");
-        }
-        break;
-      case MissionState::RECOVER:
-        if ((reading->smoke_detected || reading->co2_detected) && reading->fused_confidence >= track_confidence_) {
-          transition_to(MissionState::TRACK, "Plume reacquired");
-        }
-        break;
-      case MissionState::VERIFY:
-        if (confirmation_count_ >= required_confirmation_samples_) {
-          transition_to(MissionState::ALERT, "Multi-sensor fire criteria satisfied");
-          publish_alert();
-        } else if (reading->fused_confidence < track_confidence_) {
-          transition_to(MissionState::TRACK, "Verification evidence weakened");
-        }
-        break;
-      default:
-        break;
-    }
-  }
-
-  void on_command(
-    const std::shared_ptr<embertrace_interfaces::srv::OperatorCommand::Request> request,
-    std::shared_ptr<embertrace_interfaces::srv::OperatorCommand::Response> response)
-  {
-    const std::string command = uppercase(request->command);
-    response->accepted = true;
-
-    if (state_ == MissionState::EMERGENCY_STOP && command != "RESET" && command != "E_STOP") {
-      response->accepted = false;
-      response->message = "Emergency stop is latched; RESET is required";
+    MissionEvidence evidence{
+        seconds(msg.header.stamp), msg.fused_confidence, msg.visual_confidence, msg.smoke_detected,
+        msg.temperature_anomaly,   msg.co2_detected,     msg.co2_valid,         msg.thermal_valid};
+    if (!policy_->evidence(platform, evidence, now().seconds(), wall())) {
       return;
     }
-    if (command == "START") {
-      detection_count_ = 0;
-      confirmation_count_ = 0;
+    latest_[i] = msg;
+    if (policy_->snapshot().active == platform) {
+      active_reading_->publish(msg);
+    }
+    publish();
+  }
+  void publish() {
+    policy_->tick(now().seconds(), wall());
+    const auto s = policy_->snapshot();
+    if (s.epoch != last_epoch_) {
       have_estimate_ = false;
-      transition_to(MissionState::PATROL, "Patrol started by operator");
-    } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
-      if (state_ != MissionState::PAUSED) {pre_pause_state_ = state_;}
-      transition_to(MissionState::PAUSED, "Mission paused by operator");
-    } else if (command == "RESUME" && state_ == MissionState::PAUSED) {
-      transition_to(pre_pause_state_, "Mission resumed by operator");
-    } else if (command == "RETURN" && state_ != MissionState::EMERGENCY_STOP) {
-      transition_to(MissionState::RETURN_TO_BASE, "Return requested by operator");
-    } else if (command == "E_STOP") {
-      transition_to(MissionState::EMERGENCY_STOP, "Emergency stop latched");
-    } else if (command == "RESET") {
-      detection_count_ = 0;
-      confirmation_count_ = 0;
-      have_estimate_ = false;
-      transition_to(MissionState::IDLE, "System reset; waiting for START");
-    } else {
-      response->accepted = false;
-      response->message = "Command is unknown or invalid in the current state";
-      return;
+      last_epoch_ = s.epoch;
     }
-
-    response->message = std::string("Accepted: ") + command;
+    State msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = "husky1_odom";
+    msg.state = static_cast<std::uint8_t>(s.phase);
+    msg.state_name = phase_name(s.phase);
+    msg.detail = s.detail;
+    msg.motion_allowed = s.motion_allowed;
+    msg.active_platform = static_cast<std::uint8_t>(s.active);
+    msg.preferred_platform = static_cast<std::uint8_t>(s.preferred);
+    msg.mission_epoch = s.epoch;
+    msg.manual_control = s.manual;
+    msg.alert_acknowledged = s.acknowledged;
+    msg.progress =
+        s.phase == MissionPhase::Idle
+            ? 0
+            : (s.phase == MissionPhase::Alert || s.phase == MissionPhase::Return ? 1 : .5F);
+    state_->publish(msg);
+    const std::string event = std::to_string(s.epoch) + " | " + phase_name(s.phase) + " | " +
+                              platform_name(s.active) + " | " + s.detail +
+                              (s.acknowledged ? " | acknowledged" : "");
+    if (event != last_event_) {
+      std_msgs::msg::String m;
+      m.data = event;
+      events_->publish(m);
+      last_event_ = event;
+    }
+    if (s.warning_sequence > last_warning_ && s.active != Platform::None) {
+      last_warning_ = s.warning_sequence;
+      publish_alert(s, false);
+    }
+    if (s.alert_sequence > last_alert_ && s.active != Platform::None) {
+      last_alert_ = s.alert_sequence;
+      publish_alert(s, true);
+    }
   }
-
-  void publish_state()
-  {
-    const auto current = now();
-    if (current < last_clock_) {
-      have_reading_ = have_estimate_ = false;
-      detection_count_ = confirmation_count_ = 0;
-      last_reading_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
+  void publish_alert(const MissionSnapshot& state, bool confirmed) {
+    const auto& r = latest_[state.active == Platform::Rover ? 0 : 1];
+    embertrace_interfaces::msg::FireAlert msg;
+    msg.header.stamp = now();
+    msg.header.frame_id = r.sample_pose.header.frame_id;
+    msg.alert_id = ++event_sequence_;
+    msg.platform = static_cast<std::uint8_t>(state.active);
+    msg.severity = confirmed ? msg.CRITICAL : msg.WARNING;
+    msg.confirmed = confirmed;
+    msg.confidence = r.fused_confidence;
+    msg.estimated_source = r.sample_pose;
+    const double age = now().seconds() - seconds(latest_estimate_.header.stamp);
+    const auto& c = latest_estimate_.pose.covariance;
+    const auto& p = latest_estimate_.pose.pose.position;
+    msg.source_resolved = have_estimate_ && age >= 0 && age <= max_estimate_age_ &&
+                          latest_estimate_.header.frame_id == r.sample_pose.header.frame_id &&
+                          std::isfinite(p.x) && std::isfinite(p.y) && std::isfinite(c[0]) &&
+                          std::isfinite(c[7]) && c[0] >= 0 && c[7] >= 0 &&
+                          std::max(c[0], c[7]) <= max_estimate_stddev_ * max_estimate_stddev_;
+    if (msg.source_resolved) {
+      msg.estimated_source.header = latest_estimate_.header;
+      msg.estimated_source.pose = latest_estimate_.pose.pose;
     }
-    last_clock_ = current;
-    if (state_ != MissionState::IDLE && state_ != MissionState::ALERT &&
-      state_ != MissionState::RETURN_TO_BASE && state_ != MissionState::PAUSED &&
-      state_ != MissionState::EMERGENCY_STOP &&
-      (!have_reading_ || !perception_available_ ||
-        (current - last_reading_stamp_).seconds() > reading_timeout_s_ ||
-        std::chrono::duration<double>(std::chrono::steady_clock::now() - last_receipt_).count() > reading_timeout_s_))
-    {
-      pre_pause_state_ = state_;
-      state_ = MissionState::PAUSED;
-      detail_ = "Rover environmental data stale; restore sensors then RESUME";
-      detection_count_ = confirmation_count_ = 0;
+    msg.smoke_ppm = r.smoke_ppm;
+    msg.temperature_c = r.temperature_c;
+    msg.co2_ppm = r.co2_ppm;
+    msg.co2_valid = r.co2_valid;
+    msg.thermal_valid = r.thermal_valid;
+    msg.thermal_peak_c = r.thermal_peak_c;
+    msg.wind_speed_mps = r.wind_speed_mps;
+    msg.evidence = std::string(confirmed ? "Persistent local gas/heat corroboration from "
+                                         : "Suspected anomaly under investigation from ") +
+                   platform_name(state.active);
+    if (!msg.source_resolved) {
+      msg.evidence += "; location is sample pose, source not resolved";
     }
-    MissionState message;
-    message.header.stamp = now();
-    message.header.frame_id = "husky1_odom";
-    message.state = state_;
-    message.state_name = state_name(state_);
-    message.detail = detail_;
-    message.motion_allowed = permits_motion(state_);
-    message.progress = state_ == MissionState::IDLE ? 0.0F :
-      (state_ == MissionState::ALERT || state_ == MissionState::RETURN_TO_BASE ? 1.0F : 0.5F);
-    state_publisher_->publish(message);
+    msg.recommended_action =
+        confirmed ? "Review sensor evidence and location; notify the responsible ranger"
+                  : "Monitor local sensor data while the selected vehicle investigates";
+    alert_->publish(msg);
   }
-
-  void publish_alert()
-  {
-    if (!have_reading_) {
-      return;
-    }
-    embertrace_interfaces::msg::FireAlert alert;
-    alert.header.stamp = now();
-    alert.header.frame_id = latest_reading_.sample_pose.header.frame_id;
-    alert.severity = embertrace_interfaces::msg::FireAlert::CRITICAL;
-    // Only a recent localisation fit may be reported as the source. The robot
-    // pose is a fallback location when the source is still unresolved.
-    const double estimate_age_s = have_estimate_ ?
-      (now() - rclcpp::Time(latest_estimate_.header.stamp)).seconds() : 0.0;
-    const bool fresh_estimate = have_estimate_ &&
-      latest_estimate_.header.frame_id == latest_reading_.sample_pose.header.frame_id &&
-      estimate_age_s >= 0.0 && estimate_age_s <= max_estimate_age_s_ &&
-      std::isfinite(latest_estimate_.pose.covariance[0]) &&
-      std::isfinite(latest_estimate_.pose.covariance[7]) &&
-      latest_estimate_.pose.covariance[0] <=
-      max_estimate_stddev_m_ * max_estimate_stddev_m_ &&
-      latest_estimate_.pose.covariance[7] <=
-      max_estimate_stddev_m_ * max_estimate_stddev_m_;
-    if (fresh_estimate) {
-      alert.estimated_source.header = latest_estimate_.header;
-      alert.estimated_source.pose = latest_estimate_.pose.pose;
-    } else {
-      alert.estimated_source = latest_reading_.sample_pose;
-    }
-    alert.confidence = latest_reading_.fused_confidence;
-    alert.confirmed = true;
-    alert.evidence = "Persistent local gas/heat evidence with corroboration";
-    if (latest_reading_.co2_valid) {alert.evidence += "; CO2=" + std::to_string(latest_reading_.co2_ppm) + " ppm";}
-    if (latest_reading_.thermal_valid) {alert.evidence += "; IR peak=" + std::to_string(latest_reading_.thermal_peak_c) + " C";}
-    if (!fresh_estimate) {
-      alert.evidence += "; source location unresolved (pose is latest sample)";
-    }
-    alert.recommended_action = "Review the map, notify the ranger and keep personnel clear";
-    alert_publisher_->publish(alert);
-  }
-
-  std::uint8_t state_{MissionState::IDLE};
-  std::uint8_t pre_pause_state_{MissionState::IDLE};
-  std::string detail_{"Starting"};
-  int detection_count_{0};
-  int confirmation_count_{0};
-  int required_detection_samples_{3};
-  int required_confirmation_samples_{3};
-  double investigate_confidence_{0.22};
-  double track_confidence_{0.38};
-  double verify_confidence_{0.68};
-  double alert_confidence_{0.74};
-  double lost_confidence_{0.12};
-  double visual_confirmation_{0.55};
-  double reading_timeout_s_{2.0};
-  rclcpp::Time last_reading_stamp_{0, 0, RCL_ROS_TIME};
-  rclcpp::Time last_clock_{0, 0, RCL_ROS_TIME};
-  rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr health_subscription_;
-  rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr scout_subscription_;
-  double max_estimate_age_s_{5.0};
-  double max_estimate_stddev_m_{4.0};
-  bool have_reading_{false}, perception_available_{false}, require_thermal_{false};
-  std::chrono::steady_clock::time_point last_receipt_;
-  bool have_estimate_{false};
-  embertrace_interfaces::msg::EnvironmentalReading latest_reading_;
+  std::unique_ptr<MissionLogic> policy_;
+  std::array<Reading, 2> latest_;
   geometry_msgs::msg::PoseWithCovarianceStamped latest_estimate_;
-
-  rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;
-  rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_publisher_;
-  rclcpp::Subscription<embertrace_interfaces::msg::EnvironmentalReading>::SharedPtr
-    reading_subscription_;
-  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr
-    estimate_subscription_;
-  rclcpp::Service<embertrace_interfaces::srv::OperatorCommand>::SharedPtr command_service_;
-  rclcpp::TimerBase::SharedPtr state_timer_;
+  bool have_estimate_{false};
+  double max_estimate_age_{5}, max_estimate_stddev_{4};
+  std::uint64_t last_epoch_{0}, last_alert_{0}, last_warning_{0}, event_sequence_{0};
+  std::string last_event_;
+  rclcpp::Publisher<State>::SharedPtr state_;
+  rclcpp::Publisher<Reading>::SharedPtr active_reading_;
+  rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_;
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr events_;
+  rclcpp::Subscription<geometry_msgs::msg::Vector3Stamped>::SharedPtr wind_;
+  std::array<rclcpp::Subscription<Reading>::SharedPtr, 2> readings_;
+  std::array<rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr, 2>
+      health_;
+  std::array<rclcpp::Subscription<sensor_msgs::msg::BatteryState>::SharedPtr, 2> batteries_;
+  std::array<rclcpp::Subscription<std_msgs::msg::UInt32>::SharedPtr, 2> loops_;
+  std::array<rclcpp::Subscription<std_msgs::msg::String>::SharedPtr, 2> navigation_;
+  rclcpp::Subscription<geometry_msgs::msg::PoseWithCovarianceStamped>::SharedPtr estimate_;
+  rclcpp::Service<embertrace_interfaces::srv::OperatorCommand>::SharedPtr commands_;
+  rclcpp::TimerBase::SharedPtr timer_;
 };
-
 }  // namespace embertrace_core
-
-int main(int argc, char ** argv)
-{
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<embertrace_core::MissionManagerNode>());
   rclcpp::shutdown();

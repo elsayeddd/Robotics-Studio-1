@@ -3,23 +3,21 @@
 #include <cmath>
 #include <functional>
 #include <memory>
-#include <string>
 #include <stdexcept>
+#include <string>
+
 #include "embertrace_core/perception_filter.hpp"
 #include "embertrace_interfaces/msg/environmental_reading.hpp"
 #include "embertrace_interfaces/msg/perception_status.hpp"
-#include "embertrace_interfaces/msg/visual_cue.hpp"
 #include "embertrace_interfaces/msg/thermal_cue.hpp"
+#include "embertrace_interfaces/msg/visual_cue.hpp"
 #include "rclcpp/rclcpp.hpp"
 
 using namespace std::chrono_literals;
-namespace embertrace_core
-{
-class PerceptionNode : public rclcpp::Node
-{
-public:
-  PerceptionNode() : Node("perception_node")
-  {
+namespace embertrace_core {
+class PerceptionNode : public rclcpp::Node {
+ public:
+  PerceptionNode() : Node("perception_node") {
     PerceptionConfig c;
     c.alpha = declare_parameter<double>("filter_alpha", 0.4);
     c.nominal_period_s = declare_parameter<double>("nominal_period_s", 0.2);
@@ -46,73 +44,91 @@ public:
     drone_wind_limit_ = declare_parameter<double>("drone_wind_limit_mps", 5);
     rover_wind_limit_ = declare_parameter<double>("rover_wind_limit_mps", 12);
     if (!std::isfinite(drone_wind_limit_) || !std::isfinite(rover_wind_limit_) ||
-      drone_wind_limit_ < 0 || rover_wind_limit_ <= drone_wind_limit_)
-    {throw std::invalid_argument("Wind thresholds must be finite and increasing");}
+        drone_wind_limit_ < 0 || rover_wind_limit_ <= drone_wind_limit_) {
+      throw std::invalid_argument("Wind thresholds must be finite and increasing");
+    }
     const int detections = declare_parameter<int>("detection_samples", 3);
     c.detection_samples = detections > 0 ? static_cast<std::size_t>(detections) : 0;
     const int warmup = declare_parameter<int>("warmup_samples", 3);
     c.warmup_samples = warmup > 0 ? static_cast<std::size_t>(warmup) : 0;
+    expected_camera_frame_ =
+        declare_parameter<std::string>("expected_camera_frame", "husky1_camera_link");
     filter_ = std::make_unique<PerceptionFilter>(c);
     publisher_ = create_publisher<embertrace_interfaces::msg::EnvironmentalReading>(
-      declare_parameter<std::string>("output_topic", "/embertrace/environment"), rclcpp::SensorDataQoS());
+        declare_parameter<std::string>("output_topic", "/embertrace/environment"),
+        rclcpp::SensorDataQoS());
     status_ = create_publisher<embertrace_interfaces::msg::PerceptionStatus>(
-      declare_parameter<std::string>("status_topic", "/embertrace/perception_status"), 10);
+        declare_parameter<std::string>("status_topic", "/embertrace/perception_status"), 10);
     reading_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
-      declare_parameter<std::string>("input_topic", "/embertrace/raw_environment"),
-      rclcpp::SensorDataQoS(),
-      [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr input) {
-        filter_->tick(now().seconds(), steady());
-        const auto & q = input->sample_pose.pose.orientation;
-        const auto & p = input->sample_pose.pose.position;
-        if (input->header.frame_id.empty() || input->sample_pose.header.frame_id != input->header.frame_id ||
-          !std::isfinite(q.x) || !std::isfinite(q.y) || !std::isfinite(q.z) || !std::isfinite(q.w) ||
-          q.x*q.x+q.y*q.y+q.z*q.z+q.w*q.w < .5 ||
-          !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
-          input->sample_pose.header.stamp != input->header.stamp)
-        {
-          filter_->invalidate_environment(); publish_status(); return;
-        }
-        const auto result = filter_->update({input->header.stamp.sec + input->header.stamp.nanosec * 1e-9,
-          input->smoke_ppm, input->temperature_c, input->wind_speed_mps,
-          input->wind_direction_rad, input->co2_ppm, input->co2_valid}, now().seconds(), steady());
-        if (result && result->valid) {
-          auto out = *input;
-          // Preserve acquisition timestamps; downstream age checks must see latency.
-          out.smoke_ppm = static_cast<float>(result->smoke);
-          out.temperature_c = static_cast<float>(result->temperature);
-          out.smoke_detected = result->smoke_detected;
-          out.temperature_anomaly = result->temperature_anomaly;
-          out.visual_confidence = static_cast<float>(result->visual);
-          out.fused_confidence = static_cast<float>(result->confidence);
-          out.co2_ppm = static_cast<float>(result->co2); out.co2_valid = result->co2_valid;
-          out.co2_detected = result->co2_detected; out.thermal_valid = result->thermal_valid;
-          out.thermal_hotspot = result->thermal_hotspot;
-          out.thermal_peak_c = static_cast<float>(result->thermal_peak_c);
-          latest_wind_ = input->wind_speed_mps; co2_valid_ = result->co2_valid;
-          publisher_->publish(out);
-        }
-        publish_status();
-      });
+        declare_parameter<std::string>("input_topic", "/embertrace/raw_environment"),
+        rclcpp::SensorDataQoS(),
+        [this](const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr input) {
+          filter_->tick(now().seconds(), steady());
+          const auto& q = input->sample_pose.pose.orientation;
+          const auto& p = input->sample_pose.pose.position;
+          if (input->header.frame_id.empty() ||
+              input->sample_pose.header.frame_id != input->header.frame_id || !std::isfinite(q.x) ||
+              !std::isfinite(q.y) || !std::isfinite(q.z) || !std::isfinite(q.w) ||
+              std::abs(q.x * q.x + q.y * q.y + q.z * q.z + q.w * q.w - 1) > .1 ||
+              !std::isfinite(p.x) || !std::isfinite(p.y) || !std::isfinite(p.z) ||
+              input->sample_pose.header.stamp != input->header.stamp) {
+            ++adapter_rejected_;
+            filter_->invalidate_environment();
+            publish_status();
+            return;
+          }
+          const auto result =
+              filter_->update({input->header.stamp.sec + input->header.stamp.nanosec * 1e-9,
+                               input->smoke_ppm, input->temperature_c, input->wind_speed_mps,
+                               input->wind_direction_rad, input->co2_ppm, input->co2_valid},
+                              now().seconds(), steady());
+          if (result && result->valid) {
+            auto out = *input;
+            // Preserve acquisition timestamps; downstream age checks must see latency.
+            out.smoke_ppm = static_cast<float>(result->smoke);
+            out.temperature_c = static_cast<float>(result->temperature);
+            out.smoke_detected = result->smoke_detected;
+            out.temperature_anomaly = result->temperature_anomaly;
+            out.visual_confidence = static_cast<float>(result->visual);
+            out.fused_confidence = static_cast<float>(result->confidence);
+            out.co2_ppm = static_cast<float>(result->co2);
+            out.co2_valid = result->co2_valid;
+            out.co2_detected = result->co2_detected;
+            out.thermal_valid = result->thermal_valid;
+            out.thermal_hotspot = result->thermal_hotspot;
+            out.thermal_peak_c = static_cast<float>(result->thermal_peak_c);
+            latest_wind_ = input->wind_speed_mps;
+            co2_valid_ = result->co2_valid;
+            publisher_->publish(out);
+          }
+          publish_status();
+        });
     visual_ = create_subscription<embertrace_interfaces::msg::VisualCue>(
-      declare_parameter<std::string>("visual_topic", "/embertrace/visual_cue"), rclcpp::SensorDataQoS(),
-      [this](const embertrace_interfaces::msg::VisualCue::SharedPtr input) {
-        filter_->set_visual(input->header.stamp.sec + input->header.stamp.nanosec * 1e-9, input->confidence,
-          input->valid && !input->header.frame_id.empty(), now().seconds(), steady());
-      });
+        declare_parameter<std::string>("visual_topic", "/embertrace/visual_cue"),
+        rclcpp::SensorDataQoS(),
+        [this](const embertrace_interfaces::msg::VisualCue::SharedPtr input) {
+          filter_->set_visual(input->header.stamp.sec + input->header.stamp.nanosec * 1e-9,
+                              input->confidence,
+                              input->valid && input->header.frame_id == expected_camera_frame_,
+                              now().seconds(), steady());
+        });
     thermal_ = create_subscription<embertrace_interfaces::msg::ThermalCue>(
-      declare_parameter<std::string>("thermal_topic", "/embertrace/thermal_cue"), rclcpp::SensorDataQoS(),
-      [this](embertrace_interfaces::msg::ThermalCue::SharedPtr input) {
-        filter_->set_thermal(input->header.stamp.sec + input->header.stamp.nanosec * 1e-9,
-          input->peak_temperature_c, input->hotspot,
-          input->valid && !input->header.frame_id.empty(), now().seconds(), steady());
-      });
-    timer_ = create_wall_timer(200ms, [this]() {publish_status();});
+        declare_parameter<std::string>("thermal_topic", "/embertrace/thermal_cue"),
+        rclcpp::SensorDataQoS(), [this](embertrace_interfaces::msg::ThermalCue::SharedPtr input) {
+          filter_->set_thermal(input->header.stamp.sec + input->header.stamp.nanosec * 1e-9,
+                               input->peak_temperature_c, input->hotspot,
+                               input->valid && input->header.frame_id == expected_camera_frame_,
+                               now().seconds(), steady());
+        });
+    timer_ = create_wall_timer(200ms, [this]() { publish_status(); });
   }
-private:
-  static double steady()
-  {return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count();}
-  void publish_status()
-  {
+
+ private:
+  static double steady() {
+    return std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch())
+        .count();
+  }
+  void publish_status() {
     filter_->tick(now().seconds(), steady());
     embertrace_interfaces::msg::PerceptionStatus s;
     s.header.stamp = now();
@@ -121,13 +137,18 @@ private:
     s.confirmation_candidate = filter_->confirmation_candidate(now().seconds());
     s.thermal_fresh = filter_->thermal_fresh(now().seconds());
     s.co2_valid = s.environment_fresh && co2_valid_;
-    s.wind_condition = !s.environment_fresh ? s.WIND_UNKNOWN :
-      (latest_wind_ <= drone_wind_limit_ ? s.WIND_DRONE_SAFE :
-      (latest_wind_ <= rover_wind_limit_ ? s.WIND_ROVER_ONLY : s.WIND_UNSAFE));
-    s.rejected_samples = filter_->rejected_samples();
+    s.wind_condition =
+        !s.environment_fresh
+            ? s.WIND_UNKNOWN
+            : (latest_wind_ <= drone_wind_limit_
+                   ? s.WIND_DRONE_SAFE
+                   : (latest_wind_ <= rover_wind_limit_ ? s.WIND_ROVER_ONLY : s.WIND_UNSAFE));
+    s.rejected_samples = filter_->rejected_samples() + adapter_rejected_;
     s.consecutive_samples = static_cast<std::uint32_t>(filter_->consecutive_samples());
     status_->publish(s);
   }
+  std::string expected_camera_frame_;
+  std::uint64_t adapter_rejected_{0};
   bool co2_valid_{false};
   double latest_wind_{0}, drone_wind_limit_{5}, rover_wind_limit_{12};
   std::unique_ptr<PerceptionFilter> filter_;
@@ -138,9 +159,8 @@ private:
   rclcpp::Subscription<embertrace_interfaces::msg::ThermalCue>::SharedPtr thermal_;
   rclcpp::TimerBase::SharedPtr timer_;
 };
-}
-int main(int argc, char ** argv)
-{
+}  // namespace embertrace_core
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<embertrace_core::PerceptionNode>());
   rclcpp::shutdown();

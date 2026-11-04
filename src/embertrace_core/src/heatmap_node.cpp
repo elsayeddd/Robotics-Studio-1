@@ -1,10 +1,8 @@
 /**
  * RViz smoke-sample heatmap.
  *
- * COMPLETE BASELINE: stores a bounded, spatially down-sampled history and publishes
+ * Stores a bounded, spatially down-sampled history and publishes
  * blue-to-red cylinders. This node is operator-only and is not an autonomy input.
- *
- * TODO(student): add a proper interpolated grid, a legend and CSV/bag export.
  */
 
 #include <algorithm>
@@ -20,33 +18,37 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 
-class HeatmapNode : public rclcpp::Node
-{
-public:
-  HeatmapNode()
-  : Node("heatmap_node")
-  {
-    max_samples_ = std::max<int>(10, declare_parameter<int>("max_samples", 300));
+class HeatmapNode : public rclcpp::Node {
+ public:
+  HeatmapNode() : Node("heatmap_node") {
+    max_samples_ = std::clamp<int>(declare_parameter<int>("max_samples", 300), 10, 100000);
     minimum_spacing_m_ = std::max(0.05, declare_parameter<double>("minimum_spacing_m", 0.35));
-    display_max_smoke_ppm_ = std::max(
-      1.0, declare_parameter<double>("display_max_smoke_ppm", 60.0));
+    display_max_smoke_ppm_ =
+        std::max(1.0, declare_parameter<double>("display_max_smoke_ppm", 60.0));
 
     publisher_ = create_publisher<visualization_msgs::msg::MarkerArray>(
-      "/embertrace/sample_markers", rclcpp::QoS(1).transient_local().reliable());
+        "/embertrace/sample_markers", rclcpp::QoS(1).transient_local().reliable());
     subscription_ = create_subscription<embertrace_interfaces::msg::EnvironmentalReading>(
-      "/embertrace/environment", rclcpp::SensorDataQoS(),
-      std::bind(&HeatmapNode::on_reading, this, std::placeholders::_1));
+        "/embertrace/active_environment", rclcpp::SensorDataQoS(),
+        std::bind(&HeatmapNode::on_reading, this, std::placeholders::_1));
   }
 
-private:
-  void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading)
-  {
+ private:
+  void on_reading(const embertrace_interfaces::msg::EnvironmentalReading::SharedPtr reading) {
+    if (!std::isfinite(reading->smoke_ppm) ||
+        !std::isfinite(reading->sample_pose.pose.position.x) ||
+        !std::isfinite(reading->sample_pose.pose.position.y)) {
+      return;
+    }
+    if (!samples_.empty() &&
+        rclcpp::Time(reading->header.stamp) < rclcpp::Time(samples_.back().header.stamp)) {
+      samples_.clear();
+    }
     if (!samples_.empty()) {
-      const auto & previous = samples_.back().sample_pose.pose.position;
-      const auto & current = reading->sample_pose.pose.position;
+      const auto& previous = samples_.back().sample_pose.pose.position;
+      const auto& current = reading->sample_pose.pose.position;
       if (std::hypot(current.x - previous.x, current.y - previous.y) < minimum_spacing_m_) {
         return;
       }
@@ -59,15 +61,14 @@ private:
     publish_markers();
   }
 
-  void publish_markers()
-  {
+  void publish_markers() {
     visualization_msgs::msg::MarkerArray array;
     visualization_msgs::msg::Marker clear;
     clear.action = visualization_msgs::msg::Marker::DELETEALL;
     array.markers.push_back(clear);
 
     int id = 1;
-    for (const auto & sample : samples_) {
+    for (const auto& sample : samples_) {
       visualization_msgs::msg::Marker marker;
       marker.header = sample.sample_pose.header;
       marker.header.stamp = now();
@@ -84,8 +85,8 @@ private:
       marker.scale.x = 0.45;
       marker.scale.y = 0.45;
       marker.scale.z = 0.10;
-      const double level = std::clamp(
-        static_cast<double>(sample.smoke_ppm) / display_max_smoke_ppm_, 0.0, 1.0);
+      const double level =
+          std::clamp(static_cast<double>(sample.smoke_ppm) / display_max_smoke_ppm_, 0.0, 1.0);
       marker.color.r = static_cast<float>(level);
       marker.color.g = static_cast<float>(1.0 - std::abs(2.0 * level - 1.0));
       marker.color.b = static_cast<float>(1.0 - level);
@@ -105,8 +106,7 @@ private:
 
 }  // namespace embertrace_core
 
-int main(int argc, char ** argv)
-{
+int main(int argc, char** argv) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<embertrace_core::HeatmapNode>());
   rclcpp::shutdown();

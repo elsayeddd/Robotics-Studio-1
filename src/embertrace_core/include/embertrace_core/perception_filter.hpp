@@ -4,11 +4,9 @@
 #include <limits>
 #include <optional>
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 /** Provisional demonstrator parameters. Calibrate on training recordings only. */
-struct PerceptionConfig
-{
+struct PerceptionConfig {
   double alpha{0.4};
   double nominal_period_s{0.2};
   double smoke_enter{12.0}, smoke_exit{8.0}, smoke_scale{45.0}, baseline_smoke{1.0};
@@ -22,15 +20,13 @@ struct PerceptionConfig
   bool require_co2{false}, require_thermal{false};
 };
 
-struct PerceptionSample
-{
+struct PerceptionSample {
   double stamp_s{}, smoke{}, temperature{}, wind_speed{}, wind_direction{};
   double co2{420.0};
   bool co2_valid{false};
 };
 
-struct PerceptionResult
-{
+struct PerceptionResult {
   bool valid{false}, smoke_detected{false}, temperature_anomaly{false};
   bool visual_valid{false}, confirmed_candidate{false};
   double smoke{}, temperature{}, visual{}, confidence{};
@@ -42,29 +38,36 @@ struct PerceptionResult
  * ROS time checks acquisition age; optional monotonic receipt time detects /clock stalls.
  * Missing required data is unavailable evidence, never a fabricated clean reading.
  */
-class PerceptionFilter
-{
-public:
-  explicit PerceptionFilter(PerceptionConfig config = {});
-  void reset();  // Explicit full reset; used to begin an independent trial.
+class PerceptionFilter {
+ public:
+  explicit PerceptionFilter(PerceptionConfig config = PerceptionConfig{});
+  void reset();                   // Explicit full reset; used to begin an independent trial.
   void invalidate_environment();  // Preserve timestamp history to reject replays.
   void tick(double now_s, double steady_s = std::numeric_limits<double>::quiet_NaN());
   bool set_visual(double stamp_s, double confidence, bool valid, double now_s,
-    double steady_s = std::numeric_limits<double>::quiet_NaN());
+                  double steady_s = std::numeric_limits<double>::quiet_NaN());
   bool set_thermal(double stamp_s, double peak_c, bool hotspot, bool valid, double now_s,
-    double steady_s = std::numeric_limits<double>::quiet_NaN());
-  std::optional<PerceptionResult> update(const PerceptionSample & sample, double now_s,
-    double steady_s = std::numeric_limits<double>::quiet_NaN());
+                   double steady_s = std::numeric_limits<double>::quiet_NaN());
+  std::optional<PerceptionResult> update(
+      const PerceptionSample& sample, double now_s,
+      double steady_s = std::numeric_limits<double>::quiet_NaN());
   bool environment_fresh(double now_s) const;
   bool visual_fresh(double now_s) const;
   bool thermal_fresh(double now_s) const;
   bool confirmation_candidate(double now_s) const;
-  std::size_t rejected_samples() const {return rejected_;}
-  std::size_t consecutive_samples() const {return consecutive_;}
-  const PerceptionConfig & config() const {return config_;}
-private:
+  std::size_t rejected_samples() const {
+    return rejected_;
+  }
+  std::size_t consecutive_samples() const {
+    return consecutive_;
+  }
+  const PerceptionConfig& config() const {
+    return config_;
+  }
+
+ private:
   bool check_clock(double now_s);
-  void latch(double value, double enter, double exit, bool & latched, std::size_t & count);
+  void latch(double value, double enter, double exit, bool& latched, std::size_t& count);
   bool fresh(double now, double stamp, double timeout) const;
   PerceptionConfig config_;
   bool initialised_{false}, smoke_latched_{false}, heat_latched_{false}, co2_latched_{false};
@@ -77,6 +80,6 @@ private:
   PerceptionResult last_result_;
 };
 
-bool confirmation_allowed(bool fresh, bool gas, bool heat, double visual,
-  double confidence, double visual_threshold = 0.55, double confidence_threshold = 0.74);
+bool confirmation_allowed(bool fresh, bool gas, bool heat, double visual, double confidence,
+                          double visual_threshold = 0.55, double confidence_threshold = 0.74);
 }  // namespace embertrace_core

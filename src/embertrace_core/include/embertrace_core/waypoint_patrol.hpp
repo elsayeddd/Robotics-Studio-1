@@ -7,13 +7,11 @@
 #include <string>
 #include <vector>
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 
 /// A single patrol stop, expressed in the frame the route was authored in
 /// (husky1_map for patrol_waypoints.yaml).
-struct Waypoint
-{
+struct Waypoint {
   std::string name;
   double x{0.0};
   double y{0.0};
@@ -22,8 +20,7 @@ struct Waypoint
 
 /// A loaded route: the frame the coordinates are expressed in, plus the
 /// ordered stops.
-struct PatrolRoute
-{
+struct PatrolRoute {
   std::string frame_id{"map"};
   std::vector<Waypoint> waypoints;
 };
@@ -32,17 +29,16 @@ struct PatrolRoute
 /// separate from file I/O so it can be unit tested without touching disk.
 /// Throws std::runtime_error if `yaml_text` is malformed or defines no
 /// waypoints.
-PatrolRoute parse_patrol_route(const std::string & yaml_text);
+PatrolRoute parse_patrol_route(const std::string& yaml_text);
 
 /// Reads and parses a patrol_waypoints.yaml file (see parse_patrol_route).
 /// Throws std::runtime_error if the file cannot be read or parsed.
-PatrolRoute load_patrol_route(const std::string & yaml_path);
+PatrolRoute load_patrol_route(const std::string& yaml_path);
 
 /// The mission-state categories that matter to the patrol sequencer. The
 /// node maps embertrace_interfaces::msg::MissionState::state onto this enum
 /// so that this class stays free of any ROS/message dependency.
-enum class PatrolTrigger
-{
+enum class PatrolTrigger {
   kPatrol,        ///< MissionState::PATROL
   kReturnToBase,  ///< MissionState::RETURN_TO_BASE
   kHold,          ///< anything else: INVESTIGATE, TRACK, RECOVER, VERIFY,
@@ -69,9 +65,8 @@ enum class PatrolTrigger
 ///    dismissing a false alarm with START while INVESTIGATE/TRACK/RECOVER/
 ///    VERIFY was active (the rover may be far from the patrol loop after
 ///    chasing a lead), and the very first patrol start.
-class WaypointPatrol
-{
-public:
+class WaypointPatrol {
+ public:
   /// `arrival_tolerance_m` is how close (in metres) the rover must get to
   /// the current goal before the patrol advances to the next waypoint.
   explicit WaypointPatrol(double arrival_tolerance_m = 0.5);
@@ -80,9 +75,14 @@ public:
   /// selects which waypoint RETURN_TO_BASE targets and which waypoint is
   /// used as the fallback start point when no pose is known yet; if the name
   /// is not found, waypoint 0 is used instead.
-  void set_waypoints(std::vector<Waypoint> waypoints, const std::string & base_waypoint_name);
+  void set_waypoints(std::vector<Waypoint> waypoints, const std::string& base_waypoint_name);
 
-  bool has_waypoints() const { return !waypoints_.empty(); }
+  /// Use the measured launch point for the base waypoint, including custom spawns.
+  void set_home_pose(double x, double y);
+
+  bool has_waypoints() const {
+    return !waypoints_.empty();
+  }
 
   /// Records the rover's latest known position (e.g. from odometry). If the
   /// patrol is currently active and this pose is within tolerance of the
@@ -99,15 +99,24 @@ public:
   /// messages for a state we are already acting on).
   std::optional<Waypoint> on_mission_state(PatrolTrigger trigger);
 
-  std::size_t current_index() const { return current_index_; }
-  std::size_t loops_completed() const { return loops_completed_; }
-  bool is_patrolling() const { return mode_ == Mode::kPatrolling; }
-  bool is_returning() const { return mode_ == Mode::kReturning; }
-  bool has_reached_base() const { return returned_to_base_; }
+  std::size_t current_index() const {
+    return current_index_;
+  }
+  std::size_t loops_completed() const {
+    return loops_completed_;
+  }
+  bool is_patrolling() const {
+    return mode_ == Mode::kPatrolling;
+  }
+  bool is_returning() const {
+    return mode_ == Mode::kReturning;
+  }
+  bool has_reached_base() const {
+    return returned_to_base_;
+  }
 
-private:
-  enum class Mode
-  {
+ private:
+  enum class Mode {
     kInactive,
     kPatrolling,
     kReturning,

@@ -1,90 +1,62 @@
 # System architecture
 
-## Design intent
+The simulator knows the hidden source solely to produce independent local
+measurements. Perception, mission and search consume measurements, never source
+truth or tree-state messages. Evaluation reads truth separately to score outcomes.
 
-EmberTrace separates ground-truth simulation from robot knowledge. The environment node knows the fire location only so it can generate sensor readings. Perception, decision and search nodes receive the same kind of local measurements a real robot could obtain.
+## Runtime responsibilities
 
-```mermaid
-flowchart LR
-    GZ["Gazebo forest + Husky"] -->|odom, LiDAR, RGB-D| BR["ROS–Gazebo bridge"]
-    BR --> ENV["Environment simulator"]
-    ENV -->|raw local reading| PER["Perception node"]
-    BR --> CAM["Camera verifier"]
-    CAM -->|visual cue| PER
-    PER -->|filtered evidence| MM["Mission manager"]
-    MM -->|mission state| SEARCH["Search planner"]
-    PER --> SEARCH
-    SEARCH -->|navigation goal| NAV["Nav2 goal adapter"]
-    NAV -->|cmd_vel through Nav2| BR
-    PER --> MAP["Heatmap node"]
-    MM --> UI["Operator dashboard"]
-    PER --> UI
-    MM --> ALERT["Fire alert"]
-    ALERT --> UI
-```
+| Component | Responsibility |
+| --- | --- |
+| Gazebo + bridges | Two vehicle models, RGB/depth/IR, LiDAR/IMU, odometry and clock |
+| mission_simulator.py | Shared stamped wind and simulated per-vehicle battery |
+| fire_state_manager.py | Healthy/burning/burnt visual, thermal and gas-source consistency through actual Fortress scene services |
+| environment_simulator_node (each vehicle) | Noisy local smoke, scalar temperature and independent CO2 field at measured pose; altitude attenuation and controlled dropouts |
+| camera_verifier_node (each vehicle) | Connected RGB colour regions with stamped validity and frame persistence |
+| thermal_verifier_node (each vehicle) | Radiometric decoding and persistent connected hot regions |
+| perception_node (each vehicle) | EMA/hysteresis, gas/heat/image fusion, required-channel validity, time alignment and watchdogs |
+| sensor_health_node (each vehicle) | Required bridge-stream acquisition and monotonic receipt health |
+| mission_manager_node + MissionLogic | Wind dispatch, selected-local confirmation, mission progression, timeouts, operator service and explicit alerts |
+| search_planner_node | Selected-local bounded history; numerical source fit; upwind/crosswind goals with rover map clearance or aerial flight envelope |
+| patrol_manager_node + Nav2 adapter | Rover patrol/return, action cancellation, retries, bounded goals and completion/failure reports |
+| velocity_guard_node | Sole rover output; selected/health/mission/command gates and manual/autonomous separation |
+| drone_scout_node | Aerial ascent, sweep, local investigation, return/landing, obstacle stop and heartbeat/envelope guards |
+| heatmap_node | Bounded selected-platform samples for operator awareness |
+| operator_dashboard | Map, both-platform telemetry/health, alerts/ACK, commands, hold/release manual input, wind/tree controls |
+| mission_event_logger.py | Flushed bounded CSV of transitions and alerts |
+| recorder/evaluator/campaign scripts | Independent truth joins, replay/tuning and retained actual trial metrics |
 
-## Packages
+## Mission ownership
 
-| Package | Responsibility | Expected owners |
-| --- | --- | --- |
-| `embertrace_interfaces` | Stable messages and services shared by all packages | Systems/integration lead |
-| `embertrace_sim` | World, robot, sensor bridge, localisation, SLAM, Nav2 and RViz | Simulation/navigation members |
-| `embertrace_core` | Environmental model, perception, state machine, search goals and visualisation | Perception/autonomy members |
-| `embertrace_ui` | Ranger-facing Qt dashboard | UI/integration member |
-| `embertrace_bringup` | Project-wide launch and parameters | Systems/integration lead |
+Only the mission manager publishes authoritative mission state. Stable low wind
+selects the drone; higher safe wind selects the rover; unsafe or missing wind
+prevents deployment. Only selected-platform local evidence drives investigation
+and confirmation. The unselected platform remains held but its sensors stay visible.
+A mid-mission platform/sensor availability change pauses motion; operator RESUME
+re-checks inputs and starts a new epoch. No random platform selector is used.
 
-## Runtime nodes
+Patrol progresses through investigate, track/recover, verify and alert. Verification
+holds motion while gathering separate confirmation samples. An alert automatically
+leads to return after a hold. Completed coverage or low battery also returns. Arrival
+ends the mission; failed or timed-out navigation pauses for review. E_STOP remains
+latched across clock rewind and only RESET clears it.
 
-### `environment_simulator_node`
+## Evidence and motion boundaries
 
-Subscribes to Husky odometry and samples a Gaussian plume at the robot position. It adds seeded noise and publishes raw smoke, temperature and wind readings. This is the only node allowed to know the source coordinates.
+Acquisition timestamps reject old/future/repeated evidence. Monotonic receipt age
+also expires streams if simulation time freezes. Mission epochs clear old motion
+commands, goals and source fits. The action adapter cancels when selected platform,
+state, epoch or permission changes. Both command paths need fresh mission and sensor
+heartbeats. Manual input has its own timeout and cannot bypass selection or E-stop.
 
-### `camera_verifier_node`
+IR peaks never overwrite local scalar temperature or sample pose. A local detection
+can be valid even when source fitting is unresolved. Alerts explicitly distinguish
+a fitted location from the detection sample. No detector subscribes to TrialTruth.
 
-Reads the RGB camera and publishes a low-confidence fire-colour cue. It is an educational placeholder for a stronger computer-vision method.
+The drone is an ideal velocity-controlled simulation proxy. Its bounded flight
+layer and LiDAR stop do not represent a physical flight controller or rotor model.
+The smoke/CO2 fields are educational mathematical models, not fluid dynamics.
 
-### `perception_node`
-
-Filters raw environmental readings, merges the optional camera cue, calculates detection confidence and publishes a single robot-level perception output.
-
-### `mission_manager_node`
-
-Owns the mission state machine and operator service. It decides when the system transitions from patrol to investigation, tracking, recovery, verification, alert or return.
-
-### `search_planner_node`
-
-Turns state plus local wind/smoke evidence into short investigation goals. The baseline surges upwind when the plume is present and alternates crosswind when it is lost.
-
-### `heatmap_node`
-
-Stores a bounded history of samples and publishes RViz markers. It is for operator awareness only and must not leak ground truth into decision-making.
-
-### `operator_dashboard`
-
-Presents mission status and sends explicit operator commands through a ROS service. ROS callbacks are processed in the Qt event loop, keeping the UI implementation approachable.
-
-## State machine ownership
-
-Only the mission manager publishes `/embertrace/mission_state`. Other nodes request behaviour through inputs and commands; they do not independently change the state. This avoids contradictory decisions during integration.
-
-## Safety boundary
-
-`E_STOP` is latched in the mission manager. The Nav2 adapter cancels its goal, while the command guard immediately inhibits velocity when motion is not allowed. The guard is the only rover cmd_vel publisher in the integrated launch. Resetting the state must require an explicit operator `RESET` command.
-
-
-
-## Aerial scout and perception validation
-
-A separate drone model/bridge, environment sampler, camera verifier and local
-perception filter publish only measured scout evidence. Aerial detections can
-request rover investigation. The search planner selects short goals toward the
-sampled aerial location and still enforces known-free occupancy cells. Rover
-confirmation and the source fit use rover-local evidence.
-
-Sensor-health nodes report all streams to diagnostics. The rover command guard
-and aerial controller require fresh mission/sensor heartbeats. Perception
-watchdogs clear stale environmental/visual validity; the mission pauses on
-rover environmental dropout. A recorder consumes separate evaluation labels,
-and a standalone executable evaluates the same filter used by the live nodes.
-The new drone is a kinematic demonstrator, not a rotor-dynamics or hardware
-flight-control system. See demo-guide.md and perception-validation.md.
+See [interface-contract.md](interface-contract.md), [completion-handover.md](completion-handover.md)
+and [perception-vm-startup.md](perception-vm-startup.md) for interfaces, acceptance
+status and reproducible commands.

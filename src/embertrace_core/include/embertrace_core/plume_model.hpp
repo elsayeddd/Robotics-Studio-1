@@ -4,11 +4,9 @@
 #include <cstdint>
 #include <random>
 
-namespace embertrace_core
-{
+namespace embertrace_core {
 
-struct PlumeParameters
-{
+struct PlumeParameters {
   double source_x{12.0};
   double source_y{7.0};
   double emission_strength_ppm{120.0};
@@ -24,8 +22,7 @@ struct PlumeParameters
   double wind_speed_mps{2.5};
 };
 
-struct PlumeSample
-{
+struct PlumeSample {
   double smoke_ppm{0.0};
   double temperature_c{0.0};
   double wind_speed_mps{0.0};
@@ -33,15 +30,16 @@ struct PlumeSample
 };
 
 /// Deterministic, low-cost environmental model for simulation and unit tests.
-class PlumeModel
-{
-public:
-  explicit PlumeModel(const PlumeParameters & parameters, std::uint32_t seed = 42U);
+class PlumeModel {
+ public:
+  explicit PlumeModel(const PlumeParameters& parameters, std::uint32_t seed = 42U);
 
   PlumeSample sample(double x, double y);
+  /// Update shared ambient wind without restarting the random-number sequence.
+  void set_wind(double speed, double direction);
   PlumeSample sample_without_noise(double x, double y) const;
 
-private:
+ private:
   PlumeParameters parameters_;
   std::mt19937 random_engine_;
   std::normal_distribution<double> smoke_noise_;
