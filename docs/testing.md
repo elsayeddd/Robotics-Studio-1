@@ -73,7 +73,7 @@ ROS_DOMAIN_ID=77 LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=2 xvfb-run -a \
 ## 4. Recorded perception evidence
 
 ```bash
-ROS_DOMAIN_ID=100 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
+ROS_DOMAIN_ID=40 python3 scripts/ros_perception_campaign.py --output log/gazebo-perception-01
 ```
 
 This launches six near-source scenarios for both platforms with separate training
@@ -83,7 +83,7 @@ latency. At least three recorded scenarios are required; all six are preferred.
 Use a new output directory each run. A failed/negative trial remains evidence.
 
 The perception campaign reserves twelve DDS domains from `--domain-base`
-(ROS_DOMAIN_ID, otherwise 100), one per world, and records source/harness revisions.
+(ROS_DOMAIN_ID, otherwise 40), one per world, and records source/harness revisions.
 Default detector settings must detect fire/dropout and reject the four negative
 scenarios on both platforms. CI smoke modes also use separate domains.
 

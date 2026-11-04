@@ -168,6 +168,7 @@ def main():
     )
     pending = {}
     active = {client: False for client in clients}
+    last_response = {client: -1.0 for client in clients}
     last_poll = 0
     start = time.monotonic()
     stable_since = None
@@ -183,17 +184,27 @@ def main():
             checks["map to odom TF"] = buffer.can_transform(
                 "husky1_map", "husky1_odom", rclpy.time.Time()
             )
-            for client, future in list(pending.items()):
+            for client, (future, sent) in list(pending.items()):
                 if future.done():
                     result = future.result() if future.exception() is None else None
                     active[client] = result is not None and result.current_state.id == 3
+                    last_response[client] = time.monotonic()
+                    del pending[client]
+                elif time.monotonic() - sent > 3:
+                    # Discovery can replace an endpoint before an initial reply.
+                    # Retry a lost query instead of waiting for it indefinitely.
+                    client.remove_pending_request(future)
+                    future.cancel()
+                    active[client] = False
                     del pending[client]
             if time.monotonic() - last_poll >= 1:
                 for client in clients:
                     if client not in pending and client.service_is_ready():
-                        pending[client] = client.call_async(GetState.Request())
+                        pending[client] = (client.call_async(GetState.Request()), time.monotonic())
                 last_poll = time.monotonic()
-            checks["Nav2 lifecycle active"] = all(active.values())
+            checks["Nav2 lifecycle active"] = all(
+                active[client] and time.monotonic()-last_response[client] <= 3 for client in clients
+            )
             # An active planner can still have an incomplete initial SLAM map.
             # Prove the first moving patrol leg is plannable before START.
             if path_goal is not None and path_goal.done():
@@ -214,6 +225,13 @@ def main():
                     and len(result.result.path.poses) > 1
                 )
                 path_result = None
+            if time.monotonic() - last_path_attempt > 10:
+                if path_goal is not None:
+                    path_goal.cancel()
+                    path_goal = None
+                if path_result is not None:
+                    path_result.cancel()
+                    path_result = None
             if (
                 checks["Nav2 lifecycle active"]
                 and not checks["first patrol path"]
@@ -258,6 +276,9 @@ def main():
     stable = stable_since is not None and time.monotonic() - stable_since >= args.stable_seconds
     for key, valid in checks.items():
         print(("PASS" if valid else "FAIL") + ": " + key)
+    for client in clients:
+        if not active[client] or time.monotonic()-last_response[client]>3:
+            print("FAIL: lifecycle response " + client.srv_name)
     print(("PASS" if stable else "FAIL") + ": continuous readiness window")
     node.destroy_node()
     rclpy.shutdown()

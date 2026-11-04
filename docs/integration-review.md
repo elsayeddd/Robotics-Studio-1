@@ -219,3 +219,17 @@ and issues no recovery command. Neither sensor expiry nor E-stop is bypassed.
 Smoke modes and recorded worlds now use separate DDS domains, and baseline
 perception acceptance is enforced for both vehicles. The older source-only
 diagnostic is labelled separately from full mission acceptance.
+
+The complete sixth cohort passes all ten strict autonomous missions at controller
+revision `0c932ba`: five drone and five rover, ten resolved sources, ten measured
+returns and all drone landings. Median source error is 0.316 m for the drone,
+0.412 m for the rover and 0.338 m overall. No PAUSED recovery or operator return
+command was used. Full two-loop negative patrol checks follow separately.
+
+The next CI run passed native tests but exposed two readiness/reporting issues.
+Its Nav2 log showed every managed node active, while preflight remained blocked
+on an unanswered lifecycle query. Queries now expire after three wall seconds
+and retry; readiness also requires fresh replies. Path-query futures are bounded
+as well. CI now trusts its explicit container checkout so Git can record revision
+metadata despite the mounted directory's different owner. These changes do not
+alter controller or sensor thresholds.

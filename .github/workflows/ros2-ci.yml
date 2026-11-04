@@ -16,6 +16,8 @@ jobs:
       image: osrf/ros:humble-desktop
     steps:
       - uses: actions/checkout@v4
+      - name: Trust the container checkout
+        run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
       - name: Install dependencies
         shell: bash
         run: |
@@ -58,7 +60,7 @@ jobs:
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
           LP_NUM_THREADS: "2"
-          ROS_DOMAIN_ID: "100"
+          ROS_DOMAIN_ID: "40"
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash

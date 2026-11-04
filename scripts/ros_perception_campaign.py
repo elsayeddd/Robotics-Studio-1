@@ -161,7 +161,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", default="log/gazebo-perception")
     parser.add_argument("--duration", type=float, default=12)
-    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "100")))
+    parser.add_argument("--domain-base", type=int, default=int(os.environ.get("ROS_DOMAIN_ID", "40")))
     args = parser.parse_args()
     if args.duration < 10:
         parser.error("duration must cover warmup, dropout and recovery (at least 10 s)")
