@@ -44,6 +44,7 @@ public:
   DashboardNode()
   : Node("operator_dashboard")
   {
+    aerial_primary_ = declare_parameter<std::string>("primary_vehicle", "rover") == "drone";
     state_subscription_ = create_subscription<embertrace_interfaces::msg::MissionState>(
       "/embertrace/mission_state", rclcpp::QoS(1).transient_local().reliable(),
       [this](const embertrace_interfaces::msg::MissionState::SharedPtr message) {
@@ -73,6 +74,12 @@ public:
       [this](const embertrace_interfaces::msg::FireAlert::SharedPtr message) {
         alert_text_ = message->confirmed ? "CONFIRMED FIRE" : "Suspected fire";
         alert_text_ += " — " + message->recommended_action;
+        const auto & p = message->estimated_source.pose.position;
+        const bool unresolved = message->evidence.find("unresolved") != std::string::npos;
+        alert_text_ += QString(" • %1: (%2, %3) in %4")
+          .arg(unresolved ? "Latest sample; source unresolved" : "Estimated source")
+          .arg(p.x, 0, 'f', 1).arg(p.y, 0, 'f', 1)
+          .arg(QString::fromStdString(message->estimated_source.header.frame_id)).toStdString();
       });
     rover_status_ = create_subscription<embertrace_interfaces::msg::PerceptionStatus>(
       "/embertrace/perception_status", 10,
@@ -117,8 +124,10 @@ public:
   bool rover_fresh() const {return rover_fresh_ && fresh(rover_stamp_);}
   std::string sensor_health() const
   {
-    return std::string("Rover perception: ") + (rover_fresh() ? "fresh" : "waiting / stale") +
-      " | Drone perception: " + (drone_fresh_ && fresh(drone_stamp_) ? "fresh" : "disabled / waiting / stale");
+    const std::string primary = std::string(aerial_primary_ ? "Drone perception: " : "Rover perception: ") +
+      (rover_fresh() ? "fresh" : "waiting / stale");
+    return aerial_primary_ ? primary : primary + " | Scout perception: " +
+      (drone_fresh_ && fresh(drone_stamp_) ? "fresh" : "disabled / waiting / stale");
   }
   /// True while the mission manager reports an engaged emergency stop. Every button
   /// except the emergency stop button itself (which then releases it) is locked.
@@ -149,6 +158,7 @@ public:
   bool thermal_valid() const {return rover_fresh() && thermal_valid_;}
 
 private:
+  bool aerial_primary_{false};
   bool connected_{false}, rover_fresh_{false}, drone_fresh_{false};
   rclcpp::Time state_stamp_{0, 0, RCL_ROS_TIME}, rover_stamp_{0, 0, RCL_ROS_TIME}, drone_stamp_{0, 0, RCL_ROS_TIME};
   rclcpp::Subscription<embertrace_interfaces::msg::PerceptionStatus>::SharedPtr rover_status_, drone_status_;
@@ -243,6 +253,7 @@ public:
 
     timer_ = new QTimer(this);
     QObject::connect(timer_, &QTimer::timeout, this, [this]() {
+      if (!rclcpp::ok()) {QApplication::quit(); return;}
       rclcpp::spin_some(node_);
       refresh();
     });

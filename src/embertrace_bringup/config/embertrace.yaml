@@ -81,6 +81,8 @@ mission_manager_node:
     reading_timeout_s: 2.0
     max_estimate_age_s: 5.0
     max_estimate_stddev_m: 4.0
+    verification_timeout_s: 15.0
+    verification_retry_s: 5.0
 
 search_planner_node:
   ros__parameters:

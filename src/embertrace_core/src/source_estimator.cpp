@@ -30,14 +30,17 @@ bool SourceEstimator::add(const SearchSample & sample)
     return false;
   }
   if (!samples_.empty() &&
-    std::hypot(sample.x - samples_.back().x, sample.y - samples_.back().y) <
+    std::hypot(sample.x - anchor_x_, sample.y - anchor_y_) <
     config_.minimum_spacing_m)
   {
-    // Replace a stationary reading so sensor noise cannot overwhelm spatial evidence.
+    // I keep the spacing anchor fixed while refreshing this reading. Moving the
+    // anchor on every small step would prevent a slow rover collecting history.
     samples_.back() = sample;
     return true;
   }
   samples_.push_back(sample);
+  anchor_x_ = sample.x;
+  anchor_y_ = sample.y;
   if (samples_.size() > config_.max_samples) {
     samples_.pop_front();
   }

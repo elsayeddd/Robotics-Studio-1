@@ -28,7 +28,8 @@ def main():
     client = node.create_client(OperatorCommand, '/embertrace/operator_command')
     with (output / 'mission.log').open('w') as log:
         process = subprocess.Popen([str(executable), '--ros-args', '-p', 'require_scout_return:=true',
-            '-p', 'reading_timeout_s:=0.8'], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            '-p', 'reading_timeout_s:=0.8', '-p', 'verification_timeout_s:=0.5',
+            '-p', 'verification_retry_s:=1.0'], stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             assert client.wait_for_service(timeout_sec=15)
             def pump(seconds, confidence=0., smoke=False, heat=False, readings=True):
@@ -63,7 +64,9 @@ def main():
             pump(.2); pump(.5, .5, True); state('TRACK')
             pump(.2, .05); state('RECOVER')
             pump(.2, .5, True); state('TRACK')
-            pump(.5, .9, True, True); state('ALERT')
+            pump(.3, .7, True, True); state('VERIFY')
+            pump(.5, .7, True, True); state('TRACK')
+            pump(1.3, .9, True, True); state('ALERT')
             command('RETURN'); state('RETURN_TO_BASE')
             rover_home.publish(Empty()); pump(.3); state('RETURN_TO_BASE')
             drone_home.publish(Bool(data=True)); pump(.3); state('IDLE')

@@ -8,7 +8,8 @@ waypoints:
   - {name: west_north, x: -10.0, y: 10.0, yaw: 0.0}
   - {name: north_centre, x: 0.0, y: 10.0, yaw: 0.0}
   - {name: north_east, x: 10.0, y: 10.0, yaw: -1.5708}
-  - {name: east_centre, x: 10.0, y: 4.0, yaw: -1.5708}
+  # I keep this stop clear of the sensor-station collision at (10, 4).
+  - {name: east_centre, x: 10.0, y: 5.5, yaw: -1.5708}
   - {name: junction, x: 10.0, y: 0.0, yaw: 3.1416}
   - {name: centre, x: 0.0, y: 0.0, yaw: 3.1416}
   - {name: west_centre_return, x: -10.0, y: 0.0, yaw: -1.5708}

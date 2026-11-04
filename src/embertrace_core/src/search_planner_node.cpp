@@ -289,7 +289,8 @@ private:
     double target_x = position.x;
     double target_y = position.y;
     const bool gas = reading.smoke_detected || reading.co2_detected;
-    bool casting = state_ == MissionState::RECOVER || !gas;
+    // IR/local heat can initiate investigation before the gas plume is reached.
+    bool casting = state_ == MissionState::RECOVER || !(gas || reading.temperature_anomaly);
     const double scout_age = have_scout_ ?
       (current - rclcpp::Time(scout_pose_.header.stamp)).seconds() : -1.0;
     if (!gas && !reading.temperature_anomaly && have_scout_ &&

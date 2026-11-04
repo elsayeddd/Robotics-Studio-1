@@ -11,7 +11,7 @@ from rclpy.node import Node
 from rclpy.qos import QoSProfile, DurabilityPolicy, qos_profile_sensor_data
 from ament_index_python.packages import get_package_prefix
 from embertrace_interfaces.msg import MissionState, PerceptionStatus
-from geometry_msgs.msg import Twist
+from geometry_msgs.msg import Twist, PoseStamped
 from nav_msgs.msg import Odometry
 from rosgraph_msgs.msg import Clock
 from std_msgs.msg import Bool
@@ -20,6 +20,7 @@ from std_msgs.msg import Bool
 def main():
     output = Path('log/motion-integration'); output.mkdir(parents=True, exist_ok=True)
     rclpy.init(); node = Node('motion_integration_test')
+    goal = node.create_publisher(PoseStamped, '/embertrace/navigation_goal', 10)
     command = node.create_publisher(Twist, '/husky1/autonomy_cmd_vel', 10)
     mission = node.create_publisher(MissionState, '/embertrace/mission_state',
         QoSProfile(depth=1, durability=DurabilityPolicy.TRANSIENT_LOCAL))
@@ -35,7 +36,7 @@ def main():
         for robot in ('husky1', 'drone1')]
     processes, handles = [], []
     simulated = 100.
-    def pump(seconds, wind=PerceptionStatus.WIND_DRONE_SAFE, allowed=True, streams=True, frozen=False):
+    def pump(seconds, wind=PerceptionStatus.WIND_DRONE_SAFE, allowed=True, streams=True, frozen=False, mode=MissionState.PATROL, target=False):
         nonlocal simulated
         deadline = time.monotonic() + seconds; next_sample = 0
         while time.monotonic() < deadline:
@@ -46,7 +47,7 @@ def main():
                 value.clock.nanosec = int((simulated % 1) * 1e9); clock.publish(value)
                 if streams:
                     state = MissionState(); state.header.stamp = value.clock
-                    state.state = state.PATROL if allowed else state.EMERGENCY_STOP
+                    state.state = mode if allowed else state.EMERGENCY_STOP
                     state.motion_allowed = allowed; mission.publish(state)
                     reading = PerceptionStatus(); reading.header.stamp = value.clock
                     reading.environment_fresh = True; reading.wind_condition = wind
@@ -55,6 +56,11 @@ def main():
                     pose = Odometry(); pose.header.stamp = value.clock; pose.header.frame_id = 'husky1_odom'
                     pose.pose.pose.position.x = -14.; pose.pose.pose.position.y = -12.
                     pose.pose.pose.position.z = 8.; pose.pose.pose.orientation.w = 1.; odom.publish(pose)
+                    if target:
+                        request = PoseStamped(); request.header.stamp = value.clock
+                        request.header.frame_id = 'husky1_odom'; request.pose.orientation.w = 1.
+                        request.pose.position.x = -10.; request.pose.position.y = -12.
+                        request.pose.position.z = 8.; goal.publish(request)
                     velocity = Twist(); velocity.linear.x = .4; command.publish(velocity)
                 next_sample = time.monotonic() + .05
             rclpy.spin_once(node, timeout_sec=.01)
@@ -66,7 +72,10 @@ def main():
         for executable in ('velocity_guard_node', 'drone_scout_node'):
             handle = (output / f'{executable}.log').open('w'); handles.append(handle)
             path = Path(get_package_prefix('embertrace_core')) / 'lib/embertrace_core' / executable
-            processes.append(subprocess.Popen([str(path), '--ros-args', '-p', 'use_sim_time:=true'],
+            options = ['--ros-args', '-p', 'use_sim_time:=true']
+            if executable == 'drone_scout_node':
+                options += ['-p', 'autonomous_mission:=true']
+            processes.append(subprocess.Popen([str(path), *options],
                 stdout=handle, stderr=subprocess.STDOUT, start_new_session=True))
         pump(2.5)
         assert speed('husky1') > .1 and speed('drone1') > .1, 'Safe wind did not permit motion'
@@ -76,12 +85,18 @@ def main():
             pump(.4, wind)
             assert all(speed(r) < 1e-6 for r in velocities), 'Unknown/unsafe wind permitted motion'
         pump(.4); assert speed('husky1') > .1 and speed('drone1') > .1
+        pump(.4, mode=MissionState.TRACK)
+        assert speed('drone1') < 1e-6, 'Aerial investigation moved without a planner goal'
+        pump(.4, mode=MissionState.TRACK, target=True)
+        assert speed('drone1') > .1 and abs(velocities['drone1'][1].linear.y) < 1e-6, 'Aerial goal was not followed'
+        pump(3.5, mode=MissionState.TRACK)
+        assert speed('drone1') < 1e-6, 'Stale aerial goal remained active'
         pump(.4, allowed=False)
         assert all(speed(r) < 1e-6 for r in velocities), 'Motion-disallowed state failed'
         pump(.4)
         pump(2., streams=False, frozen=True)
         assert all(speed(r) < 1e-6 for r in velocities), 'Frozen ROS time defeated receipt watchdogs'
-        print('Motion DDS integration passed: vehicle wind limits, state inhibition and frozen-clock heartbeat expiry', flush=True)
+        print('Motion DDS integration passed: vehicle wind limits, aerial investigation goals/expiry, state inhibition and frozen-clock heartbeat expiry', flush=True)
     finally:
         for process in processes:
             if process.poll() is None: os.killpg(process.pid, signal.SIGINT)

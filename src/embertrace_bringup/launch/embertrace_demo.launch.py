@@ -94,7 +94,7 @@ def _stack(context):
     if enabled('use_dashboard'):
         actions.append(TimerAction(period=5.0, actions=[Node(
             package='embertrace_ui', executable='operator_dashboard', name='operator_dashboard',
-            output='screen', parameters=[{'use_sim_time': sim_time}], remappings=primary)]))
+            output='screen', parameters=[{'use_sim_time': sim_time, 'primary_vehicle': 'rover' if rover else 'drone'}], remappings=primary)]))
     return actions
 
 

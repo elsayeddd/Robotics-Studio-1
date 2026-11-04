@@ -42,6 +42,24 @@ TEST(SourceEstimator, RequiresSpatialEvidence)
   EXPECT_FALSE(estimator.estimate().has_value());
 }
 
+TEST(SourceEstimator, AccumulatesSlowMotionAcrossSmallSensorSteps)
+{
+  SourceEstimator estimator;
+  // At 5 Hz the 0.5 m/s rover moves less than the 0.3 m sampling interval.
+  for (int i = 0; i <= 100; ++i) {
+    estimator.add({0.05 * i, 0.0, 15.0, 35.0, 0.0});
+  }
+  EXPECT_GE(estimator.sample_count(), 12U);
+  EXPECT_LE(estimator.sample_count(), 20U);
+  EXPECT_TRUE(estimator.estimate().has_value());
+  const auto count = estimator.sample_count();
+  for (int i = 0; i < 100; ++i) {estimator.add({5.0, 0.0, 15.0, 35.0, 0.0});}
+  EXPECT_EQ(estimator.sample_count(), count);
+  estimator.clear();
+  estimator.add({-10.0, -10.0, 15.0, 35.0, 0.0});
+  EXPECT_EQ(estimator.sample_count(), 1U);
+}
+
 // The test knows the simulator source; the estimator sees only sensor samples.
 // Ten independently seeded noise sequences exercise the roadmap's error metric.
 TEST(SourceEstimator, TenSeededStandardScenarioTrials)

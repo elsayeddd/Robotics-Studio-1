@@ -59,6 +59,7 @@ private:
 
   SourceEstimatorConfig config_;
   std::deque<SearchSample> samples_;
+  double anchor_x_{0.0}, anchor_y_{0.0};
 };
 
 }  // namespace embertrace_core

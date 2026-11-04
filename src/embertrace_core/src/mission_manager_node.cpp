@@ -60,6 +60,10 @@ public:
     require_scout_return_ = declare_parameter<bool>("require_scout_return", false);
     aerial_mission_ = declare_parameter<bool>("aerial_mission", false);
     verification_timeout_s_ = declare_parameter<double>("verification_timeout_s", 15.0);
+    verification_retry_s_ = declare_parameter<double>("verification_retry_s", 5.0);
+    if (!std::isfinite(verification_timeout_s_) || verification_timeout_s_ <= 0 ||
+      !std::isfinite(verification_retry_s_) || verification_retry_s_ <= 0)
+    {throw std::invalid_argument("Verification timing must be finite and positive");}
     required_detection_samples_ = std::max<int>(
       1L, declare_parameter<int>("required_detection_samples", 3));
     required_confirmation_samples_ = std::max<int>(
@@ -190,15 +194,16 @@ private:
     const auto current = now();
     if (current < last_clock_) {
       have_reading_ = have_estimate_ = false; detection_count_ = confirmation_count_ = 0;
+      verification_retry_after_ = state_entered_ = current;
     }
     last_clock_ = current;
     if (state_ == MissionState::VERIFY &&
       (current - state_entered_).seconds() > verification_timeout_s_)
     {
-      state_ = MissionState::TRACK;
-      state_entered_ = current;
-      detail_ = "Verification timed out; continue local investigation";
       confirmation_count_ = 0;
+      verification_retry_after_ = current + rclcpp::Duration::from_seconds(verification_retry_s_);
+      transition_to(MissionState::TRACK, "Verification timed out; continue local investigation");
+      return;
     }
     if (reading->header.stamp.sec < 0) {detection_count_ = confirmation_count_ = 0; return;}
     const double age = (current - rclcpp::Time(reading->header.stamp)).seconds();
@@ -252,7 +257,8 @@ private:
       case MissionState::TRACK:
         if (reading->fused_confidence < lost_confidence_) {
           transition_to(MissionState::RECOVER, "Plume signal lost; begin crosswind cast");
-        } else if (reading->fused_confidence >= verify_confidence_ && reading->temperature_anomaly) {
+        } else if (reading->fused_confidence >= verify_confidence_ && reading->temperature_anomaly &&
+          current >= verification_retry_after_) {
           transition_to(MissionState::VERIFY, "High smoke and thermal evidence near source");
         }
         break;
@@ -290,6 +296,7 @@ private:
       detection_count_ = 0;
       confirmation_count_ = 0;
       have_estimate_ = false;
+      verification_retry_after_ = now();
       transition_to(MissionState::PATROL, "Patrol started by operator");
     } else if (command == "PAUSE" && state_ != MissionState::EMERGENCY_STOP) {
       if (state_ != MissionState::PAUSED) {pre_pause_state_ = state_;}
@@ -305,6 +312,7 @@ private:
       detection_count_ = 0;
       confirmation_count_ = 0;
       have_estimate_ = false;
+      verification_retry_after_ = now();
       transition_to(MissionState::IDLE, "System reset; waiting for START");
     } else {
       response->accepted = false;
@@ -320,6 +328,7 @@ private:
     const auto current = now();
     if (current < last_clock_) {
       have_reading_ = have_estimate_ = false;
+      verification_retry_after_ = state_entered_ = current;
       detection_count_ = confirmation_count_ = 0;
       last_reading_stamp_ = rclcpp::Time(0, 0, RCL_ROS_TIME);
     }
@@ -424,6 +433,8 @@ private:
   bool dismissed_anomaly_{false};
   bool require_scout_return_{false}, aerial_mission_{false}, rover_home_{false}, scout_home_{false};
   double verification_timeout_s_{15.0};
+  double verification_retry_s_{5.0};
+  rclcpp::Time verification_retry_after_{0, 0, RCL_ROS_TIME};
   rclcpp::Time state_entered_{0, 0, RCL_ROS_TIME};
   rclcpp::Publisher<MissionState>::SharedPtr state_publisher_;
   rclcpp::Publisher<embertrace_interfaces::msg::FireAlert>::SharedPtr alert_publisher_;

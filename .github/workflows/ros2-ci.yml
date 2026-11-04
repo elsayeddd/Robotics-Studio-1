@@ -43,6 +43,7 @@ jobs:
         shell: bash
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
+          LP_NUM_THREADS: "2"
         run: |
           source /opt/ros/humble/setup.bash
           source install/setup.bash
@@ -54,6 +55,7 @@ jobs:
         shell: bash
         env:
           LIBGL_ALWAYS_SOFTWARE: "1"
+          LP_NUM_THREADS: "2"
           ROS_DOMAIN_ID: "74"
         run: |
           source /opt/ros/humble/setup.bash
