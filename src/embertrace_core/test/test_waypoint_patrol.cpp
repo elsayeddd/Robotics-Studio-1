@@ -364,4 +364,16 @@ TEST(WaypointPatrolNav2, ReturnToBaseRetriesUntilNav2ReportsSuccess)
   EXPECT_FALSE(patrol.tick(200.0).has_value());      // arrived: nothing more to send
 }
 
+TEST(WaypointPatrol, ReturnsToObservedLaunchPose)
+{
+  WaypointPatrol patrol(0.5);
+  patrol.set_waypoints({{"ranger_base", -5.0, -5.0, 0.0},
+                        {"survey", 5.0, 5.0, 0.0}}, "ranger_base");
+  patrol.set_home_pose(-13.4, -12.7);
+  const auto home = patrol.on_mission_state(PatrolTrigger::kReturnToBase);
+  ASSERT_TRUE(home.has_value());
+  EXPECT_DOUBLE_EQ(home->x, -13.4);
+  EXPECT_DOUBLE_EQ(home->y, -12.7);
+}
+
 }  // namespace embertrace_core

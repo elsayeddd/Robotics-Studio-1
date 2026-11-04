@@ -58,8 +58,15 @@ Fresh merged revision:
 - Repository validation and strict standalone compilation passed.
 - Perception: 79 checks; mission policy: 54 checks including standalone
   availability and verification retry; system logic: 41 checks; Python: eight tests passed.
-- Full native build, DDS tests and fresh Gazebo acceptance are in progress.
-  Results are retained under `log/fresh-branch-*`.
+- Full five-package build passed (`log/fresh-branch-build-final.log`).
+- Full native suite passed: **56 tests, zero errors/failures/skips**, including
+  Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
+  downwind search, Nav2 actions and waypoint recovery (`log/fresh-native-tests.log`).
+- Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance is
+  in progress; historical results below are not a substitute for that rerun.
+- Native compilation exposed a cross-branch waypoint API regression. I retained
+  the newer retry library and added selected-platform, loop and measured-home
+  feedback. Qt shutdown now checks the ROS context before spinning.
 
 Historical evidence from main through `31dbc1d` (requires rerunning for the new
 policy):

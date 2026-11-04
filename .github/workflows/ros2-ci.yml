@@ -30,7 +30,7 @@ jobs:
         shell: bash
         run: |
           source /opt/ros/humble/setup.bash
-          MAKEFLAGS="-j2 -l2" colcon build --parallel-workers 2 --event-handlers console_direct+
+          MAKEFLAGS="-j2" colcon build --parallel-workers 1 --event-handlers console_direct+
       - name: Test
         shell: bash
         run: |

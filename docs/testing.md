@@ -23,7 +23,7 @@ Stop other EmberTrace launches first. Source Humble and the new workspace.
 ```bash
 ./scripts/build.sh
 source install/setup.bash
-ROS_DOMAIN_ID=73 colcon test --packages-select embertrace_core --event-handlers console_direct+
+ROS_DOMAIN_ID=73 colcon test --event-handlers console_direct+
 colcon test-result --verbose
 ```
 
@@ -49,6 +49,14 @@ It checks native sensors, map/TF/Nav2 when present, selected-vehicle motion,
 pause/resume, measured return and E-stop. Automatic mode also checks that the
 unselected vehicle remains held. The launch log stays in log/demo-smoke. Use
 `LIBGL_ALWAYS_SOFTWARE=1 xvfb-run -a` if a virtual display is needed.
+
+The scene check exercises real healthy → burning → burnt replacements and
+requires the native IR and local gas readings to follow those changes:
+
+```bash
+ROS_DOMAIN_ID=76 LIBGL_ALWAYS_SOFTWARE=1 LP_NUM_THREADS=2 xvfb-run -a \
+  python3 scripts/ros_scene_integration_test.py --output log/scene-integration-01
+```
 
 ## 4. Recorded perception evidence
 
