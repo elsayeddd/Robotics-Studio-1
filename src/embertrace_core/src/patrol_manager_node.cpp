@@ -12,6 +12,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
 #include "rclcpp/rclcpp.hpp"
+#include "nav_msgs/msg/odometry.hpp"
 #include "std_msgs/msg/empty.hpp"
 #include "std_msgs/msg/u_int32.hpp"
 #include "std_msgs/msg/string.hpp"
@@ -76,6 +77,17 @@ public:
 
     loops_publisher_ = create_publisher<std_msgs::msg::UInt32>("/husky1/patrol_loops", 10);
     arrival_publisher_ = create_publisher<std_msgs::msg::String>("/husky1/mission_navigation_status", 10);
+    home_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
+      "/husky1/odometry", rclcpp::SensorDataQoS(),
+      [this](nav_msgs::msg::Odometry::SharedPtr message) {
+        const auto& position = message->pose.pose.position;
+        const double age = (now() - rclcpp::Time(message->header.stamp)).seconds();
+        if (!home_set_ && message->header.frame_id == frame_id_ && age >= -.1 && age <= 1 &&
+            std::isfinite(position.x) && std::isfinite(position.y)) {
+          patrol_->set_home_pose(position.x, position.y);
+          home_set_ = true;
+        }
+      });
     goal_publisher_ = create_publisher<geometry_msgs::msg::PoseStamped>(
       "/embertrace/navigation_goal", 10);
     return_complete_publisher_ = create_publisher<std_msgs::msg::Empty>(
@@ -231,10 +243,6 @@ private:
     const auto& position = transform.transform.translation;
     const double age = (now() - rclcpp::Time(transform.header.stamp)).seconds();
     if (age < -.1 || age > 1 || !std::isfinite(position.x) || !std::isfinite(position.y)) return;
-    if (!home_set_) {
-      patrol_->set_home_pose(position.x, position.y);
-      home_set_ = true;
-    }
     // Shows where the rover believes it is (in the waypoint frame) and whether
     // a patrol leg is active, so a stalled run can be diagnosed from the log.
     RCLCPP_INFO_THROTTLE(
@@ -252,6 +260,7 @@ private:
   std::size_t skips_logged_{0};
   bool arrival_announced_{false}, home_set_{false};
   std::uint64_t epoch_{0};
+  rclcpp::Subscription<nav_msgs::msg::Odometry>::SharedPtr home_subscription_;
   rclcpp::Publisher<std_msgs::msg::UInt32>::SharedPtr loops_publisher_;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr arrival_publisher_;
   std::unique_ptr<WaypointPatrol> patrol_;

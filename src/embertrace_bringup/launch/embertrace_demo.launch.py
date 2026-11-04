@@ -43,7 +43,7 @@ def generate_launch_description():
         ),
         launch_arguments={
             "use_sim_time": use_sim_time,
-            "use_nav2": use_nav2,
+            "use_nav2": LaunchConfiguration("use_nav2"),
             "use_rviz": use_rviz,
             "world_file": world_file,
             "use_drone": LaunchConfiguration("use_drone"),

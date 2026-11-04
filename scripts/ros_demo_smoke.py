@@ -63,11 +63,19 @@ def main():
                     if predicate():
                         return
                 raise AssertionError(f'Timeout in {args.platform}; state={state}, poses={poses}')
-            def command(text, accepted=True):
-                request = OperatorCommand.Request(); request.command = text
-                future = client.call_async(request)
-                rclpy.spin_until_future_complete(node, future, timeout_sec=5)
-                assert future.done() and future.result().accepted == accepted, f'Command failed: {text}'
+            def command(text, accepted=True, wait_ready=False):
+                deadline = time.monotonic() + (15 if wait_ready else 0)
+                while True:
+                    request = OperatorCommand.Request(); request.command = text
+                    future = client.call_async(request)
+                    rclpy.spin_until_future_complete(node, future, timeout_sec=5)
+                    assert future.done() and future.exception() is None, f'Command timed out: {text}'
+                    response = future.result()
+                    if response.accepted == accepted: return
+                    if not wait_ready or time.monotonic() >= deadline:
+                        raise AssertionError(f'Command failed: {text}: {response.message}')
+                    print(f'Waiting for START readiness: {response.message}', flush=True)
+                    pump(.5)
             def zero():
                 for robot in robots:
                     received, twist = commands.get(robot, (0, None))
@@ -76,7 +84,7 @@ def main():
                                                 twist.angular.x, twist.angular.y, twist.angular.z)) < 1e-6, f'{robot} still moving'
             until(lambda: len(poses) == len(robots) and client.service_is_ready(), 25)
             initial = dict(poses)
-            command('START')
+            command('START', wait_ready=True)
             until(lambda: math.dist(initial[active_robot], poses[active_robot]) > 0.8, 70)
             moved = {r: math.dist(initial[r], poses[r]) for r in robots}
             for robot in robots:
@@ -87,7 +95,7 @@ def main():
             command('RETURN'); until(lambda: state['name'] == 'IDLE', 75); pump(1); zero()
             for robot in robots:
                 assert math.dist(initial[robot], poses[robot]) < 1.7, f'{robot} did not return to its base'
-            command('START'); until(lambda: state['name'] == 'PATROL', 5)
+            command('START', wait_ready=True); until(lambda: state['name'] == 'PATROL', 5)
             command('E_STOP'); pump(1); zero()
             for text in ('START', 'RESUME', 'RETURN'):
                 command(text, accepted=False)
@@ -97,14 +105,15 @@ def main():
             (output / 'result.json').write_text(json.dumps(result, indent=2) + '\n')
             print('Gazebo integration passed: ' + json.dumps(result), flush=True)
         finally:
-            if node:
-                node.destroy_node(); rclpy.shutdown()
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGINT)
                 try:
                     process.wait(timeout=10)
                 except subprocess.TimeoutExpired:
                     os.killpg(process.pid, signal.SIGKILL); process.wait(timeout=5)
+            if node:
+                node.destroy_node()
+                if rclpy.ok(): rclpy.shutdown()
             print(f'Launch evidence: {output / "launch.log"}', flush=True)
 
 

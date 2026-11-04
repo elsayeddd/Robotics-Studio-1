@@ -63,7 +63,17 @@ Fresh merged revision:
   Qt lifecycle, perception/mission DDS, selected motion/frozen-clock guards,
   downwind search, Nav2 actions and waypoint recovery (`log/fresh-native-tests.log`).
 - Parrot Xacro expands successfully with eight links. Fresh Gazebo acceptance is
-  in progress; historical results below are not a substitute for that rerun.
+  now includes passing standalone rover/drone and automatic-mode motion, pause/
+  resume, measured return and E-stop checks (`log/fresh-demo-acceptance` and
+  `log/fresh-automatic-mode`). The automatic check confirmed the unselected
+  rover stayed still. The initial failed runs are retained.
+- Actual healthy/burning/burnt scene transitions passed with native IR and gas
+  coupling (`log/fresh-scene-integration`). Healthy/burning/burnt IR peaks were
+  22.4/300.0/45.5°C; burning smoke/CO2 rose and returned to baseline when burnt.
+- Runtime acceptance caught missing executable modes on uploaded Python nodes,
+  a launch boolean case mismatch, and a temporary zero TF mistaken for home.
+  Permissions are now checked statically; navigation forwarding is corrected;
+  rover home is captured from actual Gazebo odometry.
 - Native compilation exposed a cross-branch waypoint API regression. I retained
   the newer retry library and added selected-platform, loop and measured-home
   feedback. Qt shutdown now checks the ROS context before spinning.

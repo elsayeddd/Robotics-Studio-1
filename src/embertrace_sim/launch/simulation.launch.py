@@ -273,8 +273,8 @@ def generate_launch_description():
 
     navigation = TimerAction(
         period=7.0,
-        condition=IfCondition(PythonExpression(["'", use_nav2, "' == 'true' and '",
-                                                 LaunchConfiguration("use_rover"), "' == 'true'"])),
+        condition=IfCondition(PythonExpression(["'", use_nav2, "'.lower() == 'true' and '",
+                                                 LaunchConfiguration("use_rover"), "'.lower() == 'true'"])),
         actions=[
             GroupAction(
                 scoped=True,
