@@ -351,3 +351,13 @@ coordinate frame. `map_frame` supplies the fallback when no route frame is set,
 and `odometry_topic` now controls measured home capture. A real DDS regression
 checks route-frame precedence and return to home from a custom odometry topic.
 The Parrot xacro expands to eight links with this repository's resources.
+
+The next dense fire run at `f57cdf2` approached tree_15 and stopped outside
+the conservative body envelope (minimum clearance 0.094 m). The search planner
+kept publishing the same target, and the adapter cancelled/restarted Nav2 every
+two simulated seconds. This reset its ten-second progress checker indefinitely.
+I paused and retained the failed run after reproducing that defect with a real
+DDS action server. The adapter now preserves targets within 0.15 m and 0.15 rad
+while pending/active, retaining the original pending deadline. Changed targets,
+mission changes and PAUSE still cancel; terminal results allow the same target
+to be retried. This removes the repeated-goal reset, not Nav2's collision checks.

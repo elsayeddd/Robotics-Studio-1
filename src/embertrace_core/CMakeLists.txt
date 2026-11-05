@@ -162,6 +162,9 @@ if(BUILD_TESTING)
   add_test(NAME ros_patrol_frame_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_patrol_frame_test.py)
   set_tests_properties(ros_patrol_frame_integration PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)
+  add_test(NAME ros_navigation_repeat_integration
+    COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_navigation_repeat_test.py)
+  set_tests_properties(ros_navigation_repeat_integration PROPERTIES TIMEOUT 35 RUN_SERIAL TRUE)
   add_test(NAME ros_event_logger_integration
     COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/../../scripts/ros_event_logger_test.py)
   set_tests_properties(ros_event_logger_integration PROPERTIES TIMEOUT 25 RUN_SERIAL TRUE)

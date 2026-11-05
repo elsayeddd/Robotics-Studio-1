@@ -1,0 +1,7 @@
+{
+  "renderer_workers": 6,
+  "thermal_frames": 720,
+  "maximum_wall_gap_s": 0.7350022030004766,
+  "invalid_thermal_cues_after_warmup": 0,
+  "operator_stop_reason": "Repeated identical goals reset the Nav2 progress checker while the rover stayed stationary. No autonomous pass claimed."
+}

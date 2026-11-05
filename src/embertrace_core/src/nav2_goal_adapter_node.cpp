@@ -120,6 +120,7 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode() : Node("nav2_goal_adapter_node") {
           {
             std::scoped_lock lock(goalMtx_);
             pending_goal_.reset();
+            requested_goal_.reset();
             ++generation_;
           }
           retry_timer_->cancel();
@@ -155,12 +156,24 @@ Nav2GoalAdapterNode::Nav2GoalAdapterNode() : Node("nav2_goal_adapter_node") {
           }
         }
 
-        ++generation_;
-
         {
           std::scoped_lock lock(goalMtx_);
+          // I keep the current action for repeated search targets so Nav2's
+          // progress checker can finish a leg or run its bounded recovery.
+          if (requested_goal_ && requested_goal_->header.frame_id == goal_msg->header.frame_id) {
+            const auto & previous = requested_goal_->pose;
+            const auto & incoming = goal_msg->pose;
+            const double yaw_delta = tf2::getYaw(previous.orientation) - tf2::getYaw(incoming.orientation);
+            if (std::hypot(previous.position.x - incoming.position.x,
+                           previous.position.y - incoming.position.y) <= 0.15 &&
+                std::abs(std::atan2(std::sin(yaw_delta), std::cos(yaw_delta))) <= 0.15) {
+              return;
+            }
+          }
+          ++generation_;
           cancelActiveGoal("new goal arrived");
           pending_goal_ = *goal_msg;
+          requested_goal_ = *goal_msg;
           pending_since_ = now();
           goal_ = *goal_msg;
         }
@@ -217,6 +230,7 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped &ra
     {
       std::scoped_lock lock(goalMtx_);
       pending_goal_.reset();
+      requested_goal_.reset();
     }
     publish_status("STALE");
     return;
@@ -259,6 +273,7 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped &ra
     {
       std::scoped_lock lock(goalMtx_);
       pending_goal_.reset();
+      requested_goal_.reset();
     }
     publish_status("OUT_OF_BOUNDS");
     RCLCPP_ERROR(get_logger(), "Invalid goal coordinates (NaN/Inf or out of bounds)");
@@ -283,6 +298,8 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped &ra
         if (!handle) {
           RCLCPP_ERROR(get_logger(), "Nav2 rejected the goal");
           if (request_generation == generation_) {
+            std::scoped_lock lock(goalMtx_);
+            requested_goal_.reset();
             publish_status("REJECTED");
           }
           return;
@@ -309,6 +326,10 @@ void Nav2GoalAdapterNode::sendNav2Goal(const geometry_msgs::msg::PoseStamped &ra
               &result) {
         if (request_generation != generation_) {
           return;
+        }
+        {
+          std::scoped_lock lock(goalMtx_);
+          requested_goal_.reset();
         }
         switch (result.code) {
           case rclcpp_action::ResultCode::SUCCEEDED:

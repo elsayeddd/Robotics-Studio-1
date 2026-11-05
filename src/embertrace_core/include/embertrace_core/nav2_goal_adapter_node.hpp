@@ -52,6 +52,7 @@ class Nav2GoalAdapterNode : public rclcpp::Node {
 
   mutable std::mutex goalMtx_;
   std::optional<geometry_msgs::msg::PoseStamped> pending_goal_;
+  std::optional<geometry_msgs::msg::PoseStamped> requested_goal_;
   rclcpp::Time pending_since_;
   geometry_msgs::msg::PoseStamped goal_;  // Last accepted goal for telemetry
   std::uint64_t generation_{0};
