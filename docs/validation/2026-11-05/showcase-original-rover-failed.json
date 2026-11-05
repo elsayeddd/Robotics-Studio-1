@@ -1,0 +1,76 @@
+{
+  "scenario": "fire",
+  "world_file": "embertrace_forest.sdf",
+  "trials": 1,
+  "completed": 0,
+  "successful": 0,
+  "resolved_sources": 0,
+  "median_source_error_m": null,
+  "results": [
+    {
+      "trial": "husky1_1301",
+      "source_revision": "a9aceea9b10cb4f24c9e4263000eee3ed8886f2e",
+      "harness_revision": "bce15458a734cd74c281834e4a54fcfe28699a25",
+      "seed": 1301,
+      "world_file": "embertrace_forest.sdf",
+      "gazebo_gui": true,
+      "ros_domain_id": 63,
+      "platform": "husky1",
+      "success": false,
+      "mission_completed": false,
+      "preflight_passed": true,
+      "preflight_time_s": 23.852556649999997,
+      "patrol_loops": 0,
+      "required_patrol_loops": 2,
+      "expected_patrol_visits": 21,
+      "visited_patrol_waypoints": [
+        "ranger_base"
+      ],
+      "visit_tolerance_m": 1.7,
+      "initial_position": [
+        -14.0,
+        -14.0,
+        0.0
+      ],
+      "final_position": [
+        -13.589213312918618,
+        -13.562802084454852,
+        0.0
+      ],
+      "return_error_m": null,
+      "return_reason": null,
+      "mission_time_s": 2.79,
+      "path_length_m": 0.5999901382026317,
+      "minimum_tree_clearance_m": 5.445199832617146,
+      "closest_tree": "tree_01",
+      "detection_latency_s": null,
+      "source_resolution_latency_s": null,
+      "first_confirmation_stamp_s": null,
+      "local_exposure_stamp_s": null,
+      "source_error_m": null,
+      "source_resolved": false,
+      "alerts": 0,
+      "false_alerts": 0,
+      "early_detection": false,
+      "recoveries": 0,
+      "states": [
+        "IDLE",
+        "PATROL",
+        "INVESTIGATE",
+        "TRACK",
+        "PAUSED"
+      ],
+      "latest_estimate": null,
+      "error": "Autonomous mission stopped: Wind/platform or sensor availability changed; review then RESUME"
+    }
+  ],
+  "platforms": {
+    "husky1": {
+      "trials": 1,
+      "successful": 0,
+      "resolved_sources": 0,
+      "median_source_error_m": null
+    }
+  },
+  "passed": false
+}

@@ -23,6 +23,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--platform', choices=('combined', 'rover', 'drone'), default='combined')
     parser.add_argument('--output', default='log/demo-smoke')
+    parser.add_argument('--gui', action='store_true', help='Show the simulator during the control checks')
     parser.add_argument('--max-sensor-holds', type=int, default=0,
                         help='Verify stopped motion and operator recovery after at most this many sensor holds')
     args = parser.parse_args()
@@ -124,7 +125,7 @@ def main():
             # Establish the recorder before the servers, as in the mission
             # campaign, so startup readiness also covers this DDS participant.
             process = subprocess.Popen(['ros2', 'launch', 'embertrace_bringup', 'embertrace_demo.launch.py',
-                'use_rviz:=false', 'use_dashboard:=false', 'gazebo_gui:=false',
+                'use_rviz:=false', 'use_dashboard:=false', 'gazebo_gui:='+str(args.gui).lower(),
                 f'mission_platform:={args.platform}', 'scenario:=no_fire'],
                 stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=environment)
             subprocess.run(['ros2', 'run', 'embertrace_core', 'demo_preflight.py',

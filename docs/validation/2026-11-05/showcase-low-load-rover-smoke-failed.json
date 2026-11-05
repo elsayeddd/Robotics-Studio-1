@@ -1,0 +1,10 @@
+{
+  "source_revision": "4a655ab",
+  "passed": false,
+  "supervisor": {
+    "exit_code": 1,
+    "elapsed_wall_s": 42.79422044754028
+  },
+  "failure": "Unexpected sensor hold during return, following successful movement/navigation. RGBD pixel-count reduction did not eliminate thermal expiry and was reverted.",
+  "log": "log/showcase-rover-low-load-smoke.log"
+}

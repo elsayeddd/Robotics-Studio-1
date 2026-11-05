@@ -141,7 +141,12 @@ confirmation promotes that same ID. Three repeated-warning DDS cycles plus
 confirmation and reset/new-mission isolation pass the focused test. This is one
 open investigation per mission, not spatial clustering of multiple simultaneous fires.
 
-The rover candidate adds a 10 cm local stopping buffer over global padding, a
-stronger global preference for clear paths and a 0.2 m SLAM movement threshold.
-The final rover run and complete final-suite confirmation are still in progress.
+The rover candidate retains a 10 cm local stopping buffer over global padding
+and a stronger global preference for clear paths. An attempted 0.2 m SLAM movement
+threshold was reverted because it held the initial sparse map too static. The
+full five-package confirmation passes **69 tests, zero errors/failures/skips**.
+The final dense rover run failed on unavailable IR after no suitable initial
+search goal was found. The original-forest rover check also failed on unavailable IR. A temporary quarter-pixel-count RGB/depth profile also failed its visible return
+smoke check on thermal expiry and was reverted. Original rover RGB/depth
+resolution is retained. Full rover autonomous acceptance remains outstanding.
 The preceding algorithm and integration explanation remains applicable.

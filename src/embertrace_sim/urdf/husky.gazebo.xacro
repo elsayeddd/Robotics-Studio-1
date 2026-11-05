@@ -153,10 +153,8 @@
       <camera>
         <horizontal_fov>2.0944</horizontal_fov>
         <image>
-          <!-- I halve RGB/depth dimensions to keep software-rendered camera
-               work from starving the independent thermal evidence stream. -->
-          <width>360</width>
-          <height>240</height>
+          <width>720</width>
+          <height>480</height>
         </image>
         <clip>
           <near>0.1</near>

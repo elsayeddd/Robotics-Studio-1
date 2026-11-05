@@ -1,0 +1,10 @@
+{
+  "source_revision": "3b4f43550f1b09b80543743a95233de08f15b97b",
+  "packages": 5,
+  "tests": 69,
+  "errors": 0,
+  "failures": 0,
+  "skipped": 0,
+  "full_confirmation_log": "log/showcase-native-final-confirmation.log",
+  "note": "An earlier full attempt had one source-fixture timing failure; two isolated reruns and this complete confirmation pass."
+}

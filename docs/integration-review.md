@@ -372,3 +372,10 @@ reverted the new 0.2 m SLAM movement threshold so stationary scans can continue
 filling that initial map, while retaining the extra local clearance and safer
 global path weighting. A final original-forest rover check follows; it must not
 be labelled a larger-forest pass.
+
+The original-forest rover check also pauses on unavailable IR. A temporary
+360 × 240 rover RGBD profile reaches movement/navigation success in the visible
+control smoke but pauses during return. I reverted that profile to retain the
+original image resolution; no autonomous pass or freshness fix is claimed. The
+standalone drone is the validated showcase option. Final handover opens it in
+IDLE with the larger forest and live console, awaiting the presenter's START.
