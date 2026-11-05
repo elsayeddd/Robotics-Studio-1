@@ -297,3 +297,26 @@ that offset, including the cross term. A controlled clipped-source fixture that
 previously appeared below the 4 m gate is now withheld. Numerical source positions,
 configured uncertainty limits and fire-confirmation rules are unchanged. Five
 focused native source/search suites pass; the next dense Gazebo rerun is pending.
+
+The user observed the next rover run turning against a tree. I paused the run
+and retained it as failed. The recorded pose came within 0.661 m of tree_15's
+centre. A live subscription audit then found the missing integration: local and
+global costmaps listened on `/husky1/local_costmap/scan` and
+`/husky1/global_costmap/scan`, both without publishers. Only SLAM and sensor health
+subscribed to the actual `/husky1/scan`; costmaps received front depth alone.
+The odometry alias was checked and is correctly connected to the EKF.
+
+Both collision layers now use the absolute LiDAR topic. Preflight verifies those
+actual subscriptions and rejects the old running stack. The local controller also
+checks the full padded polygon, and NavFn uses a 0.8 m enclosing radius globally.
+Its A* path computation is enabled; the turn critic now uses the same 1 m arrival
+tolerance as the goal checker. Neither maximum speed nor sensor expiry is raised.
+The trial observers now measure oriented footprint/trunk clearance from the world
+and odometry, failing on overlap; this evaluation geometry is never an autonomy
+input. Two pure geometry/world-loading regressions pass. Live reruns remain.
+
+The routing regression is red/green on live Gazebo stacks: the original stack
+fails the new collision LiDAR gate, while the corrected stack passes every
+preflight check including its first path. Parameter/service introspection confirms
+the padded local footprint critic, global 0.8 m radius and A* setting are loaded.
+Before/after subscription and preflight evidence is saved in the validation folder.

@@ -19,6 +19,7 @@ from std_msgs.msg import UInt32
 from geometry_msgs.msg import PoseWithCovarianceStamped
 from embertrace_interfaces.msg import FireAlert, MissionState, TrialTruth
 from embertrace_interfaces.srv import OperatorCommand
+from mission_clearance import TreeClearance
 
 
 def stop(process):
@@ -46,6 +47,9 @@ def trial(args, output, number):
     else:
         route = yaml.safe_load((config_root/'patrol_waypoints.yaml').read_text())['waypoints']
     expected_visits = len(route)*required_loops + int(robot == 'husky1')
+    sim_root = Path(get_package_share_directory('embertrace_sim'))
+    clearance_model = (TreeClearance.from_files(sim_root/'worlds'/args.world_file,
+                       sim_root/'config/nav2_params_husky1.yaml') if robot == 'husky1' else None)
     visit_tolerance = 1.0 if robot == 'drone1' else 1.7
     result = dict(
         trial=name,
@@ -71,6 +75,8 @@ def trial(args, output, number):
         return_reason=None,
         mission_time_s=None,
         path_length_m=0.0,
+        minimum_tree_clearance_m=None,
+        closest_tree=None,
         detection_latency_s=None,
         source_resolution_latency_s=None,
         first_confirmation_stamp_s=None,
@@ -149,6 +155,13 @@ def trial(args, output, number):
         if messages["start"] is not None and messages["previous_pose"] is not None:
             result["path_length_m"] += math.dist(current, messages["previous_pose"])
         messages["previous_pose"] = current
+        if clearance_model is not None and messages['start'] is not None:
+            q = message.pose.pose.orientation
+            yaw = math.atan2(2*(q.w*q.z+q.x*q.y), 1-2*(q.y*q.y+q.z*q.z))
+            clearance, tree = clearance_model.closest(p.x, p.y, yaw)
+            if clearance is not None and (result['minimum_tree_clearance_m'] is None or
+                                          clearance < result['minimum_tree_clearance_m']):
+                result.update(minimum_tree_clearance_m=clearance, closest_tree=tree)
         visited = result['visited_patrol_waypoints']
         if messages['start'] is not None and len(visited)<expected_visits:
             target = route[len(visited)%len(route)]
@@ -278,6 +291,8 @@ def trial(args, output, number):
                     last_attempt = time.monotonic()
                 if messages["start"] is not None:
                     result["mission_time_s"] = now_s - messages["start"]
+                    if result['minimum_tree_clearance_m'] is not None and result['minimum_tree_clearance_m'] < 0:
+                        raise RuntimeError('Measured rover footprint overlaps trunk '+str(result['closest_tree']))
                     if mission.state in (MissionState.PAUSED, MissionState.EMERGENCY_STOP):
                         raise RuntimeError("Autonomous mission stopped: " + mission.detail)
                     if messages["finished"]:

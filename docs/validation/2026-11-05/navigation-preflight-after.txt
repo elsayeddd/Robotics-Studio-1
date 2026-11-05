@@ -1,0 +1,12 @@
+PASS: mission heartbeat
+PASS: ambient wind
+PASS: event logging
+PASS: rover sensors
+PASS: rover perception
+PASS: occupancy map
+PASS: map to odom TF
+PASS: Nav2 action
+PASS: Nav2 lifecycle active
+PASS: collision LiDAR routing
+PASS: first patrol path
+PASS: continuous readiness window

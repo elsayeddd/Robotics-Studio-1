@@ -13,6 +13,24 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src/embertrace_core/python"))
 from embertrace_tools.fire_scene import state_model
+from mission_clearance import TreeClearance
+
+
+class ClearanceTests(unittest.TestCase):
+    def test_turning_a_square_corner_can_touch_a_trunk(self):
+        model = TreeClearance([('trunk', .69, .69, .28)],
+                              [[.5, .5], [.5, -.5], [-.5, -.5], [-.5, .5]])
+        self.assertLess(model.closest(0, 0, 0)[0], 0)
+        self.assertGreater(model.closest(0, 0, 3.141592653589793/4)[0], .19)
+        self.assertLess(model.closest(.69, .69, 0)[0], -.28)
+
+    def test_both_forests_supply_their_actual_trunks(self):
+        package = ROOT/'src/embertrace_sim'
+        for world, count in [('embertrace_forest.sdf', 20), ('embertrace_forest_dense.sdf', 60)]:
+            model = TreeClearance.from_files(package/'worlds'/world,
+                                            package/'config/nav2_params_husky1.yaml')
+            self.assertEqual(len(model.trees), count)
+            self.assertGreater(model.closest(-14, -14, 0)[0], 0)
 
 
 class SceneTests(unittest.TestCase):

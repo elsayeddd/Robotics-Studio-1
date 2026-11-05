@@ -69,6 +69,7 @@ def main():
                 "map to odom TF": False,
                 "Nav2 action": False,
                 "Nav2 lifecycle active": False,
+                "collision LiDAR routing": False,
                 "first patrol path": False,
             }
         )
@@ -180,6 +181,14 @@ def main():
             for topic in ("/embertrace/mission_event", "/embertrace/fire_alert")
         )
         if not args.no_nav2:
+            collision_subscribers = {
+                (info.node_namespace, info.node_name)
+                for info in node.get_subscriptions_info_by_topic('/husky1/scan')
+            }
+            checks['collision LiDAR routing'] = node.count_publishers('/husky1/scan') > 0 and {
+                ('/husky1/local_costmap', 'local_costmap'),
+                ('/husky1/global_costmap', 'global_costmap'),
+            }.issubset(collision_subscribers)
             checks["Nav2 action"] = action.server_is_ready()
             checks["map to odom TF"] = buffer.can_transform(
                 "husky1_map", "husky1_odom", rclpy.time.Time()

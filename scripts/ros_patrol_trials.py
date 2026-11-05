@@ -17,6 +17,7 @@ from ament_index_python.packages import get_package_share_directory
 from embertrace_interfaces.msg import MissionState, FireAlert
 from embertrace_interfaces.srv import OperatorCommand
 from nav_msgs.msg import Odometry
+from mission_clearance import TreeClearance
 from std_msgs.msg import String, UInt32
 
 
@@ -33,6 +34,9 @@ def main():
     output = Path(args.output); output.mkdir(parents=True, exist_ok=True)
     if (output / 'result.json').exists(): raise FileExistsError('Use a fresh output directory')
     route = yaml.safe_load((Path(get_package_share_directory('embertrace_bringup')) / 'config/patrol_waypoints.yaml').read_text())['waypoints']
+    sim_root = Path(get_package_share_directory('embertrace_sim'))
+    clearance_model = TreeClearance.from_files(sim_root/'worlds'/args.world_file,
+                                             sim_root/'config/nav2_params_husky1.yaml')
     base = (route[0]['x'], route[0]['y'])
     expected_visits = len(route) * args.loops + 1
     visit_tolerance = 1.7
@@ -40,12 +44,19 @@ def main():
               'harness_revision': subprocess.check_output(['git', 'log', '-1', '--format=%H', '--', 'scripts/ros_patrol_trials.py'], text=True).strip(),
               'world_file': args.world_file, 'gazebo_gui': args.gui,
               'visited_waypoints': [], 'visit_tolerance_m': visit_tolerance,
-              'closed_loops': 0, 'skipped_waypoints': 0, 'navigation_failures': 0, 'path_length_m': 0., 'false_alerts': 0, 'passed': False}
+              'closed_loops': 0, 'skipped_waypoints': 0, 'navigation_failures': 0, 'path_length_m': 0., 'false_alerts': 0, 'passed': False,
+              'minimum_tree_clearance_m': None, 'closest_tree': None}
     rclpy.init(); node = Node('patrol_acceptance')
     node.set_parameters([rclpy.parameter.Parameter('use_sim_time', value=True)])
     current = {'state': None, 'pose': None}
     def odometry(msg):
         p = msg.pose.pose.position; pose = (p.x, p.y)
+        q = msg.pose.pose.orientation
+        yaw = math.atan2(2*(q.w*q.z+q.x*q.y), 1-2*(q.y*q.y+q.z*q.z))
+        clearance, tree = clearance_model.closest(p.x, p.y, yaw)
+        if clearance is not None and (result['minimum_tree_clearance_m'] is None or
+                                     clearance < result['minimum_tree_clearance_m']):
+            result.update(minimum_tree_clearance_m=clearance, closest_tree=tree)
         if current['pose'] is not None:
             distance = math.dist(pose, current['pose'])
             if distance < 2: result['path_length_m'] += distance
@@ -97,12 +108,19 @@ def main():
                         print(json.dumps({'elapsed': elapsed, **current, **result}), flush=True); last_report = time.monotonic()
                     if current['state'] in ('PAUSED', 'EMERGENCY_STOP') or result['false_alerts']:
                         raise RuntimeError(f'Unexpected mission state during no-fire patrol: {current}')
+                    if result['skipped_waypoints']:
+                        raise RuntimeError('A required patrol waypoint was skipped')
+                    if result['minimum_tree_clearance_m'] is not None and result['minimum_tree_clearance_m'] < 0:
+                        raise RuntimeError('Measured rover footprint overlaps trunk '+str(result['closest_tree']))
                     if result['closed_loops'] >= args.loops: break
                     if elapsed > args.max_duration or process.poll() is not None: raise RuntimeError('Patrol mission deadline or launch exit')
                 assert result['closed_loops'] >= args.loops, 'Patrol loops did not complete'
             # The mission policy automatically returns after its configured two loops.
             deadline = time.monotonic() + 120
-            while time.monotonic() < deadline and (current['state'] != 'IDLE' or len(result['visited_waypoints']) < expected_visits): rclpy.spin_once(node, timeout_sec=.1)
+            while time.monotonic() < deadline and (current['state'] != 'IDLE' or len(result['visited_waypoints']) < expected_visits):
+                rclpy.spin_once(node, timeout_sec=.1)
+                if result['minimum_tree_clearance_m'] is not None and result['minimum_tree_clearance_m'] < 0:
+                    raise RuntimeError('Measured rover footprint overlaps trunk '+str(result['closest_tree']))
             assert current['state'] == 'IDLE' and current['pose'] is not None, 'Patrol did not park in IDLE'
             assert len(result['visited_waypoints']) == expected_visits, 'Route points were not physically visited in order'
             result['return_error_m'] = math.dist(current['pose'], base)

@@ -168,3 +168,9 @@ rover/drone axes returned to zero on button release, connection loss and focus
 loss. Screenshots and the action/assertion log remain in
 `log/dashboard-interaction`; the production controller's acceptance is covered
 separately by the DDS and Gazebo tests above.
+
+Rover preflight also requires both costmaps to subscribe to the published
+`/husky1/scan`; a healthy sensor topic alone does not establish collision-layer
+routing. Full rover trial recorders independently evaluate the oriented local
+footprint against static tree trunks, record minimum clearance and fail on overlap.
+This geometry is used only by observers, not motion planning.

@@ -1,0 +1,63 @@
+{
+  "/husky1/scan": {
+    "publishers": [
+      "/husky1/gazebo_bridge"
+    ],
+    "subscribers": [
+      "//sensor_health_node",
+      "/husky1/slam_toolbox",
+      "/husky1/local_costmap/local_costmap",
+      "/husky1/global_costmap/global_costmap"
+    ]
+  },
+  "/husky1/local_costmap/scan": {
+    "publishers": [],
+    "subscribers": []
+  },
+  "/husky1/global_costmap/scan": {
+    "publishers": [],
+    "subscribers": []
+  },
+  "/husky1/controller_server": {},
+  "/husky1/global_costmap/global_costmap": {
+    "robot_radius": {
+      "type": 3,
+      "bool": false,
+      "double": 0.8,
+      "string": "",
+      "strings": []
+    },
+    "footprint": {
+      "type": 4,
+      "bool": false,
+      "double": 0.0,
+      "string": "[]",
+      "strings": []
+    }
+  },
+  "/husky1/local_costmap/local_costmap": {
+    "footprint": {
+      "type": 4,
+      "bool": false,
+      "double": 0.0,
+      "string": "[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]",
+      "strings": []
+    },
+    "footprint_padding": {
+      "type": 3,
+      "bool": false,
+      "double": 0.05,
+      "string": "",
+      "strings": []
+    }
+  },
+  "/husky1/planner_server": {
+    "GridBased.use_astar": {
+      "type": 1,
+      "bool": true,
+      "double": 0.0,
+      "string": "",
+      "strings": []
+    }
+  }
+}

@@ -156,11 +156,14 @@ controller_server:
       - RotateToGoal
       - Oscillation
       - BaseObstacle
+      - ObstacleFootprint
       - GoalAlign
       - PathAlign
       - PathDist
       - GoalDist
       BaseObstacle.scale: 0.02
+      # I check the complete Husky outline while turning past narrow trunks.
+      ObstacleFootprint.scale: 1.0
       PathAlign.scale: 32.0
       PathAlign.forward_point_distance: 0.1
       GoalAlign.scale: 32.0
@@ -168,7 +171,7 @@ controller_server:
       PathDist.scale: 32.0
       GoalDist.scale: 24.0
       RotateToGoal.scale: 32.0
-      RotateToGoal.xy_goal_tolerance: 2.0
+      RotateToGoal.xy_goal_tolerance: 1.0
       RotateToGoal.slowing_factor: 5.0
       RotateToGoal.lookahead_time: -1.0
 local_costmap:
@@ -184,6 +187,7 @@ local_costmap:
       height: 10
       resolution: 0.05
       footprint: '[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]'
+      footprint_padding: 0.05
       plugins:
       - obstacle_layer
       - inflation_layer
@@ -207,7 +211,7 @@ local_costmap:
           raytrace_min_range: 0.4
           raytrace_max_range: 10.0
         scan:
-          topic: scan
+          topic: /husky1/scan
           max_obstacle_height: 2.0
           clearing: true
           marking: true
@@ -228,7 +232,8 @@ global_costmap:
       global_frame: husky1_map
       robot_base_frame: husky1_base_link
       use_sim_time: true
-      footprint: '[ [0.5, 0.5], [0.5, -0.5], [-0.5, -0.5], [-0.5, 0.5] ]'
+      # NavFn checks centres; this encloses every orientation of the local outline.
+      robot_radius: 0.8
       resolution: 0.1
       track_unknown_space: true
       plugins:
@@ -251,7 +256,7 @@ global_costmap:
           raytrace_min_range: 0.4
           raytrace_max_range: 10.0
         scan:
-          topic: scan
+          topic: /husky1/scan
           max_obstacle_height: 2.0
           clearing: true
           marking: true
@@ -288,7 +293,7 @@ planner_server:
     GridBased:
       plugin: nav2_navfn_planner/NavfnPlanner
       tolerance: 0.5
-      use_astar: false
+      use_astar: true
       allow_unknown: true
 smoother_server:
   ros__parameters:

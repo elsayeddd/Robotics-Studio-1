@@ -1,0 +1,243 @@
+{
+  "/husky1/controller_server": {
+    "subscriptions": [
+      [
+        "/clock",
+        [
+          "rosgraph_msgs/msg/Clock"
+        ]
+      ],
+      [
+        "/husky1/bond",
+        [
+          "bond/msg/Status"
+        ]
+      ],
+      [
+        "/husky1/odom",
+        [
+          "nav_msgs/msg/Odometry"
+        ]
+      ],
+      [
+        "/husky1/speed_limit",
+        [
+          "nav2_msgs/msg/SpeedLimit"
+        ]
+      ],
+      [
+        "/parameter_events",
+        [
+          "rcl_interfaces/msg/ParameterEvent"
+        ]
+      ]
+    ]
+  },
+  "/husky1/local_costmap/local_costmap": {
+    "subscriptions": [
+      [
+        "/clock",
+        [
+          "rosgraph_msgs/msg/Clock"
+        ]
+      ],
+      [
+        "/husky1/camera/depth/points",
+        [
+          "sensor_msgs/msg/PointCloud2"
+        ]
+      ],
+      [
+        "/husky1/local_costmap/footprint",
+        [
+          "geometry_msgs/msg/Polygon"
+        ]
+      ],
+      [
+        "/husky1/local_costmap/scan",
+        [
+          "sensor_msgs/msg/LaserScan"
+        ]
+      ],
+      [
+        "/parameter_events",
+        [
+          "rcl_interfaces/msg/ParameterEvent"
+        ]
+      ]
+    ]
+  },
+  "/husky1/global_costmap/global_costmap": {
+    "subscriptions": [
+      [
+        "/clock",
+        [
+          "rosgraph_msgs/msg/Clock"
+        ]
+      ],
+      [
+        "/husky1/camera/depth/points",
+        [
+          "sensor_msgs/msg/PointCloud2"
+        ]
+      ],
+      [
+        "/husky1/global_costmap/footprint",
+        [
+          "geometry_msgs/msg/Polygon"
+        ]
+      ],
+      [
+        "/husky1/global_costmap/scan",
+        [
+          "sensor_msgs/msg/LaserScan"
+        ]
+      ],
+      [
+        "/husky1/map",
+        [
+          "nav_msgs/msg/OccupancyGrid"
+        ]
+      ],
+      [
+        "/parameter_events",
+        [
+          "rcl_interfaces/msg/ParameterEvent"
+        ]
+      ]
+    ]
+  },
+  "/husky1/bt_navigator": {
+    "subscriptions": [
+      [
+        "/clock",
+        [
+          "rosgraph_msgs/msg/Clock"
+        ]
+      ],
+      [
+        "/husky1/bond",
+        [
+          "bond/msg/Status"
+        ]
+      ],
+      [
+        "/husky1/goal_pose",
+        [
+          "geometry_msgs/msg/PoseStamped"
+        ]
+      ],
+      [
+        "/husky1/navigate_to_pose/_action/feedback",
+        [
+          "nav2_msgs/action/NavigateToPose_FeedbackMessage"
+        ]
+      ],
+      [
+        "/husky1/navigate_to_pose/_action/status",
+        [
+          "action_msgs/msg/GoalStatusArray"
+        ]
+      ],
+      [
+        "/husky1/odom",
+        [
+          "nav_msgs/msg/Odometry"
+        ]
+      ],
+      [
+        "/husky1/tf",
+        [
+          "tf2_msgs/msg/TFMessage"
+        ]
+      ],
+      [
+        "/husky1/tf_static",
+        [
+          "tf2_msgs/msg/TFMessage"
+        ]
+      ],
+      [
+        "/parameter_events",
+        [
+          "rcl_interfaces/msg/ParameterEvent"
+        ]
+      ]
+    ]
+  },
+  "/husky1/velocity_smoother": {
+    "subscriptions": [
+      [
+        "/clock",
+        [
+          "rosgraph_msgs/msg/Clock"
+        ]
+      ],
+      [
+        "/husky1/bond",
+        [
+          "bond/msg/Status"
+        ]
+      ],
+      [
+        "/husky1/cmd_vel_nav",
+        [
+          "geometry_msgs/msg/Twist"
+        ]
+      ],
+      [
+        "/parameter_events",
+        [
+          "rcl_interfaces/msg/ParameterEvent"
+        ]
+      ]
+    ]
+  },
+  "/husky1/scan": {
+    "publishers": [
+      "/husky1/gazebo_bridge"
+    ],
+    "subscribers": [
+      "//sensor_health_node",
+      "/husky1/slam_toolbox"
+    ]
+  },
+  "/husky1/local_costmap/scan": {
+    "publishers": [],
+    "subscribers": [
+      "/husky1/local_costmap/local_costmap"
+    ]
+  },
+  "/husky1/global_costmap/scan": {
+    "publishers": [],
+    "subscribers": [
+      "/husky1/global_costmap/global_costmap"
+    ]
+  },
+  "/husky1/odom": {
+    "publishers": [
+      "/husky1/robot_localization"
+    ],
+    "subscribers": [
+      "/husky1/controller_server",
+      "/husky1/bt_navigator"
+    ]
+  },
+  "/husky1/odometry": {
+    "publishers": [
+      "/husky1/gazebo_bridge"
+    ],
+    "subscribers": [
+      "/husky1/robot_localization",
+      "//operator_dashboard",
+      "//sensor_health_node",
+      "//environment_simulator_node",
+      "//patrol_manager_node",
+      "//nav2_goal_adapter_node"
+    ]
+  },
+  "/husky1/odometry/filtered": {
+    "publishers": [],
+    "subscribers": []
+  }
+}

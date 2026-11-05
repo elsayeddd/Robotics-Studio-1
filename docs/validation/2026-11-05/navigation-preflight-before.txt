@@ -1,0 +1,13 @@
+PASS: mission heartbeat
+PASS: ambient wind
+PASS: event logging
+PASS: rover sensors
+PASS: rover perception
+PASS: occupancy map
+PASS: map to odom TF
+PASS: Nav2 action
+PASS: Nav2 lifecycle active
+FAIL: collision LiDAR routing
+FAIL: first patrol path
+FAIL: continuous readiness window
+[ros2run]: Process exited with failure 1
