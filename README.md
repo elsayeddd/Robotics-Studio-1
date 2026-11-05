@@ -15,10 +15,10 @@ matrix and [integration review](docs/integration-review.md) for current acceptan
 | --- | --- | --- |
 | IR/CO2/smoke/temperature/RGB perception | Independent per-platform filters, image persistence, timestamp alignment and stale watchdogs | Pure/native regressions and six scenarios over twelve Gazebo runs passed |
 | Wind dispatch and mission policy | Stable safe wind selects drone or rover; selected-local confirmation, E-stop, timeouts and ACK | 61 pure policy checks and native transport tests passed |
-| Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | Ten autonomous fire missions passed, including source resolution and measured return; dense-forest drone two-loop patrol passed |
-| Scene state and shared inputs | Healthy/burning/burnt tree rendering/emissions; configurable wind/battery | Eight fixtures and native healthy/burning/burnt service + sensor check passed |
+| Patrol, search and return | Nav2 rover route; bounded drone ascent/sweep/investigation/landing; completion and battery return | Ten autonomous fire missions passed at `0c932ba`, including source resolution and measured return; dense-forest drone two-loop patrol passed; latest rover long-run checks remain in progress |
+| Scene state and shared inputs | Healthy/burning/burnt tree rendering/emissions; configurable wind/battery | Eleven fixtures and native healthy/burning/burnt service + sensor check passed |
 | Map/dashboard/manual control | SLAM or local odometry positions, both platforms, source/sample marker, health, controls and event log | Native Qt/map/TF and actual-window interaction checks passed, including release/focus/connection loss |
-| Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | Twelve recorded worlds passed both-platform checks; ten autonomous missions passed with 0.338 m median source error |
+| Evaluation | Recorder/replay, training-only tuning, six-scenario and ten-autonomous-run scripts | Twelve recorded worlds passed both-platform checks; ten autonomous missions at `0c932ba` passed with 0.338 m median source error |
 
 See [Development roadmap](docs/development-roadmap.md) for ownership-ready tasks and acceptance criteria.
 

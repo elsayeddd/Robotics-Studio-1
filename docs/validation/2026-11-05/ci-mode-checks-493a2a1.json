@@ -1,0 +1,37 @@
+{
+  "source_revision": "493a2a122ce48ce9816bb8bf6b895510c54aa661",
+  "run_id": 41942831671,
+  "modes": {
+    "rover": {
+      "platform": "rover",
+      "movement_m": {
+        "husky1": 0.8043455647698595
+      },
+      "controls": "passed",
+      "return": "passed",
+      "emergency_stop": "passed",
+      "verified_sensor_holds": []
+    },
+    "drone": {
+      "platform": "drone",
+      "movement_m": {
+        "drone1": 0.8149999999999914
+      },
+      "controls": "passed",
+      "return": "passed",
+      "emergency_stop": "passed",
+      "verified_sensor_holds": []
+    },
+    "combined": {
+      "platform": "combined",
+      "movement_m": {
+        "husky1": 0.0,
+        "drone1": 0.8499999999999907
+      },
+      "controls": "passed",
+      "return": "passed",
+      "emergency_stop": "passed",
+      "verified_sensor_holds": []
+    }
+  }
+}

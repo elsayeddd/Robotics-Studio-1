@@ -3,7 +3,7 @@
 This update completes the perception code paths and connects them to the mission,
 both simulated platforms, the operator interface and reproducible evaluation tools.
 The November 5 integration merges teammate branch `feature/perception-validation`
-at `2d385d5` and navigation assets at `c6faa28` into main. The original November 2
+at `2d385d5` and navigation assets through `8af5831` into main. The original November 2
 handover used archive `921cdf8`; the current integration uses freshly fetched Git
 branches. See [integration review](integration-review.md) for current validation
 and the distinction between historical and fresh runtime results.
@@ -24,12 +24,12 @@ mapping remain extensions to the original MVP.
 | R3 elevated CO2 | Explicit independently simulated concentration, validity, EMA, hysteresis, persistence and gas fusion | Pure boundaries/spikes/dropout plus twelve recorded Gazebo worlds pass both-platform checks |
 | R4 terrain mapping (stretch) | Existing SLAM occupancy map, map-safe rover goals and dashboard map are integrated | This does not implement a new 3D terrain model |
 | R5 healthy/burning/burnt trees | Tree service changes visual geometry/material/thermal state and gas emissions together; unavailable scene changes withhold raw samples | Native service, IR and coupled gas changes pass in both supplied worlds |
-| R6 investigate anomaly | Selected vehicle progresses patrol → investigate → track/recover → verify; bounded history and timeouts | Ten autonomous missions complete with local evidence, including bounded rover recovery |
-| R7 location and sensor alert | Suspected-anomaly warning on investigation, followed by a separately gated confirmed alert; platform/id/time, gas/heat/IR/wind, resolved source or explicitly labelled detection-sample fallback | Ten resolved sources: median 0.316 m drone, 0.412 m rover, 0.338 m overall; fallback excluded; latency and early detections retained |
+| R6 investigate anomaly | Selected vehicle progresses patrol → investigate → track/recover → verify; bounded history and timeouts | Ten autonomous missions complete with local evidence, at `0c932ba`, including bounded rover recovery; latest ground-source rerun pending |
+| R7 location and sensor alert | Suspected-anomaly warning on investigation, followed by a separately gated confirmed alert; platform/id/time, gas/heat/IR/wind, resolved source or explicitly labelled detection-sample fallback | Ten resolved sources at `0c932ba`: median 0.316 m drone, 0.412 m rover, 0.338 m overall; fallback excluded; latency and early detections retained |
 | R8 robot/source UI | Qt SLAM or odometry map, both robot positions/telemetry, source/sample marker, batteries and stale/disconnected states | Native Qt/map transforms and actual-window interaction pass; live rover and standalone drone screenshots retained |
 | R9 operator commands | START/PAUSE/RESUME/RETURN/RESET/E_STOP plus ACK; responses and event log | Actual button clicks, confirmation cancellation, service transport and persistent CSV regression pass |
 | R10 manual control (stretch) | Hold/release dashboard buttons; shared command input; selected-platform gate, timeouts and bounds | Actual-window release/focus/connection-loss checks and native guards pass for both vehicles |
-| R11 automatic return | Return after two patrol loops, alert hold or low battery; measured launch position; arrival ends mission | All ten fire missions return; all five drones land; dense drone two-loop return and live battery-input tests pass |
+| R11 automatic return | Return after two patrol loops, alert hold or low battery; measured launch position; arrival ends mission | All ten fire missions at `0c932ba` return; all five drones land; dense drone two-loop return and live battery-input tests pass |
 | R12 wind measurement | Configurable simulated stamped wind; filtered policy with dwell/hysteresis and stale-data checks | Native simulator parameter changes, frozen/missing inputs and policy regressions pass |
 | R13 wind deployment | ≤5 m/s drone, >5 to ≤12 m/s rover, >12 m/s neither; immediate stop on unsafe change | Pure boundaries/noise plus native selection, unsafe/lost-input holds and live wind changes pass |
 | Roadmap P4 evaluation | Same production filter used by recorder/replay, confusion matrices, availability, missed events, latency and training-only threshold sweep | Six scenarios across twelve recorded worlds; both vehicle baselines checked, four negatives have zero confirmed false positives |
@@ -73,7 +73,7 @@ Run `bash scripts/validate_all.sh` to reproduce the normal standalone suite.
 | Perception regression | 79 checks passed | Fusion, images, CO2, time ordering, freshness and confirmation gates |
 | Mission policy regression | 45 checks passed | Selected-platform confirmation, dispatch, unsafe/frozen inputs, battery, return, completion, manual mode and E-stop |
 | System logic regression | 41 checks passed | Stream watchdog, cue alignment, stale IR, free-grid boundaries and numerical source fits |
-| Python fixtures/replay | 8 tests passed | Scene geometry/states and replay accounting/error handling |
+| Python fixtures/replay | 11 tests passed | Scene geometry/states and replay accounting/error handling |
 | Address/undefined-behaviour sanitizers | All three pure suites passed | Leak checking disabled in this container |
 | C++ compilation flags | C++17, `-Wall -Wextra -Wpedantic -Werror` | ROS-independent sources only |
 | Synthetic held-out replay | Six scenarios × ten seeds, 9,000 input events | Synthetic samples and image cues, not rendered Gazebo images |

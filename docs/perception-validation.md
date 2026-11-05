@@ -192,9 +192,9 @@ other settings use documented defaults.
 
 ## Target-machine acceptance
 
-The Humble/Fortress build, 63 native tests, both-platform recorded perception,
+The Humble/Fortress build, 67 native tests at `493a2a1`, both-platform recorded perception,
 shared wind/battery/scene controls and ten strict autonomous fire missions have
-now passed on the target setup. The ten missions include five per vehicle, all
+passed on the target setup. The ten missions at `0c932ba` include five per vehicle, all
 source resolutions and measured returns, with 0.338 m median source error overall.
 Actual-window control/freshness checks and live rover/drone map views also pass.
 See the [saved integration results](validation/2026-11-05/README.md) for revisions,

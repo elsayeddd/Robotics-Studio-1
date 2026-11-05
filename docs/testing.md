@@ -13,7 +13,7 @@ bash scripts/validate_all.sh
 
 This compiles the actual pure C++ perception, mission and numerical libraries,
 runs scene/replay Python checks, and generates six-scenario synthetic metrics.
-Expected current result: 79 perception + 61 mission + 45 system checks and eight
+Expected current result: 79 perception + 61 mission + 45 system checks and eleven
 Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
 
 ## 2. Clean native build and unit/transport tests
@@ -35,7 +35,7 @@ include a 250 ms delayed environmental stream and confirmed-source refinement,
 stable incident IDs, reset isolation, bounded fallback and unsafe-wind holds. They
 also run the real wind/battery simulator with the manager: live parameter changes,
 depletion/low-battery return, invalid-setting rejection and loss-of-input holds.
-A native search-map fixture also checks a bounded surveyed detour when the first upwind view is unknown, minimum probe travel beyond the controller arrival radius, and holds on entirely unknown or occupied maps. They are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
+A native search-map fixture also checks a bounded surveyed detour when the first upwind view is unknown, minimum probe travel beyond the controller arrival radius, and holds on entirely unknown or occupied maps. A native patrol fixture verifies route-frame precedence over a configured map alias and return to home captured from a custom odometry topic. They are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
 of host scheduling jitter; dedicated expiry tests retain production limits.
 
 ## 3. Native scene/sensor/controller integration
