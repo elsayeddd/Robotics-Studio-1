@@ -6,6 +6,8 @@ The repository is designed for a mixed-experience university team. Existing ROS 
 
 ## Project status
 
+For the final showcase, use the **standalone drone**: its latest larger-forest fire rehearsal passes with automatic return and landing. The rover still has unresolved autonomous-navigation/rendering holds. See the [showcase quick start](docs/showcase-quick-start.md) and [search/source presentation fact sheet](docs/search-source-presentation-factsheet.md).
+
 The November 5 merge connects both local perception pipelines to wind-based
 mission dispatch, autonomous investigation/return, scene states and the dashboard.
 See [Completion handover](docs/completion-handover.md) for the C1/C3 requirement

@@ -5,6 +5,28 @@ selected drone as independent missions. The current aircraft is the documented
 velocity-controlled simulation proxy. These results cover the simulator and ROS
 integration; they do not establish physical sensor or flight performance.
 
+## Showcase cutoff checkpoint
+
+The final autonomous demonstration is the **standalone drone in the larger forest**.
+Its [fresh fire rehearsal](showcase-final-drone.json) passes with 0.141 m source
+error, 0.189 m final home displacement, one confirmed alert and automatic landing.
+The [complete native confirmation](showcase-native-final.json) has 69 results with
+zero errors/failures/skips. The current C++ implementation retains those fixes.
+
+The rover remains **unaccepted for autonomous demonstration**: both the
+[dense candidate](showcase-final-dense-rover-failed.json) and
+[original-forest check](showcase-original-rover-failed.json) pause on unavailable
+IR. A [smaller-image smoke trial](showcase-low-load-rover-smoke-failed.json)
+also pauses during return; that camera change was reverted. Original resolutions,
+rates and freshness limits are retained. Investigation retries now reuse one open
+incident ID through confirmation within the mission epoch.
+
+Use the [showcase quick start](../../showcase-quick-start.md) and
+[Adam's presentation fact sheet](../../search-source-presentation-factsheet.md).
+The detailed sections below retain historical evidence and intermediate failures;
+their revisions are significant. Final CI is still running at cutoff.
+
+
 | Check | Recorded result | Evidence |
 | --- | --- | --- |
 | Five-package native build and regression suite | 67 tests, zero failures/errors/skips | [CI at 493a2a1](https://github.com/elsayeddd/Robotics-Studio-1/actions/runs/41942831671), native test step |

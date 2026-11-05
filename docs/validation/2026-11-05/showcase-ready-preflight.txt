@@ -1,0 +1,6 @@
+PASS: mission heartbeat
+PASS: ambient wind
+PASS: event logging
+PASS: drone sensors
+PASS: drone perception
+PASS: continuous readiness window
