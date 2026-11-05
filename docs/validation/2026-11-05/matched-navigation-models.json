@@ -1,0 +1,16 @@
+{
+  "source_revision": "493a2a122ce48ce9816bb8bf6b895510c54aa661",
+  "/husky1/local_costmap/local_costmap": {
+    "robot_radius": 0.8,
+    "footprint": "[]",
+    "footprint_padding": 0.05
+  },
+  "/husky1/global_costmap/global_costmap": {
+    "robot_radius": 0.8,
+    "footprint": "[]",
+    "footprint_padding": 0.05
+  },
+  "/husky1/planner_server": {
+    "GridBased.plugin": "nav2_smac_planner/SmacPlanner2D"
+  }
+}

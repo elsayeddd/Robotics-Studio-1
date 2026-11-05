@@ -337,3 +337,17 @@ uses the installed Humble SmacPlanner2D A* plugin instead, with the same clearan
 models and unknown-space policy. Its dependency is explicit in the simulation
 package. The next run must validate this replacement through actual route
 coverage and source/return missions; no speed or acceptance threshold is relaxed.
+
+The Smac rerun reached 18/21 physical stops over 153.1 m with no skipped
+waypoints, no navigation failures and minimum conservative trunk clearance
+1.397 m. It then paused on unavailable IR evidence; I retain this as a failed
+patrol, not a full-route pass. CI at `493a2a1` is fully green: 67 native tests,
+all three mission-mode checks with zero sensor-hold rescues, and twelve recorded
+perception worlds.
+
+I fetched Lachlan's new `3693178` and `8af5831` commits and merged the frame
+configuration and Parrot resource fixes. The route file still determines its
+coordinate frame. `map_frame` supplies the fallback when no route frame is set,
+and `odometry_topic` now controls measured home capture. A real DDS regression
+checks route-frame precedence and return to home from a custom odometry topic.
+The Parrot xacro expands to eight links with this repository's resources.

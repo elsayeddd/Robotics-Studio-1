@@ -9,7 +9,6 @@
   
 
 
-
   <gazebo reference="${prefix}imu_link">
     <turnGravityOff>true</turnGravityOff>
     <sensor type="imu" name="imu">

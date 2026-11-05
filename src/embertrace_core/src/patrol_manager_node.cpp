@@ -36,7 +36,10 @@ public:
       "base_waypoint_name", "ranger_base");
     const auto arrival_tolerance_m = declare_parameter<double>("arrival_tolerance_m", 1.2);
     base_frame_ = declare_parameter<std::string>("base_frame", "husky1_base_link");
-    frame_id_ = declare_parameter<std::string>("frame_id", "husky1_map");
+    const auto map_frame = declare_parameter<std::string>("map_frame", "husky1_map");
+    const auto odom_frame = declare_parameter<std::string>("odom_frame", "husky1_odom");
+    const auto odometry_topic = declare_parameter<std::string>("odometry_topic", "/husky1/odometry");
+    frame_id_ = declare_parameter<std::string>("frame_id", map_frame);
     const auto status_topic = declare_parameter<std::string>(
       "status_topic", "/embertrace/navigation_status");
     const auto pose_rate_hz = declare_parameter<double>("pose_rate_hz", 10.0);
@@ -75,10 +78,12 @@ public:
       }
     }
 
+    RCLCPP_INFO(get_logger(), "Configured patrol frame=%s, odom_frame=%s, odom_topic=%s",
+      frame_id_.c_str(), odom_frame.c_str(), odometry_topic.c_str());
     loops_publisher_ = create_publisher<std_msgs::msg::UInt32>("/husky1/patrol_loops", 10);
     arrival_publisher_ = create_publisher<std_msgs::msg::String>("/husky1/mission_navigation_status", 10);
     home_subscription_ = create_subscription<nav_msgs::msg::Odometry>(
-      "/husky1/odometry", rclcpp::SensorDataQoS(),
+      odometry_topic, rclcpp::SensorDataQoS(),
       [this](nav_msgs::msg::Odometry::SharedPtr message) {
         const auto& position = message->pose.pose.position;
         const double age = (now() - rclcpp::Time(message->header.stamp)).seconds();
@@ -254,7 +259,7 @@ private:
       patrol_->update_pose(transform.transform.translation.x, transform.transform.translation.y));
   }
 
-  std::string frame_id_{"husky1_map"};
+  std::string frame_id_;
   std::string base_frame_{"husky1_base_link"};
   std::size_t loops_logged_{0};
   std::size_t skips_logged_{0};
