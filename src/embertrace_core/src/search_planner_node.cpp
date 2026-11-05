@@ -291,6 +291,10 @@ class SearchPlannerNode : public rclcpp::Node {
     message.pose.covariance[28] = 1e6;
     message.pose.covariance[35] = 1e6;
     estimate_publisher_->publish(message);
+    RCLCPP_INFO_THROTTLE(get_logger(), *get_clock(), 5000,
+                        "Source fit (%.2f, %.2f), stddev (%.2f, %.2f), %zu samples",
+                        source.x, source.y, std::sqrt(source.variance_x),
+                        std::sqrt(source.variance_y), source.sample_count);
   }
 
   void publish_goal(const Reading& reading, const rclcpp::Time& current) {

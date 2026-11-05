@@ -42,6 +42,30 @@ TEST(SourceEstimator, RequiresSpatialEvidence)
   EXPECT_FALSE(estimator.estimate().has_value());
 }
 
+TEST(SourceEstimator, IncludesClippedPeakOffsetInReportedUncertainty)
+{
+  SourceEstimator estimator;
+  const double wind = -3 * 3.14159265358979323846 / 4;
+  // A source beyond the fitted domain produces a skewed, clipped likelihood.
+  // Its constrained peak must not appear resolved solely because the tail was cut.
+  for (int i = 0; i < 30; ++i) {
+    const double x = -10 + .65*i;
+    const double y = -8 + .48*i + 3*std::sin(.4*i);
+    const double dx = x-22, dy = y-16, distance = std::hypot(dx, dy);
+    const double down = dx*std::cos(wind) + dy*std::sin(wind);
+    const double cross = -dx*std::sin(wind) + dy*std::cos(wind);
+    const double smoke = 120*std::exp(-down/14)*
+        std::exp(-.5*std::pow(cross/(1.6+.05*down), 2));
+    estimator.add({x, y, 1+smoke, 22+88*std::exp(-distance/7), wind});
+  }
+  const auto estimate = estimator.estimate();
+  ASSERT_TRUE(estimate);
+  EXPECT_GT(estimate->x, 18.0);
+  EXPECT_GT(std::max(estimate->variance_x, estimate->variance_y), 4*4);
+  EXPECT_LE(estimate->covariance_xy * estimate->covariance_xy,
+            estimate->variance_x * estimate->variance_y);
+}
+
 TEST(SourceEstimator, AccumulatesSlowMotionAcrossSmallSensorSteps)
 {
   SourceEstimator estimator;

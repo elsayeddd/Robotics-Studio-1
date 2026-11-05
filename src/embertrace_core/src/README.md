@@ -40,8 +40,8 @@ from the logarithmic thermal decay and wind-aligned Gaussian plume equations,
 then scores the remaining spatial residuals. It publishes the best candidate
 on `/embertrace/source_estimate` as
 `geometry_msgs/msg/PoseWithCovarianceStamped` in the sample frame. The x/y
-covariance is a relative likelihood spread with a 0.5 m standard deviation
-floor; it does not include a measured SLAM error. The estimator never reads
+uncertainty includes likelihood spread and displacement of its mean from the
+reported peak, with a 0.5 m standard deviation floor; it does not include a measured SLAM error. The estimator never reads
 `source_x` or `source_y`. The field-shape values in
 `embertrace.yaml` are tunable model assumptions, not source coordinates.
 
@@ -55,7 +55,7 @@ is published until `/husky1/map` and the odom-to-map transform are available.
 Aerial goals use the configured bounded flight layer and the local LiDAR stop instead.
 The map check rejects unknown/occupied cells and requires 0.8 m robot
 clearance. It validates the endpoint; Nav2 remains responsible for route
-planning and live obstacle avoidance. Search timeouts only withhold planner
+planning and live obstacle avoidance. If an initial probe has no clearance-safe cell within the normal 2 m snap radius, search can use a surveyed detour within 4 m of that target. Probe goals stay at least 1.5 m from the robot so Nav2 can gather another view before stopping. Unknown/occupied cells remain excluded. Search timeouts only withhold planner
 goals; mission-state timeout policy belongs to the mission manager.
 
 The full launch uses only a recent estimate with at most 4 m standard deviation

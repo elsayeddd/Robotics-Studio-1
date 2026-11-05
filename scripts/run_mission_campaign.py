@@ -378,7 +378,8 @@ def main():
     (output / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     print(
         f"Recorded {len(results)} autonomous trials; {summary['completed']} completed, "
-        f"{summary['successful']} accepted. Failures are retained."
+        f"{summary['successful']} passed per-trial checks. "
+        f"Cohort acceptance: {'PASS' if summary['passed'] else 'FAIL'}. Failures are retained."
     )
 
     raise SystemExit(0 if summary["passed"] else 1)

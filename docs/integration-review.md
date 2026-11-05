@@ -284,3 +284,16 @@ robot, beyond Nav2's 1 m arrival tolerance. Unknown/occupied cells and clearance
 rules are unchanged; failed goal searches are throttled to the normal goal
 interval. Focused grid/source tests and real DDS map/goal tests pass. The actual
 dense rover fire regression is still required before accepting this fix.
+
+The detour rerun at `bea2c9a` completed the dense rover's detection and measured
+return without operator recovery, but failed cohort accuracy: the reported source
+was (18.4, 12.0), 8.122 m from the evaluated fire. The saved summary has
+`passed=false`; its lifecycle success flag is not a source-accuracy pass.
+
+I found that SourceEstimator published the fitted peak while calculating spread
+around the different likelihood mean. Skewed or boundary-clipped fits therefore
+understated uncertainty about the published position. The uncertainty now includes
+that offset, including the cross term. A controlled clipped-source fixture that
+previously appeared below the 4 m gate is now withheld. Numerical source positions,
+configured uncertainty limits and fire-confirmation rules are unchanged. Five
+focused native source/search suites pass; the next dense Gazebo rerun is pending.

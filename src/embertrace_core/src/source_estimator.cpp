@@ -195,12 +195,17 @@ std::optional<SourceEstimate> SourceEstimator::estimate() const {
     variance_y += weight * dy * dy;
     covariance_xy += weight * dx * dy;
   }
+  // I report the best-fit peak, so uncertainty must include its displacement
+  // from the likelihood mean. Centring only on that mean understates the error
+  // of a skewed or boundary-clipped peak and can end source refinement early.
+  const double offset_x = mean_x - best_x;
+  const double offset_y = mean_y - best_y;
   // A half-metre floor acknowledges odometry drift, model mismatch and filtered lag.
   return SourceEstimate{best_x,
                         best_y,
-                        std::max(0.25, variance_x / sum_w),
-                        std::max(0.25, variance_y / sum_w),
-                        covariance_xy / sum_w,
+                        std::max(0.25, variance_x / sum_w + offset_x * offset_x),
+                        std::max(0.25, variance_y / sum_w + offset_y * offset_y),
+                        covariance_xy / sum_w + offset_x * offset_y,
                         samples_.size()};
 }
 

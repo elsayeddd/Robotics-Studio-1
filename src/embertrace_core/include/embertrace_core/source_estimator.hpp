@@ -18,7 +18,8 @@ struct SearchSample {
 struct SourceEstimate {
   double x{0.0};
   double y{0.0};
-  // Marginal position covariance in square metres. xy is the off-diagonal term.
+  // Position uncertainty about the reported fit peak, in square metres.
+  // xy is the off-diagonal term; skew from the likelihood mean is included.
   double variance_x{0.0};
   double variance_y{0.0};
   double covariance_xy{0.0};

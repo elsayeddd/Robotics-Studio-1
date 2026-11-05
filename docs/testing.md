@@ -35,7 +35,7 @@ include a 250 ms delayed environmental stream and confirmed-source refinement,
 stable incident IDs, reset isolation, bounded fallback and unsafe-wind holds. They
 also run the real wind/battery simulator with the manager: live parameter changes,
 depletion/low-battery return, invalid-setting rejection and loss-of-input holds.
-They are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
+A native search-map fixture also checks a bounded surveyed detour when the first upwind view is unknown, minimum probe travel beyond the controller arrival radius, and holds on entirely unknown or occupied maps. They are serialised to avoid shared-topic collisions. They do not launch Gazebo. The dual-platform image fixture allows five seconds
 of host scheduling jitter; dedicated expiry tests retain production limits.
 
 ## 3. Native scene/sensor/controller integration
