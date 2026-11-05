@@ -1,0 +1,90 @@
+{
+  "scenario": "fire",
+  "world_file": "embertrace_forest_dense.sdf",
+  "trials": 1,
+  "completed": 1,
+  "successful": 1,
+  "resolved_sources": 1,
+  "median_source_error_m": 0.141421356237309,
+  "results": [
+    {
+      "trial": "drone1_1300",
+      "source_revision": "3b4f43550f1b09b80543743a95233de08f15b97b",
+      "harness_revision": "bce15458a734cd74c281834e4a54fcfe28699a25",
+      "seed": 1300,
+      "world_file": "embertrace_forest_dense.sdf",
+      "gazebo_gui": true,
+      "ros_domain_id": 63,
+      "platform": "drone1",
+      "success": true,
+      "mission_completed": true,
+      "preflight_passed": true,
+      "preflight_time_s": 29.696272409000017,
+      "patrol_loops": 0,
+      "required_patrol_loops": 2,
+      "expected_patrol_visits": 12,
+      "visited_patrol_waypoints": [
+        "sweep_1",
+        "sweep_2",
+        "sweep_3"
+      ],
+      "visit_tolerance_m": 1.0,
+      "initial_position": [
+        -14.0,
+        -12.0,
+        0.6
+      ],
+      "final_position": [
+        -13.999994994735328,
+        -11.999996584168876,
+        0.7893699640374021
+      ],
+      "return_error_m": 0.18936996413435672,
+      "return_reason": "Alert recorded; automatically returning to launch position",
+      "mission_time_s": 107.53999999999999,
+      "path_length_m": 95.95516205099703,
+      "minimum_tree_clearance_m": null,
+      "closest_tree": null,
+      "detection_latency_s": 17.1,
+      "source_resolution_latency_s": 0.0,
+      "first_confirmation_stamp_s": 62.77,
+      "local_exposure_stamp_s": 45.67,
+      "source_error_m": 0.141421356237309,
+      "source_resolved": true,
+      "alerts": 1,
+      "false_alerts": 0,
+      "early_detection": false,
+      "recoveries": 0,
+      "states": [
+        "IDLE",
+        "PATROL",
+        "INVESTIGATE",
+        "TRACK",
+        "VERIFY",
+        "ALERT",
+        "RETURN_TO_BASE",
+        "IDLE"
+      ],
+      "latest_estimate": {
+        "x": 12.099999999999998,
+        "y": 6.899999999999999,
+        "variance_x": 5.8655395906974945,
+        "variance_y": 13.702510174814762
+      },
+      "error": null,
+      "reported_position": [
+        12.099999999999998,
+        6.899999999999999
+      ]
+    }
+  ],
+  "platforms": {
+    "drone1": {
+      "trials": 1,
+      "successful": 1,
+      "resolved_sources": 1,
+      "median_source_error_m": 0.141421356237309
+    }
+  },
+  "passed": true
+}

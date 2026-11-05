@@ -1,7 +1,7 @@
 # Search and source estimation — presentation fact sheet
 
 **EmberTrace · Adam's subsection · 5 November 2026**  
-Implementation checked against main `312559d`. This sheet describes the code before the final showcase fixes. Test results are tied to their recorded revisions.
+Algorithm and interfaces checked against main `3b4f435`. The final showcase update at the end records the latest runtime results. Test results are tied to their recorded revisions.
 
 ## The explanation to give first
 
@@ -108,9 +108,9 @@ The planner rejects stale/out-of-order readings, invalid numerical inputs and in
 - **Earlier standard forest campaign (`0c932ba`):** ten autonomous fire missions, five per vehicle, all resolved and returned; overall median source error **0.338 m** (drone 0.316 m, rover 0.412 m). These used one source location with multiple noise seeds, not ten arbitrary fire locations.
 - **Numerical regressions:** spatial evidence, slow-motion accumulation, bounded history, moved/translated sources, uncertainty for clipped fits, and occupied/unknown/rotated-map handling are tested. Controlled ROS fixtures exercise fitted-source goals, strict uncertainty gating, pause and map detours.
 - **Current limitation:** the larger-forest rover investigation still stalls at obstacles. A prior dense fit was wrong by **8.12 m**; a subsequent uncertainty correction withholds overconfident clipped fits, but latest dense rover source/return acceptance is still outstanding.
-- **Current test issue:** latest CI has 68/69 results passing; the normal search stand-off transport fixture failed while recorded perception passed. The local repeat-goal and frame/home regressions pass. Final fixes and reruns are still in progress.
+- **Pre-fix test issue (`312559d`):** CI had 68/69 results passing; the normal search stand-off transport fixture failed while recorded perception passed. The local repeat-goal and frame/home regressions pass. The final update below records subsequent fixes and reruns.
 - **Simulation assumption:** the estimator knows field-shape priors compatible with the simulator. It does not read simulator truth coordinates, but success here does not establish robustness to real turbulent smoke, multiple fires, changing winds, physical sensor bias or GPS/SLAM drift.
-- **Incident display issue:** repeated investigation warnings currently receive new anomaly numbers. That is a separate warning/incident-lifecycle defect, not proof of several fires. Confirmed-source refinement already reuses a confirmed incident ID.
+- **Incident identity:** retries previously received new anomaly numbers. The final fix keeps one open investigation ID through retries and confirmation, clearing it for a new mission epoch. It does not attempt to cluster multiple simultaneous sources.
 
 ## Questions I am likely to be asked
 
@@ -127,3 +127,21 @@ The planner rejects stale/out-of-order readings, invalid numerical inputs and in
 **“What would you improve next?”** Robust obstacle-aware investigation progress, persistent incident identity, more informative crosswind sampling when fits are ambiguous, and validation across changed plume models, source locations and physical sensors.
 
 **One-sentence takeaway:** “I connect selected-robot perception to evidence-driven search and an uncertainty-aware source estimate, with map/frame checks and a clear handoff to navigation, mission confirmation and the operator interface.”
+
+## Final showcase update — 5 November
+
+At revision `3b4f435`, the visible standalone drone completed the larger-forest
+fire mission without operator intervention: **0.141 m source error**, **0.189 m
+final 3D displacement from launch**, one confirmed alert, zero recovery cycles,
+and automatic landing, in **107.54 simulated seconds**. This is one final-version
+mission, distinct from the earlier ten-run campaign.
+
+Investigation retries now retain one open warning ID within a mission epoch, and
+confirmation promotes that same ID. Three repeated-warning DDS cycles plus
+confirmation and reset/new-mission isolation pass the focused test. This is one
+open investigation per mission, not spatial clustering of multiple simultaneous fires.
+
+The rover candidate adds a 10 cm local stopping buffer over global padding, a
+stronger global preference for clear paths and a 0.2 m SLAM movement threshold.
+The final rover run and complete final-suite confirmation are still in progress.
+The preceding algorithm and integration explanation remains applicable.

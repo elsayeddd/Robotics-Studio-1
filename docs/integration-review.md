@@ -361,3 +361,14 @@ DDS action server. The adapter now preserves targets within 0.15 m and 0.15 rad
 while pending/active, retaining the original pending deadline. Changed targets,
 mission changes and PAUSE still cancel; terminal results allow the same target
 to be retried. This removes the repeated-goal reset, not Nav2's collision checks.
+
+Final showcase candidate `3b4f435` passes all 69 native results in the full
+confirmation run. Its visible dense drone fire mission passes with 0.141 m
+source error, 0.189 m home displacement and automatic landing. A first full
+native attempt had a source-fixture timing failure; two isolated checks and
+the complete confirmation run pass. Dense rover remains failed: the stationary
+first map had no valid search detour, followed by unavailable IR evidence. I
+reverted the new 0.2 m SLAM movement threshold so stationary scans can continue
+filling that initial map, while retaining the extra local clearance and safer
+global path weighting. A final original-forest rover check follows; it must not
+be labelled a larger-forest pass.
