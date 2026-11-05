@@ -1,0 +1,21 @@
+{
+  "issue": "Orphaned old Gazebo server and a new showcase shared the same transport partition.",
+  "fix": [
+    "Fresh Gazebo partition for each showcase invocation",
+    "Isolated launch process group cleaned on normal exit and Ctrl-C",
+    "Executable launcher resolves and enters repository directory"
+  ],
+  "regressions": {
+    "scene_replay_clearance_and_session_cleanup": 13,
+    "failures": 0
+  },
+  "live_preflight": [
+    "PASS: mission heartbeat",
+    "PASS: ambient wind",
+    "PASS: event logging",
+    "PASS: drone sensors",
+    "PASS: drone perception",
+    "PASS: continuous readiness window"
+  ],
+  "verified_ros_domain": 26
+}

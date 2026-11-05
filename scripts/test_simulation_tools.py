@@ -3,10 +3,13 @@
 
 import csv
 import os
+import json
+import signal
 from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import xml.etree.ElementTree as ET
 
@@ -14,6 +17,51 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src/embertrace_core/python"))
 from embertrace_tools.fire_scene import state_model
 from mission_clearance import TreeClearance
+
+
+class ShowcaseSessionTests(unittest.TestCase):
+    def check_cleanup(self, interrupt):
+        with tempfile.TemporaryDirectory() as directory:
+            record = Path(directory)/'session.json'
+            fake = Path(directory)/'fake_launch.py'
+            fake.write_text("import json,os,subprocess,sys,time\n"
+                "child=subprocess.Popen([sys.executable,'-c',"
+                "'import signal,time;signal.signal(signal.SIGINT,signal.SIG_IGN);time.sleep(60)'])\n"
+                "open(sys.argv[1],'w').write(json.dumps([os.getpgrp(),child.pid]))\n"
+                "time.sleep(60 if sys.argv[2]=='wait' else .2)\n")
+            unrelated = subprocess.Popen([sys.executable, '-c', 'import time;time.sleep(60)'])
+            wrapper = subprocess.Popen([sys.executable, str(ROOT/'scripts/showcase_session.py'),
+                sys.executable, str(fake), str(record), 'wait' if interrupt else 'exit'],
+                stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.monotonic()+5
+                while not record.exists() and time.monotonic()<deadline:
+                    time.sleep(.02)
+                self.assertTrue(record.exists(), 'Fake launch did not start')
+                group, child = json.loads(record.read_text())
+                if interrupt:
+                    wrapper.send_signal(signal.SIGINT)
+                wrapper.wait(timeout=20)
+                state = Path('/proc')/str(child)/'stat'
+                self.assertTrue(not state.exists() or state.read_text().split()[2]=='Z',
+                                'Simulator child survived showcase shutdown')
+                self.assertIsNone(unrelated.poll(), 'Cleanup reached an unrelated process')
+                self.assertEqual(wrapper.returncode, 130 if interrupt else 0)
+            finally:
+                if wrapper.poll() is None:
+                    wrapper.kill(); wrapper.wait()
+                if record.exists():
+                    try:
+                        os.killpg(json.loads(record.read_text())[0], signal.SIGKILL)
+                    except ProcessLookupError:
+                        pass
+                unrelated.terminate(); unrelated.wait()
+
+    def test_cleanup_after_launch_exits_with_orphan(self):
+        self.check_cleanup(False)
+
+    def test_cleanup_after_presenter_interrupts(self):
+        self.check_cleanup(True)
 
 
 class ClearanceTests(unittest.TestCase):

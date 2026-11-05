@@ -379,3 +379,14 @@ control smoke but pauses during return. I reverted that profile to retain the
 original image resolution; no autonomous pass or freshness fix is claimed. The
 standalone drone is the validated showcase option. Final handover opens it in
 IDLE with the larger forest and live console, awaiting the presenter's START.
+
+The presentation restart exposed a launcher lifecycle defect: an orphaned
+Gazebo sensor server remained after the old viewer closed. A new ROS-domain-26
+launch reused the fixed Gazebo partition and could exchange clock/model traffic
+with that old ROS-domain-63 server. I removed the old instance, gave every
+showcase invocation its own partition and added an isolated-session supervisor
+that cleans remaining children when ros2 launch exits or receives Ctrl-C. The
+launcher is executable and works by absolute path from any directory. Thirteen
+scene/replay/clearance/session regressions pass, including orphan cleanup and
+preservation of an unrelated process. The user's new isolated drone instance
+passes all six live preflight gates.

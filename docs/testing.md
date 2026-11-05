@@ -13,7 +13,7 @@ bash scripts/validate_all.sh
 
 This compiles the actual pure C++ perception, mission and numerical libraries,
 runs scene/replay Python checks, and generates six-scenario synthetic metrics.
-Expected current result: 79 perception + 61 mission + 45 system checks and eleven
+Expected current result: 79 perception + 61 mission + 45 system checks and thirteen
 Python tests. Synthetic fixtures are not Gazebo camera or autonomous trial evidence.
 
 ## 2. Clean native build and unit/transport tests

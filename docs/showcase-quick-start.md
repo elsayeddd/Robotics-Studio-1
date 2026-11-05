@@ -12,6 +12,12 @@ bash scripts/run_showcase.sh drone
 
 This opens the larger 70 × 70 m forest and **EmberTrace Ranger Console**, with the mission waiting in IDLE. Click **START** when ready to present. Keep the default scene and wind settings for the rehearsed run.
 
+The launcher is also executable directly. Each start uses its own Gazebo transport
+partition. Ctrl-C or closing the viewer shuts down the isolated launch session,
+including sensor-server children, before the script returns. This prevents an old
+world from interfering with the next demonstration. The script works from any
+directory when invoked by its absolute path.
+
 Expected sequence: takeoff → patrol → investigate/track → verify → confirmed alert/source marker → automatic return and landing → IDLE. The tested run took 107.54 simulation seconds, roughly 2½ minutes including startup on this machine. Runtime varies with host rendering load.
 
 Show the map, sensor values and mission state while explaining how local evidence produces investigation goals. The same incident number is retained through investigation retries and confirmation. **Detection sample** means the source is unresolved; **Source estimate** means the location passed the acceptance gate.
