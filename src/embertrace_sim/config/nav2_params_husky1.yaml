@@ -188,7 +188,9 @@ local_costmap:
       # Match the global planner's enclosing circle so local shortcuts cannot
       # leave the next global plan starting inside its inflated obstacles.
       robot_radius: 0.8
-      footprint_padding: 0.05
+      # I stop locally an extra 10 cm before the global start becomes blocked
+      # by map/odometry registration and costmap cell rounding.
+      footprint_padding: 0.15
       plugins:
       - obstacle_layer
       - inflation_layer
@@ -294,6 +296,8 @@ planner_server:
     - GridBased
     GridBased:
       plugin: nav2_smac_planner/SmacPlanner2D
+      # Prefer open space so the local controller can track without shaving trunks.
+      cost_travel_multiplier: 4.0
       tolerance: 0.5
       max_planning_time: 2.0
       allow_unknown: true

@@ -191,6 +191,7 @@ class MissionManagerNode : public rclcpp::Node {
       have_estimate_ = false;
       estimate_epoch_start_ = now().seconds();
       last_epoch_ = s.epoch;
+      warning_alert_id_ = 0;
       if (!s.confirmed) active_alert_id_ = 0;
     }
     State msg;
@@ -221,12 +222,15 @@ class MissionManagerNode : public rclcpp::Node {
     }
     if (s.warning_sequence > last_warning_ && s.active != Platform::None) {
       last_warning_ = s.warning_sequence;
-      publish_alert(s, false, ++event_sequence_);
+      // I keep one open investigation through recovery/patrol retries. A retry
+      // is an update to that investigation, rather than another detected fire.
+      if (warning_alert_id_ == 0) warning_alert_id_ = ++event_sequence_;
+      publish_alert(s, false, warning_alert_id_);
     }
     if (s.alert_sequence > last_alert_ && s.active != Platform::None) {
       last_alert_ = s.alert_sequence;
       confirmed_reading_ = latest_[s.active == Platform::Rover ? 0 : 1];
-      active_alert_id_ = ++event_sequence_;
+      active_alert_id_ = warning_alert_id_ != 0 ? warning_alert_id_ : ++event_sequence_;
       publish_alert(s, true, active_alert_id_);
     } else if (s.phase == MissionPhase::Alert && last_phase_ != MissionPhase::Alert &&
                active_alert_id_ != 0 && s.confirmed) {
@@ -286,6 +290,7 @@ class MissionManagerNode : public rclcpp::Node {
   bool have_estimate_{false};
   MissionPhase last_phase_{MissionPhase::Idle};
   std::uint64_t active_alert_id_{0};
+  std::uint64_t warning_alert_id_{0};
   double estimate_epoch_start_{0};
   double max_estimate_age_{5}, max_estimate_stddev_{4};
   std::uint64_t last_epoch_{0}, last_alert_{0}, last_warning_{0}, event_sequence_{0};

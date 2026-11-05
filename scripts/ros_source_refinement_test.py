@@ -33,9 +33,9 @@ def main():
     next_sample = 0
     inputs = {}
 
-    def pump(seconds, fire=False, source=False, speed=7, source_age=0):
+    def pump(seconds, fire=False, source=False, speed=7, source_age=0, suspected=False):
         nonlocal next_sample
-        inputs.update(fire=fire, source=source, speed=speed, source_age=source_age)
+        inputs.update(fire=fire, source=source, speed=speed, source_age=source_age, suspected=suspected)
         deadline = time.monotonic() + seconds
         while time.monotonic() < deadline:
             if time.monotonic() >= next_sample:
@@ -51,11 +51,12 @@ def main():
                 reading.sample_pose.pose.orientation.w = 1.0
                 reading.sample_pose.pose.position.x = 1.0
                 reading.sample_pose.pose.position.y = 2.0
-                reading.smoke_ppm = 55.0 if fire else 1.0
+                reading.smoke_ppm = 55.0 if fire else (20.0 if suspected else 1.0)
                 reading.temperature_c = 80.0 if fire else 22.0
                 reading.co2_ppm = 1500.0 if fire else 420.0
-                reading.fused_confidence = .95 if fire else 0.0
-                reading.smoke_detected = reading.temperature_anomaly = reading.co2_detected = fire
+                reading.fused_confidence = .95 if fire else (.5 if suspected else 0.0)
+                reading.smoke_detected = reading.co2_detected = fire or suspected
+                reading.temperature_anomaly = fire
                 reading.thermal_valid = reading.co2_valid = True
                 reading.thermal_peak_c = 100.0 if fire else 22.0
                 readings.publish(reading)
@@ -97,14 +98,19 @@ def main():
     with (output / 'manager.log').open('w') as log:
         process = subprocess.Popen([str(executable), '--ros-args',
             '-p', 'drone_enabled:=false', '-p', 'localise_before_hold:=true',
-            '-p', 'localisation_timeout_s:=3.0', '-p', 'wind_dwell_s:=0.3'],
+            '-p', 'localisation_timeout_s:=3.0', '-p', 'search_timeout_s:=2.5', '-p', 'wind_dwell_s:=0.3'],
             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         try:
             until(lambda: client.service_is_ready() and received['state'] is not None)
             pump(1)
             command('START')
+            until(lambda: len([a for a in received['alerts'] if not a.confirmed]) >= 3,
+                  timeout=12, suspected=True)
+            warnings = [a for a in received['alerts'] if not a.confirmed]
+            assert len({a.alert_id for a in warnings}) == 1, 'Investigation retries created new anomaly IDs'
             until(lambda: bool(confirmed()) and received['state'].state == MissionState.TRACK, fire=True)
             first = confirmed()[0]
+            assert first.alert_id == warnings[0].alert_id, 'Confirmation did not promote the existing investigation'
             assert not first.source_resolved and received['state'].motion_allowed
             until(lambda: received['state'].state == MissionState.ALERT and
                   any(a.source_resolved for a in confirmed()), fire=True, source=True)

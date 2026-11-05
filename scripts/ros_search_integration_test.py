@@ -74,9 +74,13 @@ def main():
                 for y in (3., 5., 7., 9.):
                     environment.publish(reading(x, y)); spin(.07)
             state(MissionState.INVESTIGATE)
+            # Discard the first goal, which may use the last survey pose while
+            # the independent state and reading subscriptions catch up.
+            received['goals'].clear()
             end = time.monotonic() + 3
             while (received['estimate'] is None or not received['goals']) and time.monotonic() < end:
                 spin(.1, (12.2, 6.8))
+            spin(.3, (12.2, 6.8))
             assert received['estimate'] is not None and received['goals'], 'Search did not fit and publish'
             estimate = received['estimate'].pose.pose.position
             goal = received['goals'][-1].pose.position
