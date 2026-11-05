@@ -320,3 +320,20 @@ fails the new collision LiDAR gate, while the corrected stack passes every
 preflight check including its first path. Parameter/service introspection confirms
 the padded local footprint critic, global 0.8 m radius and A* setting are loaded.
 Before/after subscription and preflight evidence is saved in the validation folder.
+
+The first connected-LiDAR patrol avoids tree overlap but exhausts retries at the
+east sensor station, so it remains failed. The controller's rectangular local
+outline could pass closer to the post than the global planner's enclosing circle,
+leaving the next plan's start inside its inflated region. Both costmaps now use
+the same 0.8 m enclosing circle and 0.05 m padding. The full-footprint critic stays
+enabled. The observer supports this conservative circular envelope as well as the
+previous rectangle; eleven pure scene/replay/clearance fixtures pass. I also
+removed an unused per-critic tolerance override: Humble uses the shared
+`FollowPath.xy_goal_tolerance`, which service introspection confirms is 1 m.
+
+NavFn's potential-to-path extraction also repeatedly failed on reachable legs
+with both Dijkstra and its A* option. The configured `GridBased` action ID now
+uses the installed Humble SmacPlanner2D A* plugin instead, with the same clearance
+models and unknown-space policy. Its dependency is explicit in the simulation
+package. The next run must validate this replacement through actual route
+coverage and source/return missions; no speed or acceptance threshold is relaxed.

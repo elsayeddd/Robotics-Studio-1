@@ -32,6 +32,12 @@ class ClearanceTests(unittest.TestCase):
             self.assertEqual(len(model.trees), count)
             self.assertGreater(model.closest(-14, -14, 0)[0], 0)
 
+    def test_enclosing_circle_protects_every_heading(self):
+        model = TreeClearance([('trunk', .69, .69, .28)], [], .8)
+        first = model.closest(0, 0, 0)[0]
+        self.assertLess(first, 0)
+        self.assertAlmostEqual(first, model.closest(0, 0, 1.2)[0])
+
 
 class SceneTests(unittest.TestCase):
     @classmethod

@@ -18,7 +18,27 @@
     "publishers": [],
     "subscribers": []
   },
-  "/husky1/controller_server": {},
+  "/husky1/controller_server": {
+    "FollowPath.critics": {
+      "type": 9,
+      "double": 0.0,
+      "strings": [
+        "RotateToGoal",
+        "Oscillation",
+        "BaseObstacle",
+        "ObstacleFootprint",
+        "GoalAlign",
+        "PathAlign",
+        "PathDist",
+        "GoalDist"
+      ]
+    },
+    "FollowPath.xy_goal_tolerance": {
+      "type": 3,
+      "double": 1.0,
+      "strings": []
+    }
+  },
   "/husky1/global_costmap/global_costmap": {
     "robot_radius": {
       "type": 3,

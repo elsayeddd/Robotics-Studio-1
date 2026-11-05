@@ -8,9 +8,10 @@ import yaml
 
 
 class TreeClearance:
-    def __init__(self, trees, footprint):
+    def __init__(self, trees, footprint, robot_radius=None):
         self.trees = trees
         self.footprint = footprint
+        self.robot_radius = robot_radius
 
     @classmethod
     def from_files(cls, world, nav_config):
@@ -23,14 +24,21 @@ class TreeClearance:
                 x, y, *_ = map(float, item.findtext('pose').split())
                 trees.append((item.findtext('name'), x, y, radius))
         config = yaml.safe_load(Path(nav_config).read_text())
-        points = config['local_costmap']['local_costmap']['ros__parameters']['footprint']
-        return cls(trees, ast.literal_eval(points) if isinstance(points, str) else points)
+        local = config['local_costmap']['local_costmap']['ros__parameters']
+        points = local.get('footprint', [])
+        points = ast.literal_eval(points) if isinstance(points, str) else points
+        return cls(trees, points, None if points else float(local['robot_radius']))
 
     def closest(self, x, y, yaw):
         closest = (None, None)
         c, s = math.cos(yaw), math.sin(yaw)
         for name, tx, ty, radius in self.trees:
             dx, dy = tx-x, ty-y
+            if self.robot_radius is not None:
+                clearance = math.hypot(dx, dy)-self.robot_radius-radius
+                if closest[0] is None or clearance < closest[0]:
+                    closest = (clearance, name)
+                continue
             px, py = c*dx+s*dy, -s*dx+c*dy
             distance = math.inf
             inside = False

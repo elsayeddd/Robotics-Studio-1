@@ -1,0 +1,25 @@
+{
+  "source_revision": "bce15458a734cd74c281834e4a54fcfe28699a25",
+  "harness_revision": "bce15458a734cd74c281834e4a54fcfe28699a25",
+  "world_file": "embertrace_forest_dense.sdf",
+  "gazebo_gui": true,
+  "visited_waypoints": [
+    "ranger_base",
+    "west_south",
+    "west_centre",
+    "west_north",
+    "north_centre",
+    "north_east",
+    "east_centre"
+  ],
+  "visit_tolerance_m": 1.7,
+  "closed_loops": 0,
+  "skipped_waypoints": 1,
+  "navigation_failures": 3,
+  "path_length_m": 56.77018077403765,
+  "false_alerts": 0,
+  "passed": false,
+  "minimum_tree_clearance_m": 3.3057155489461882,
+  "closest_tree": "tree_17",
+  "failure": "A required patrol waypoint was skipped"
+}
